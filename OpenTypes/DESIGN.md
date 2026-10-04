@@ -6,11 +6,11 @@ A preferences tool for AmigaOS 3.x that says which program opens each kind of
 file, and applies that to the icons, so default applications are as easy to
 set as on a modern desktop.
 
-Dale, 4 October 2026: "we also want to create a new preferences tool that
+We, 4 October 2026: "we also want to create a new preferences tool that
 lets us update the filetype in icons to make default applications easier,
 the current solution is a bit... pants".
 
-**OpenTypes** (a working name, Dale's to change) is the first of OpenPrefs,
+**OpenTypes** (a working name, our to change) is the first of OpenPrefs,
 our preferences editors, in the repository `DalsinAI/openamigaprefs`. MIT,
 Copyright (c) 2026 Dalsin Limited, credit kept. GadTools, as OS 3.x
 applications are.

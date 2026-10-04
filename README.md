@@ -21,4 +21,4 @@ copyright notice and the licence text stay with every copy and fork. We also
 ask, as a courtesy rather than a condition, that a fork or a port say it is
 based on OpenPrefs by Dalsin Limited.
 
-OpenPrefs was created by Dale Kirkwood at Dalsin Limited, for AmigaChrome.
+OpenPrefs was created by Dalsin Limited, for AmigaChrome.
