@@ -1,0 +1,32 @@
+Short:        Default programs per file type
+Uploader:     (Dale fills this in at upload time)
+Author:       Dale Kirkwood (Dalsin Limited)
+Type:         util/wb
+Version:      0.1
+Architecture: m68k-amigaos >= 3.2.0
+Distribution: Aminet
+
+OpenTypes is a preferences editor that says which program opens each kind of
+file, and applies it to the icons, so default programs are as easy to set as
+on a modern desktop.
+
+- Every type, from the datatypes and the default icons, with the program that
+  opens it now and the programs that can.
+- Choose a program per type: the type's default icon gets it, so files without
+  icons open with it.
+- The icons files already have that still name the old program are listed and
+  updated on Apply, backed up first, with Undo. An icon set to a different
+  program on purpose is left alone unless you tick it.
+- Open with... in Workbench's Tools menu, with Always use this.
+- Types by file name too, for files no datatype recognises.
+
+GadTools, icon.library only, no patches.
+
+Status: designed; in development.
+
+Free software under the MIT licence, Copyright (c) 2026 Dalsin Limited. Use
+it, change it, fork it and ship it; keep the copyright notice and the licence
+with every copy. If you build on it, please say it is based on OpenPrefs by
+Dalsin Limited.
+
+Source: https://github.com/DalsinAI/openamigaprefs
