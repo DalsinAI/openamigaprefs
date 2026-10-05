@@ -65,7 +65,27 @@ applications are.
   default tools.
 - **AROS:** the same, on AROS's default icons.
 
-## 4. Phases
+## 4. Built: OpenTypes 0.1 (5 October 2026)
+
+Phases 1 and 2, in `src/opentypes.c` (`build.sh` builds it with the os32
+stove):
+
+- **The window** (`docs/window.png`): the kinds of file (the OS's project
+  default icons) with the program for each; Opens with, Choose... (ASL) and
+  the programs known to open the kind; Find icons that still name the old
+  program..., with a list to tick; Save, Use, Undo all, Cancel.
+- **The Shell**, for scripts and tests: `OpenTypes LIST`,
+  `SET <type> TO <program> [SAVE]`, `SCAN <type> IN <drawer> [TO <program>
+  APPLY]`, `TYPE <file>`, `UNDO`.
+- **Tested on OS 3.2.3** (a scratch instance, two PNGs whose icons named
+  MultiView):
+  - it found both as pictures;
+  - it changed their icons and the picture default icon to OpenView;
+  - Undo put the three icons back, leaving the drive identical, file for file.
+- **Found:** commands run from a script have 4 KB of stack. Undo overflowed
+  it, so large buffers are static.
+
+## 5. Phases
 
 | Phase | Delivers | Done when |
 | --- | --- | --- |

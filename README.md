@@ -4,9 +4,9 @@ Preferences editors for AmigaOS 3.x, as part of the Open family: GadTools
 windows with Use, Save, Test and Cancel, that keep the OS's own settings
 files wherever the OS already has one.
 
-| Editor | What it sets | State, 4 October 2026 |
+| Editor | What it sets | State |
 | --- | --- | --- |
-| [OpenTypes](OpenTypes/DESIGN.md) | Which program opens each kind of file: the default icons, the icons files already have, and Open with... in Workbench's Tools menu | designed |
+| [OpenTypes](OpenTypes/DESIGN.md) | Which program opens each kind of file: the default icons, the icons files already have, and Open with... in Workbench's Tools menu | 0.1 built 5 Oct 2026: the window, the Shell commands, finding and changing icons, Undo (phases 1 and 2); Open with... next |
 
 More of the Open family's editors may join it.
 
