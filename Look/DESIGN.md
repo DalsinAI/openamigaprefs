@@ -1,0 +1,41 @@
+# OpenPrefs Look
+
+The editor for OpenLook, the OpenGadTools look on Workbench and every
+GadTools program. OpenLook draws; Look sets what it draws. MIT, Copyright
+(c) 2026 Dalsin Limited.
+
+![Look 0.1, testing the Graphite theme](docs/window.png)
+
+## 0.1 (6 October 2026)
+
+| Setting | Where it goes |
+| --- | --- |
+| Theme, from `SYS:Prefs/Presets/Themes`, with a preview | First line of `ENV:OpenGadTools/Look` |
+| Light, dark, or by the clock (dark from/to) | First line, and `mode auto 19 7` |
+| Own accent (`#rrggbb`) | `accent` |
+| Lite: automatic (on for a real 68040 or 68060 without OpenGPU), on (with no shadows, square, flat), off | `lite`, `lite.shadows`, `lite.rounding`, `lite.gradients` |
+| Workbench, other public screens, game screens: themed or Classic | `screen workbench|public|custom` |
+| Programs never touched (comma between names) | `never` lines |
+| Icon labels: plain, fields, shadow, outline | Font prefs' Workbench icon text (`ENV:Sys/font.prefs`) |
+| Desktop profiles: Load one into the editor; By machine lets OpenLook choose at start | `SYS:Prefs/Presets/OpenPrefs/<name>.profile`; `profile auto` |
+| Click to front (any click, or with a key), Focus follows (AutoPoint) | The OS's commodities: on at start (copied into `SYS:WBStartup`, ClickToFront's `QUALIFIER` tooltype) and started or stopped now |
+
+Save writes `ENV:` and `ENVARC:`; Use writes `ENV:`; Test writes `ENV:` and
+puts it back after 15 seconds unless Use or Save follows; Cancel puts back
+what a Test changed. Each tells OpenLook (Ctrl-F to its port's task), which
+redraws the open windows' frames and gadgets. From the Shell:
+`Look [FROM file] [USE] [SAVE]`.
+
+The three profiles OpenUp installs: **Modern** (AmigaChrome: Open, dark by
+the clock), **Lite 68040** (a real 68040 or 68060: Open, Lite) and
+**Classic 3.2** (any machine: the OS's own look). A profile is OpenLook's
+prefs format with `target` lines (opengadtools DESIGN.md section 2i).
+
+Holding Shift while OpenLook starts gives the OS's own look until the look
+is changed again (safe start).
+
+## Next
+
+Windows (snapping, Amiga+Tab, wheel under the pointer, remembered window
+places, new-drawer defaults), then OpenMenus. The frame and title geometry
+(theme format 2) and one text-size scale follow the OpenPrefs page.
