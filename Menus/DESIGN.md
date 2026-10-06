@@ -15,7 +15,7 @@ again.
 | Setting | Line in `ENV:OpenMenus/Menus` |
 | --- | --- |
 | OpenMenus on, or the OS's own menus pixel for pixel | `enabled on\|off` |
-| Menus open from the screen bar, at the pointer, or by where the pointer is | `open pulldown\|popup\|pointer` |
+| Menus open from the screen bar, at the pointer, or by where the pointer is ("Bar or pointer") | `open pulldown\|popup\|pointer` |
 | Hold and release, sticky (open on move), sticky (open on click), for each kind | `pulldown hold\|sticky\|click`, `popup ...` |
 | A delay before a menu opens, 0 to 10 tenths of a second, for each kind | `delay.pulldown 0-10`, `delay.popup 0-10` |
 | A pop-up opens on the item last chosen | `popup.last on\|off` |

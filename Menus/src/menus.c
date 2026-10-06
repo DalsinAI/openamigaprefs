@@ -316,8 +316,8 @@ enum {
     G_ENABLED, G_TAKEOVER, G_FEEL, G_THEME, G_LOOK, G_STATUS, G_SAVE, G_USE, G_TEST, G_CANCEL, G_COUNT
 };
 
-static const char *open_labels[] = { "From the screen bar", "At the pointer", "By where the pointer is", NULL };
-static const char *use_labels[] = { "Hold and release", "Sticky, open on move", "Sticky, open on click", NULL };
+static const char *open_labels[] = { "From the bar", "At the pointer", "Bar or pointer", NULL };
+static const char *use_labels[] = { "Hold and release", "Sticky, on move", "Sticky, on click", NULL };
 static const char *colours_labels[] = { "From the theme", "The screen's own", "My own", NULL };
 static const char *which_labels[] = { "Background", "Text", "Selected", "Selected text", "Bright edges", "Dark edges", "Shadow", NULL };
 static const char *border_labels[] = { "Single", "Double", NULL };
@@ -438,13 +438,52 @@ static int handle_key(UWORD code)
     return code == 27 ? G_CANCEL : -1;
 }
 
-/* The gadgets for the view; the window's inner height, or 0. */
-static int make_gadgets(struct Screen *scr, APTR vi, struct Gadget **glist, int W)
+/* The widest of some words in the screen's font. */
+static int widest(struct Screen *scr, const char *const *words)
 {
+    int w = 0;
+    for (; *words; words++) {
+        int t = TextLength(&scr->RastPort, (STRPTR)*words, strlen(*words));
+        if (t > w) w = t;
+    }
+    return w;
+}
+
+static int text_w(struct Screen *scr, const char *s) { return TextLength(&scr->RastPort, (STRPTR)s, strlen(s)); }
+
+/* The gadgets for the view, laid out from the screen font's own widths;
+ * the window's inner height (and *Wp its inner width), or 0. */
+static int make_gadgets(struct Screen *scr, APTR vi, struct Gadget **glist, int *Wp)
+{
+    static const char *const left_words[] = { "Menus open", "From the bar", "At the pointer", "Bar delay", "Pointer delay", "Open on last",
+                                              "Centre submenus", "Programs run on", "Keyboard", "R.Amiga+R.Alt", "Use OpenMenus", "They work",
+                                              "Colours", "Shadow", NULL };
+    static const char *const right_words[] = { "Colours", "Border", "Shadow", "Strength", "Background", "Picture", NULL };
     struct Gadget *g;
     struct NewGadget ng;
-    int fh = scr->Font->ta_YSize, lh = fh + 6, top = scr->WBorTop + fh + 1 + 6, row, row2, L = 10, R = 330, i;
-    int gp = scr->Height < 320 ? 2 : 4;         /* closer rows on a 256-line PAL or 200-line NTSC screen */
+    int fh = scr->Font->ta_YSize, lh = fh + 6, bl = scr->WBorLeft, top = scr->WBorTop + fh + 1 + 6, row, row2, i;
+    int gp = scr->Height < 320 ? 2 : 4, cb = 26, slv = 3 * scr->RastPort.TxWidth + 8;    /* a checkbox; a slider's number */
+    /* the left column: labels, then gadgets as wide as the widest choice */
+    int lx = bl + 8 + widest(scr, left_words) + 8;
+    int cw = widest(scr, open_labels) > widest(scr, use_labels) ? widest(scr, open_labels) : widest(scr, use_labels);
+    int lw, rx0, rx, rg, bw, sw, hexw, chw, W;
+    if (widest(scr, colours_labels) > cw) cw = widest(scr, colours_labels);
+    lw = cw + 30;                                                /* and the cycle's mark */
+    if (lw < 2 * cb + 16 + text_w(scr, "Mark them")) lw = 2 * cb + 16 + text_w(scr, "Mark them");
+    if (lw < 2 * cb + 16 + text_w(scr, "Pointer up")) lw = 2 * cb + 16 + text_w(scr, "Pointer up");
+    /* the right column: labels, then gadgets */
+    rx0 = lx + lw + 16;
+    rx = rx0 + widest(scr, right_words) + 8;
+    bw = widest(scr, border_labels) + 30;
+    sw = widest(scr, seps_labels) + 30;
+    hexw = text_w(scr, "#000000") + 16;
+    chw = text_w(scr, "Choose...") + 16;
+    rg = widest(scr, bg_labels) + 30;
+    if (rg < widest(scr, which_labels) + 30 + 6 + hexw) rg = widest(scr, which_labels) + 30 + 6 + hexw;
+    if (rg < bw + 8 + text_w(scr, "Lines") + 8 + sw) rg = bw + 8 + text_w(scr, "Lines") + 8 + sw;
+    if (rg < 160) rg = 160;
+    W = rx + rg + 10 - bl;
+    *Wp = W;
     memset(gad, 0, sizeof gad);
     g = CreateContext(glist);
     memset(&ng, 0, sizeof ng);
@@ -455,66 +494,67 @@ static int make_gadgets(struct Screen *scr, APTR vi, struct Gadget **glist, int 
      ng.ng_Flags = (flags), ng.ng_GadgetID = (id), g = gad[id] = CreateGadget(kind, g, &ng, __VA_ARGS__, TAG_DONE))
 
     /* the right column: the preview, in both views */
-    px = R; py = top; pw = W - R - 10; ph = 6 * (fh + 3) + (gp < 4 ? 8 : 22);
+    px = rx0; py = top; pw = rx + rg - rx0; ph = 6 * (fh + 3) + (gp < 4 ? 8 : 22);
     row = row2 = top;
 
     if (!advanced) {
         /* Simple: the theme first, and the few things people change */
-        G(CHECKBOX_KIND, G_ENABLED, L + 110, row, 26, lh, "Use OpenMenus", PLACETEXT_LEFT, GTCB_Scaled, TRUE); row += lh + 4;
-        G(CYCLE_KIND, G_OPEN, L + 110, row, 200, lh, "Menus open", PLACETEXT_LEFT, GTCY_Labels, (ULONG)open_labels); row += lh + 4;
-        G(CYCLE_KIND, G_FEEL, L + 110, row, 200, lh, "They work", PLACETEXT_LEFT, GTCY_Labels, (ULONG)use_labels); row += lh + 4;
-        G(CYCLE_KIND, G_COLOURS, L + 110, row, 200, lh, "Colours", PLACETEXT_LEFT, GTCY_Labels, (ULONG)colours_labels); row += lh + 4;
-        G(CHECKBOX_KIND, G_SHADOW, L + 110, row, 26, lh, "Shadow", PLACETEXT_LEFT, GTCB_Scaled, TRUE); row += lh + 8;
-        G(TEXT_KIND, G_THEME, L, row, 200, lh, NULL, 0, GTTX_Text, (ULONG)theme_line);
-        G(BUTTON_KIND, G_LOOK, L + 210, row, 100, lh, "Look...", 0, GA_Disabled, FALSE); row += lh + 8;
-        row2 += ph + 8;
-        G(BUTTON_KIND, G_TAKEOVER, R, row2, pw, lh, "Take over MagicMenu's...", 0, GA_Disabled, FALSE); row2 += lh + 8;
+        int look = text_w(scr, "Look...") + 20;
+        G(CHECKBOX_KIND, G_ENABLED, lx, row, cb, lh, "Use OpenMenus", PLACETEXT_LEFT, GTCB_Scaled, TRUE); row += lh + gp;
+        G(CYCLE_KIND, G_OPEN, lx, row, lw, lh, "Menus open", PLACETEXT_LEFT, GTCY_Labels, (ULONG)open_labels); row += lh + gp;
+        G(CYCLE_KIND, G_FEEL, lx, row, lw, lh, "They work", PLACETEXT_LEFT, GTCY_Labels, (ULONG)use_labels); row += lh + gp;
+        G(CYCLE_KIND, G_COLOURS, lx, row, lw, lh, "Colours", PLACETEXT_LEFT, GTCY_Labels, (ULONG)colours_labels); row += lh + gp;
+        G(CHECKBOX_KIND, G_SHADOW, lx, row, cb, lh, "Shadow", PLACETEXT_LEFT, GTCB_Scaled, TRUE); row += lh + 2 * gp;
+        G(TEXT_KIND, G_THEME, bl + 8, row, lx + lw - look - 6 - (bl + 8), lh, NULL, 0, GTTX_Text, (ULONG)theme_line);
+        G(BUTTON_KIND, G_LOOK, lx + lw - look, row, look, lh, "Look...", 0, GA_Disabled, FALSE); row += lh + 2 * gp;
+        row2 += ph + 2 * gp;
+        G(BUTTON_KIND, G_TAKEOVER, rx0, row2, pw, lh, "Take over MagicMenu's...", 0, GA_Disabled, FALSE); row2 += lh + 2 * gp;
         if (row2 > row) row = row2;
     } else {
         /* the left column: how menus open, and the keys */
-        G(CYCLE_KIND, G_OPEN, L + 110, row, 200, lh, "Menus open", PLACETEXT_LEFT, GTCY_Labels, (ULONG)open_labels); row += lh + gp;
-        G(CYCLE_KIND, G_PDUSE, L + 110, row, 200, lh, "From the bar", PLACETEXT_LEFT, GTCY_Labels, (ULONG)use_labels); row += lh + gp;
-        G(CYCLE_KIND, G_PUUSE, L + 110, row, 200, lh, "At the pointer", PLACETEXT_LEFT, GTCY_Labels, (ULONG)use_labels); row += lh + gp;
-        G(SLIDER_KIND, G_PDDELAY, L + 110, row, 160, lh, "Bar delay", PLACETEXT_LEFT, GTSL_Min, 0, GTSL_Max, OM_DELAY_MAX,
+        G(CYCLE_KIND, G_OPEN, lx, row, lw, lh, "Menus open", PLACETEXT_LEFT, GTCY_Labels, (ULONG)open_labels); row += lh + gp;
+        G(CYCLE_KIND, G_PDUSE, lx, row, lw, lh, "From the bar", PLACETEXT_LEFT, GTCY_Labels, (ULONG)use_labels); row += lh + gp;
+        G(CYCLE_KIND, G_PUUSE, lx, row, lw, lh, "At the pointer", PLACETEXT_LEFT, GTCY_Labels, (ULONG)use_labels); row += lh + gp;
+        G(SLIDER_KIND, G_PDDELAY, lx, row, lw - slv, lh, "Bar delay", PLACETEXT_LEFT, GTSL_Min, 0, GTSL_Max, OM_DELAY_MAX,
           GTSL_LevelFormat, (ULONG)"%2ld", GTSL_MaxLevelLen, 2, GTSL_LevelPlace, PLACETEXT_RIGHT, GA_RelVerify, TRUE); row += lh + gp;
-        G(SLIDER_KIND, G_PUDELAY, L + 110, row, 160, lh, "Pointer delay", PLACETEXT_LEFT, GTSL_Min, 0, GTSL_Max, OM_DELAY_MAX,
+        G(SLIDER_KIND, G_PUDELAY, lx, row, lw - slv, lh, "Pointer delay", PLACETEXT_LEFT, GTSL_Min, 0, GTSL_Max, OM_DELAY_MAX,
           GTSL_LevelFormat, (ULONG)"%2ld", GTSL_MaxLevelLen, 2, GTSL_LevelPlace, PLACETEXT_RIGHT, GA_RelVerify, TRUE); row += lh + gp;
-        G(CHECKBOX_KIND, G_LAST, L + 110, row, 26, lh, "Open on last", PLACETEXT_LEFT, GTCB_Scaled, TRUE); row += lh + gp / 2;
-        G(CHECKBOX_KIND, G_CENTRE, L + 110, row, 26, lh, "Centre submenus", PLACETEXT_LEFT, GTCB_Scaled, TRUE);
-        G(CHECKBOX_KIND, G_MARK, L + 284, row, 26, lh, "Mark them", PLACETEXT_LEFT, GTCB_Scaled, TRUE); row += lh + gp / 2;
-        G(CHECKBOX_KIND, G_RUNNING, L + 110, row, 26, lh, "Programs run on", PLACETEXT_LEFT, GTCB_Scaled, TRUE); row += lh + 2 * gp;
-        G(CHECKBOX_KIND, G_KEYBOARD, L + 110, row, 26, lh, "Keyboard", PLACETEXT_LEFT, GTCB_Scaled, TRUE);
-        G(STRING_KIND, G_KEY, L + 150, row, 160, lh, NULL, 0, GTST_MaxChars, 60); row += lh + gp / 2;
-        G(CHECKBOX_KIND, G_RALT, L + 110, row, 26, lh, "R.Amiga+R.Alt", PLACETEXT_LEFT, GTCB_Scaled, TRUE);
-        G(CHECKBOX_KIND, G_TOP, L + 284, row, 26, lh, "Pointer up", PLACETEXT_LEFT, GTCB_Scaled, TRUE); row += lh + 2 * gp;
+        G(CHECKBOX_KIND, G_LAST, lx, row, cb, lh, "Open on last", PLACETEXT_LEFT, GTCB_Scaled, TRUE); row += lh + gp / 2;
+        G(CHECKBOX_KIND, G_CENTRE, lx, row, cb, lh, "Centre submenus", PLACETEXT_LEFT, GTCB_Scaled, TRUE);
+        G(CHECKBOX_KIND, G_MARK, lx + lw - cb, row, cb, lh, "Mark them", PLACETEXT_LEFT, GTCB_Scaled, TRUE); row += lh + gp / 2;
+        G(CHECKBOX_KIND, G_RUNNING, lx, row, cb, lh, "Programs run on", PLACETEXT_LEFT, GTCB_Scaled, TRUE); row += lh + 2 * gp;
+        G(CHECKBOX_KIND, G_KEYBOARD, lx, row, cb, lh, "Keyboard", PLACETEXT_LEFT, GTCB_Scaled, TRUE);
+        G(STRING_KIND, G_KEY, lx + cb + 8, row, lw - cb - 8, lh, NULL, 0, GTST_MaxChars, 60); row += lh + gp / 2;
+        G(CHECKBOX_KIND, G_RALT, lx, row, cb, lh, "R.Amiga+R.Alt", PLACETEXT_LEFT, GTCB_Scaled, TRUE);
+        G(CHECKBOX_KIND, G_TOP, lx + lw - cb, row, cb, lh, "Pointer up", PLACETEXT_LEFT, GTCB_Scaled, TRUE); row += lh + 2 * gp;
 
         /* the right column: below the preview, the look */
-        row2 += ph + 8;
-        G(CYCLE_KIND, G_COLOURS, R + 90, row2, pw - 90, lh, "Colours", PLACETEXT_LEFT, GTCY_Labels, (ULONG)colours_labels); row2 += lh + gp;
-        G(CYCLE_KIND, G_WHICH, R + 90, row2, pw - 180, lh, NULL, 0, GTCY_Labels, (ULONG)which_labels);
-        G(STRING_KIND, G_HEX, R + pw - 86, row2, 86, lh, NULL, 0, GTST_MaxChars, 7); row2 += lh + gp;
-        G(CYCLE_KIND, G_BORDER, R + 90, row2, 90, lh, "Border", PLACETEXT_LEFT, GTCY_Labels, (ULONG)border_labels);
-        G(CYCLE_KIND, G_SEPS, R + pw - 86, row2, 86, lh, "Lines", PLACETEXT_LEFT, GTCY_Labels, (ULONG)seps_labels); row2 += lh + gp;
-        G(CHECKBOX_KIND, G_SHADOW, R + 90, row2, 26, lh, "Shadow", PLACETEXT_LEFT, GTCB_Scaled, TRUE);
-        G(SLIDER_KIND, G_SSIZE, R + 124, row2, pw - 154, lh, NULL, 0, GTSL_Min, 1, GTSL_Max, OM_SHADOW_SIZE_MAX,
+        row2 += ph + 2 * gp;
+        G(CYCLE_KIND, G_COLOURS, rx, row2, rg, lh, "Colours", PLACETEXT_LEFT, GTCY_Labels, (ULONG)colours_labels); row2 += lh + gp;
+        G(CYCLE_KIND, G_WHICH, rx, row2, rg - hexw - 6, lh, NULL, 0, GTCY_Labels, (ULONG)which_labels);
+        G(STRING_KIND, G_HEX, rx + rg - hexw, row2, hexw, lh, NULL, 0, GTST_MaxChars, 7); row2 += lh + gp;
+        G(CYCLE_KIND, G_BORDER, rx, row2, bw, lh, "Border", PLACETEXT_LEFT, GTCY_Labels, (ULONG)border_labels);
+        G(CYCLE_KIND, G_SEPS, rx + rg - sw, row2, sw, lh, "Lines", PLACETEXT_LEFT, GTCY_Labels, (ULONG)seps_labels); row2 += lh + gp;
+        G(CHECKBOX_KIND, G_SHADOW, rx, row2, cb, lh, "Shadow", PLACETEXT_LEFT, GTCB_Scaled, TRUE);
+        G(SLIDER_KIND, G_SSIZE, rx + cb + 8, row2, rg - cb - 8 - slv, lh, NULL, 0, GTSL_Min, 1, GTSL_Max, OM_SHADOW_SIZE_MAX,
           GTSL_LevelFormat, (ULONG)"%2ld", GTSL_MaxLevelLen, 3, GTSL_LevelPlace, PLACETEXT_RIGHT, GA_RelVerify, TRUE); row2 += lh + gp;
-        G(SLIDER_KIND, G_SSTRENGTH, R + 124, row2, pw - 154, lh, "Strength", PLACETEXT_LEFT, GTSL_Min, 1, GTSL_Max, OM_SHADOW_STRENGTH_MAX,
+        G(SLIDER_KIND, G_SSTRENGTH, rx + cb + 8, row2, rg - cb - 8 - slv, lh, "Strength", PLACETEXT_LEFT, GTSL_Min, 1, GTSL_Max, OM_SHADOW_STRENGTH_MAX,
           GTSL_LevelFormat, (ULONG)"%3ld", GTSL_MaxLevelLen, 3, GTSL_LevelPlace, PLACETEXT_RIGHT, GA_RelVerify, TRUE); row2 += lh + gp;
-        G(CYCLE_KIND, G_BG, R + 90, row2, pw - 90, lh, "Background", PLACETEXT_LEFT, GTCY_Labels, (ULONG)bg_labels); row2 += lh + gp;
-        G(STRING_KIND, G_IMAGE, R + 90, row2, pw - 176, lh, "Picture", PLACETEXT_LEFT, GTST_MaxChars, 250);
-        G(BUTTON_KIND, G_CHOOSE, R + pw - 82, row2, 82, lh, "Choose...", 0, GA_Disabled, FALSE); row2 += lh + 2 * gp;
+        G(CYCLE_KIND, G_BG, rx, row2, rg, lh, "Background", PLACETEXT_LEFT, GTCY_Labels, (ULONG)bg_labels); row2 += lh + gp;
+        G(STRING_KIND, G_IMAGE, rx, row2, rg - chw - 6, lh, "Picture", PLACETEXT_LEFT, GTST_MaxChars, 250);
+        G(BUTTON_KIND, G_CHOOSE, rx + rg - chw, row2, chw, lh, "Choose...", 0, GA_Disabled, FALSE); row2 += lh + 2 * gp;
 
         /* at the foot of the left column, which is the shorter */
-        G(CHECKBOX_KIND, G_ENABLED, L + 110, row, 26, lh, "Use OpenMenus", PLACETEXT_LEFT, GTCB_Scaled, TRUE); row += lh + gp;
-        G(BUTTON_KIND, G_TAKEOVER, L, row, 300, lh, "Take over MagicMenu's...", 0, GA_Disabled, FALSE); row += lh + 2 * gp;
+        G(CHECKBOX_KIND, G_ENABLED, lx, row, cb, lh, "Use OpenMenus", PLACETEXT_LEFT, GTCB_Scaled, TRUE); row += lh + gp;
+        G(BUTTON_KIND, G_TAKEOVER, bl + 8, row, lx + lw - (bl + 8), lh, "Take over MagicMenu's...", 0, GA_Disabled, FALSE); row += lh + 2 * gp;
         if (row2 > row) row = row2;
     }
-    G(TEXT_KIND, G_STATUS, L, row, W - 20, lh, NULL, 0, GTTX_Text, (ULONG)status_text, GTTX_Border, TRUE); row += lh + gp + 2;
+    G(TEXT_KIND, G_STATUS, bl + 8, row, W - 16, lh, NULL, 0, GTTX_Text, (ULONG)status_text, GTTX_Border, TRUE); row += lh + gp + 2;
     {
         static const char *const names[4] = { "_Save", "_Use", "_Test", "_Cancel" };
         static const int ids[4] = { G_SAVE, G_USE, G_TEST, G_CANCEL };
-        int bw = (W - 20 - 3 * 10) / 4;
-        for (i = 0; i < 4; i++) G(BUTTON_KIND, ids[i], L + i * (bw + 10), row, bw, lh, names[i], 0, GT_Underscore, '_');
+        int bwid = (W - 16 - 3 * 10) / 4;
+        for (i = 0; i < 4; i++) G(BUTTON_KIND, ids[i], bl + 8 + i * (bwid + 10), row, bwid, lh, names[i], 0, GT_Underscore, '_');
         row += lh + gp + 2;
     }
 #undef G
@@ -550,14 +590,16 @@ static int gui(void)
   reopen:
     /* a view change opens the window again where it was, with the other view's gadgets */
     newmenus[3].nm_Flags = CHECKIT | MENUTOGGLE | (advanced ? CHECKED : 0);
-    if (!(inner = make_gadgets(scr, vi, &glist, W))) { rc = RETURN_FAIL; goto out; }
+    if (!(inner = make_gadgets(scr, vi, &glist, &W))) { rc = RETURN_FAIL; goto out; }
     if (!(menus = CreateMenus(newmenus, GTMN_FullMenu, TRUE, TAG_DONE)) || !LayoutMenus(menus, vi, GTMN_NewLookMenus, TRUE, TAG_DONE)) {
         rc = RETURN_FAIL; goto out;
     }
     {
         /* the whole window on the screen: higher up, over the screen bar if need be */
         int tall = inner + scr->WBorTop + scr->Font->ta_YSize + 1 + scr->WBorBottom;
+        int wide = W + scr->WBorLeft + scr->WBorRight;
         if (wy + tall > scr->Height) wy = scr->Height - tall > 0 ? scr->Height - tall : 0;
+        if (wx + wide > scr->Width) wx = scr->Width - wide > 0 ? scr->Width - wide : 0;
     }
     win = OpenWindowTags(NULL, WA_Title, (ULONG)"Menus", WA_ScreenTitle, (ULONG)"OpenPrefs Menus 0.1", WA_PubScreen, (ULONG)scr,
                          WA_Left, wx, WA_Top, wy, WA_InnerWidth, W, WA_InnerHeight, inner,
