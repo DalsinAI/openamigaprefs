@@ -146,7 +146,8 @@ Tested on a scratch OS 3.2.3 (OpenRTG 800x600, 6 October 2026), all with
 
 Not in 0.1: keyboard control, the opening delays, see-through and pictures,
 and a pop-up that opens on the item last chosen. The sticky modes are written
-but not yet tested.
+but not yet tested. The Menus editor keeps these settings, and changing one
+says on its status line that OpenMenus 0.1 keeps it for later.
 
 ### For the OpenUp part (to add in openamigaup)
 
