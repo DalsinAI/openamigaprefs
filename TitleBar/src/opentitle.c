@@ -38,6 +38,9 @@
 #include <proto/graphics.h>
 #include <proto/layers.h>
 #include <proto/utility.h>
+#include <proto/bsdsocket.h>
+#include <exec/io.h>
+#include <dos/dostags.h>
 
 #include <string.h>
 #include <stdio.h>
@@ -47,16 +50,19 @@
 #include "om_prefs.h"
 #include "logo.h"
 
-const char version[] __attribute__((used)) = "$VER: OpenTitle 0.3 (6.10.2026) OpenPrefs, Dalsin Limited";
+const char version[] __attribute__((used)) = "$VER: OpenTitle 0.4 (6.10.2026) OpenPrefs, Dalsin Limited";
 
 struct IntuitionBase *IntuitionBase;
 struct GfxBase *GfxBase;
-struct Library *LayersBase, *UtilityBase;
+struct Library *LayersBase, *UtilityBase, *SocketBase;
 
 #define MENUS_ENV  "ENV:OpenMenus/Menus"
 #define TRAY_DIR   "ENV:OpenMenus/Tray"
-#define TRAY_MINE  "ENV:OpenMenus/Tray/Clock"
-#define MY_ORDER   10                          /* left of OpenSpeaker (0) */
+#define CLOCK_ORDER 10                         /* left of the network icons (5) and OpenSpeaker (0) */
+#define NET_ORDER   5
+#define NET_TOOL   "SYS:Tools/Commodities/OpenSocketControl"
+#define WIFI_DEVICE "opensocketwifi.device"    /* OpenSocket's: the PC's (or the card's) Wi-Fi */
+#define WIFI_STATUS 2
 #define WB_ENV     "ENV:Sys/Workbench.prefs"
 #define TITLE_MEM  "Workbench %r  Chip %mcek KB  Fast %mfem MB"
 #define TITLE_PLAIN "Amiga Workbench %r"
@@ -71,6 +77,15 @@ static int bar_edge = OM_BAR_TITLE;
 static int border_set;                         /* we made the border black */
 static struct Window *last_other;              /* the window that was active before a click on ours */
 static char shown[40];
+
+/* the network icons: LAN and Wi-Fi, from OpenSocket */
+static struct Window *net_w, *pop_w;
+static WORD nx, ny, nw, nh;
+static int lan_state;                          /* 0 no bsdsocket.library, 1 no address, 2 connected */
+static int wifi_state = -1;                    /* -1 no Wi-Fi to show, 0 not connected, 1 connected */
+static int wifi_signal, pop_ticks;
+static char lan_addr[20], wifi_ssid[34];
+static int net_drawn = -100;                   /* what the icons show, to draw only on change */
 
 static LONG pens[64];
 static ULONG pen_rgb[64];
@@ -125,27 +140,31 @@ static void tell_openmenus(void)
     Permit();
 }
 
-static void tray(int width)
+static void tray(const char *name, int width, int order)
 {
     BPTR fh, lock;
-    char t[24];
+    char t[24], path[64];
     if (width > 0) {
         if ((lock = Lock((STRPTR)TRAY_DIR, ACCESS_READ))) UnLock(lock);
         else {                                 /* ENV:OpenMenus is there only once OpenMenus has settings */
             if ((lock = CreateDir((STRPTR)"ENV:OpenMenus"))) UnLock(lock);
             if ((lock = CreateDir((STRPTR)TRAY_DIR))) UnLock(lock);
         }
-        if ((fh = Open((STRPTR)TRAY_MINE, MODE_NEWFILE))) {
-            LONG n = snprintf(t, sizeof t, "%d %d\n", width, MY_ORDER);
+        snprintf(path, sizeof path, TRAY_DIR "/%s", name);
+        if ((fh = Open((STRPTR)path, MODE_NEWFILE))) {
+            LONG n = snprintf(t, sizeof t, "%d %d\n", width, order);
             Write(fh, t, n);
             Close(fh);
         }
-    } else DeleteFile((STRPTR)TRAY_MINE);
+    } else {
+        snprintf(path, sizeof path, TRAY_DIR "/%s", name);
+        DeleteFile((STRPTR)path);
+    }
     tell_openmenus();
 }
 
 /* the room the tray programs nearer the bar's end take, and how many they are */
-static int tray_before(int *count)
+static int tray_before(const char *mine, int my_order, int *count)
 {
     struct FileInfoBlock *fib = AllocDosObject(DOS_FIB, NULL);
     BPTR lock = Lock((STRPTR)TRAY_DIR, ACCESS_READ);
@@ -156,13 +175,13 @@ static int tray_before(int *count)
             char path[96], *t;
             int w = 0, order = 0;
             const char *name = (const char *)fib->fib_FileName;
-            if (fib->fib_DirEntryType > 0 || !strcmp(name, "Clock")) continue;
+            if (fib->fib_DirEntryType > 0 || !strcmp(name, mine)) continue;
             snprintf(path, sizeof path, TRAY_DIR "/%s", name);
             if (!(t = read_file(path, NULL))) continue;
             if (sscanf(t, "%d %d", &w, &order) < 1) w = 0;
             FreeVec(t);
             if (w <= 0 || w > 400) continue;
-            if (order < MY_ORDER || (order == MY_ORDER && strcmp(name, "Clock") < 0)) { sum += w; (*count)++; }
+            if (order < my_order || (order == my_order && strcmp(name, mine) < 0)) { sum += w; (*count)++; }
         }
     }
     if (lock) UnLock(lock);
@@ -354,7 +373,7 @@ static void draw_clock(int force)
 static void place(void)
 {
     WORD bh = scr->BarHeight + 1;
-    int n, off = tray_before(&n);
+    int n, off = tray_before("Clock", CLOCK_ORDER, &n);
     cw = clock_width();
     switch (bar_edge) {
     case OM_BAR_BOTTOM: ch = bh; cx = scr->Width - cw - off; cy = scr->Height - bh; break;
@@ -374,9 +393,225 @@ static struct Window *bar_window(WORD x, WORD y, WORD w, WORD h)
                           WA_IDCMP, IDCMP_REFRESHWINDOW | IDCMP_ACTIVEWINDOW, TAG_DONE);
 }
 
+
+/* ---- the network icons ----------------------------------------------------------------------- */
+
+struct wifi_row {                              /* opensocketwifi.device's record (acnetwork.h), 64 bytes */
+    char ssid[33];
+    UBYTE bssid[6], signal, security, flags, reserved0[2];
+    ULONG channel, rate_mbps;
+    UBYTE reserved1[12];
+};
+struct wifi_call { ULONG command; const char *ssid; struct wifi_row *networks; ULONG capacity; LONG result; ULONG error; };
+
+/* the PC's (or the card's) Wi-Fi: -1 none to show, 0 not connected, 1 connected */
+static int wifi_poll(void)
+{
+    struct MsgPort *port = CreateMsgPort();
+    struct IOStdReq *req = port ? (struct IOStdReq *)CreateIORequest(port, sizeof *req) : NULL;
+    struct wifi_row row;
+    struct wifi_call call;
+    int state = -1;
+    if (req && !OpenDevice((STRPTR)WIFI_DEVICE, 0, (struct IORequest *)req, 0)) {
+        register struct Device *a6 __asm("a6") = req->io_Device;
+        register struct wifi_call *a0 __asm("a0") = &call;
+        register LONG d0 __asm("d0");
+        memset(&call, 0, sizeof call);
+        memset(&row, 0, sizeof row);
+        call.command = WIFI_STATUS;
+        call.networks = &row;
+        call.capacity = 1;
+        __asm volatile ("jsr -42(%%a6)" : "=r"(d0), "+r"(a0) : "r"(a6) : "d1", "a1", "cc", "memory");
+        (void)d0;
+        if (!call.error) {
+            state = call.result > 0;
+            if (state) { strncpy(wifi_ssid, row.ssid, sizeof wifi_ssid - 1); wifi_ssid[sizeof wifi_ssid - 1] = 0; wifi_signal = row.signal; }
+        }
+        CloseDevice((struct IORequest *)req);
+    }
+    if (req) DeleteIORequest((struct IORequest *)req);
+    if (port) DeleteMsgPort(port);
+    return state;
+}
+
+static void net_poll(void)
+{
+    ULONG id;
+    if (!SocketBase) SocketBase = OpenLibrary((STRPTR)"bsdsocket.library", 4);
+    if (!SocketBase) { lan_state = 0; lan_addr[0] = 0; }
+    else if ((id = gethostid()) != 0 && id != 0x7f000001UL) {
+        struct in_addr a;
+        a.s_addr = id;
+        lan_state = 2;
+        strncpy(lan_addr, (const char *)Inet_NtoA(a.s_addr), sizeof lan_addr - 1);
+        lan_addr[sizeof lan_addr - 1] = 0;
+    } else { lan_state = 1; lan_addr[0] = 0; }
+    wifi_state = wifi_poll();
+}
+
+static WORD net_width(void) { return (wifi_state >= 0 ? 2 : 1) * 20 + 4; }
+
+static void net_place(void)
+{
+    WORD bh = scr->BarHeight + 1;
+    int n, off = tray_before("Network", NET_ORDER, &n);
+    nw = net_width();
+    switch (bar_edge) {
+    case OM_BAR_BOTTOM: nh = bh; nx = scr->Width - nw - off; ny = scr->Height - bh; break;
+    case OM_BAR_LEFT:   nh = bh; nx = 0; ny = scr->Height - bh * (n + 1); break;
+    case OM_BAR_RIGHT:  nh = bh; nx = scr->Width - nw; ny = scr->Height - bh * (n + 1); break;
+    case OM_BAR_TOP:    nh = bh; nx = scr->Width - 2 * scr->BarHeight - nw - off; ny = 0; break;
+    default:            nh = scr->BarHeight; nx = scr->Width - 2 * scr->BarHeight - nw - off; ny = 0; break;
+    }
+}
+
+/* LAN: a box above two, joined; filled when connected, hollow when not, crossed with no network */
+static void draw_lan(struct RastPort *rp, WORD x, WORD cy, int state)
+{
+    WORD t = cy - 5;
+    if (state == 2) { RectFill(rp, x + 5, t, x + 10, t + 3); RectFill(rp, x, t + 7, x + 4, t + 10); RectFill(rp, x + 11, t + 7, x + 15, t + 10); }
+    else {
+        Move(rp, x + 5, t); Draw(rp, x + 10, t); Draw(rp, x + 10, t + 3); Draw(rp, x + 5, t + 3); Draw(rp, x + 5, t);
+        Move(rp, x, t + 7); Draw(rp, x + 4, t + 7); Draw(rp, x + 4, t + 10); Draw(rp, x, t + 10); Draw(rp, x, t + 7);
+        Move(rp, x + 11, t + 7); Draw(rp, x + 15, t + 7); Draw(rp, x + 15, t + 10); Draw(rp, x + 11, t + 10); Draw(rp, x + 11, t + 7);
+    }
+    Move(rp, x + 7, t + 4); Draw(rp, x + 7, t + 5); Move(rp, x + 2, t + 5); Draw(rp, x + 13, t + 5);
+    Move(rp, x + 2, t + 5); Draw(rp, x + 2, t + 6); Move(rp, x + 13, t + 5); Draw(rp, x + 13, t + 6);
+    if (state == 0) { Move(rp, x, t); Draw(rp, x + 15, t + 10); Move(rp, x + 15, t); Draw(rp, x, t + 10); }
+}
+
+/* Wi-Fi: a dot and up to three arcs by the signal; only the dot and a cross when not connected */
+static void draw_wifi(struct RastPort *rp, WORD x, WORD cy, int state, int signal)
+{
+    WORD ox = x + 8, oy = cy + 4;
+    int arcs = !state ? 0 : signal > 66 ? 3 : signal > 33 ? 2 : 1;
+    RectFill(rp, ox - 1, oy - 1, ox, oy);
+    for (int k = 1; k <= 3; k++) {
+        int r = 3 * k + 1;
+        if (k > arcs) continue;
+        for (int dx = -r; dx <= r; dx++) {
+            int dy = 0;
+            while ((dy + 1) * (dy + 1) + dx * dx <= r * r) dy++;
+            if (dx * dx <= dy * dy) WritePixel(rp, ox + dx, oy - dy);
+        }
+    }
+    if (!state) { Move(rp, ox + 2, oy - 8); Draw(rp, ox + 7, oy - 3); Move(rp, ox + 7, oy - 8); Draw(rp, ox + 2, oy - 3); }
+}
+
+static void draw_net(int force)
+{
+    struct RastPort *rp;
+    int key = lan_state * 1000 + (wifi_state + 1) * 100 + (wifi_state > 0 ? (wifi_signal > 66 ? 3 : wifi_signal > 33 ? 2 : 1) : 0);
+    WORD cy;
+    if (!net_w || (!force && key == net_drawn)) return;
+    net_drawn = key;
+    rp = net_w->RPort;
+    SetAPen(rp, dri->dri_Pens[BARBLOCKPEN]);
+    RectFill(rp, 0, 0, nw - 1, nh - 1);
+    SetAPen(rp, dri->dri_Pens[BARDETAILPEN]);
+    cy = (nh - (bar_edge == OM_BAR_TITLE ? 1 : 0)) / 2;
+    draw_lan(rp, 2, cy, lan_state);
+    if (wifi_state >= 0) draw_wifi(rp, 22, cy, wifi_state, wifi_signal);
+}
+
+static struct Window *net_window(WORD x, WORD y, WORD w, WORD h)
+{
+    return OpenWindowTags(NULL, WA_CustomScreen, (ULONG)scr, WA_Left, x, WA_Top, y, WA_Width, w, WA_Height, h,
+                          WA_Borderless, TRUE, WA_Activate, FALSE, WA_RMBTrap, TRUE, WA_SmartRefresh, TRUE,
+                          WA_IDCMP, IDCMP_REFRESHWINDOW | IDCMP_ACTIVEWINDOW | IDCMP_MOUSEBUTTONS, TAG_DONE);
+}
+
+static void net_open(void)
+{
+    net_poll();
+    net_place();
+    if ((net_w = net_window(nx, ny, nw, nh))) {
+        net_drawn = -100;
+        draw_net(1);
+        tray("Network", nw, NET_ORDER);
+    }
+}
+
+/* the panel under the icons: what the network is, and a button for its settings */
+#define POP_W 230
+static void pop_lines(char l[3][64])
+{
+    if (lan_state == 0) strcpy(l[0], "Network: OpenSocket isn't running");
+    else if (lan_state == 1) strcpy(l[0], "Network: not connected");
+    else snprintf(l[0], 64, "Network: connected, %s", lan_addr);
+    if (wifi_state < 0) strcpy(l[1], "Wi-Fi: none");
+    else if (!wifi_state) strcpy(l[1], "Wi-Fi: not connected");
+    else snprintf(l[1], 64, "Wi-Fi: %s, signal %d%%", wifi_ssid, wifi_signal);
+    strcpy(l[2], "Network settings...");
+}
+
+static void draw_pop(void)
+{
+    struct RastPort *rp;
+    char l[3][64];
+    WORD fh, y, i;
+    if (!pop_w) return;
+    rp = pop_w->RPort;
+    fh = rp->TxHeight;
+    pop_lines(l);
+    SetAPen(rp, dri->dri_Pens[BACKGROUNDPEN]);
+    RectFill(rp, 0, 0, pop_w->Width - 1, pop_w->Height - 1);
+    SetAPen(rp, dri->dri_Pens[SHADOWPEN]);
+    Move(rp, 0, 0); Draw(rp, pop_w->Width - 1, 0); Draw(rp, pop_w->Width - 1, pop_w->Height - 1); Draw(rp, 0, pop_w->Height - 1); Draw(rp, 0, 0);
+    SetAPen(rp, dri->dri_Pens[TEXTPEN]);
+    SetDrMd(rp, JAM1);
+    for (i = 0, y = 6; i < 2; i++, y += fh + 4) { Move(rp, 8, y + rp->TxBaseline); Text(rp, (STRPTR)l[i], strlen(l[i])); }
+    /* the button */
+    SetAPen(rp, dri->dri_Pens[SHINEPEN]);
+    Move(rp, 8, y + fh + 5); Draw(rp, 8, y); Draw(rp, pop_w->Width - 9, y);
+    SetAPen(rp, dri->dri_Pens[SHADOWPEN]);
+    Draw(rp, pop_w->Width - 9, y + fh + 5); Draw(rp, 8, y + fh + 5);
+    SetAPen(rp, dri->dri_Pens[TEXTPEN]);
+    Move(rp, (pop_w->Width - TextLength(rp, (STRPTR)l[2], strlen(l[2]))) / 2, y + 3 + rp->TxBaseline);
+    Text(rp, (STRPTR)l[2], strlen(l[2]));
+}
+
+static void pop_close(void)
+{
+    if (pop_w) { CloseWindow(pop_w); pop_w = NULL; }
+    if (last_other) ActivateWindow(last_other);
+}
+
+static void pop_open(void)
+{
+    WORD fh = dri->dri_Font->tf_YSize, h = 3 * (fh + 4) + 14, x = nx + nw - POP_W, y = ny + nh;
+    if (x < 0) x = 0;
+    if (bar_edge == OM_BAR_BOTTOM) y = ny - h;
+    if (y + h > scr->Height) y = scr->Height - h;
+    net_poll();
+    draw_net(0);
+    if ((pop_w = net_window(x, y, POP_W, h))) {
+        SetFont(pop_w->RPort, dri->dri_Font);
+        draw_pop();
+        pop_ticks = 0;
+    }
+}
+
+static void pop_click(WORD my)
+{
+    WORD fh = pop_w->RPort->TxHeight, by = 6 + 2 * (fh + 4);
+    if (my >= by && my <= by + fh + 5) {
+        BPTR in = Open((STRPTR)"NIL:", MODE_OLDFILE), out = Open((STRPTR)"NIL:", MODE_NEWFILE);
+        /* asynchronous: both handles are the new process's, closed when it ends */
+        if (!in || !out || SystemTags((STRPTR)NET_TOOL, SYS_Input, in, SYS_Output, out, SYS_Asynch, TRUE, SYS_UserShell, TRUE,
+                                      NP_StackSize, 16384, TAG_DONE) == -1) {
+            if (in) Close(in);
+            if (out) Close(out);
+        }
+    }
+    pop_close();
+}
+
 static void close_all(void)
 {
-    if (clock_w) { CloseWindow(clock_w); clock_w = NULL; tray(0); }
+    if (clock_w) { CloseWindow(clock_w); clock_w = NULL; tray("Clock", 0, CLOCK_ORDER); }
+    if (pop_w) { CloseWindow(pop_w); pop_w = NULL; }
+    if (net_w) { CloseWindow(net_w); net_w = NULL; tray("Network", 0, NET_ORDER); }
     if (logo_w) { CloseWindow(logo_w); logo_w = NULL; }
     if (border_set) { prefs.border_black = 0; apply_border(); }
     free_pens();
@@ -395,9 +630,10 @@ static int open_all(void)
             SetFont(clock_w->RPort, dri->dri_Font);
             shown[0] = 0;
             draw_clock(1);
-            tray(cw);
+            tray("Clock", cw, CLOCK_ORDER);
         }
     }
+    if (prefs.network) net_open();
     apply_border();
     return 1;
 }
@@ -425,14 +661,20 @@ static void events(struct Window *w)
     if (!w) return;
     while ((m = (struct IntuiMessage *)GetMsg(w->UserPort))) {
         ULONG cls = m->Class;
+        UWORD code = m->Code;
+        WORD my = m->MouseY;
         ReplyMsg((struct Message *)m);
         if (cls == IDCMP_REFRESHWINDOW) {
             BeginRefresh(w);
-            if (w == logo_w) draw_logo(); else draw_clock(1);
+            if (w == logo_w) draw_logo(); else if (w == net_w) draw_net(1); else if (w == pop_w) draw_pop(); else draw_clock(1);
             EndRefresh(w, TRUE);
         }
-        /* a click on ours: the window before stays the active one */
-        else if (cls == IDCMP_ACTIVEWINDOW && last_other) ActivateWindow(last_other);
+        else if (cls == IDCMP_MOUSEBUTTONS && code == SELECTDOWN) {
+            if (w == net_w) { if (pop_w) pop_close(); else pop_open(); return; }
+            if (w == pop_w) { pop_click(my); return; }
+        }
+        /* a click on ours: the window before stays the active one (the panel keeps it while open) */
+        else if (cls == IDCMP_ACTIVEWINDOW && last_other && w != pop_w) ActivateWindow(last_other);
     }
 }
 
@@ -442,7 +684,7 @@ static int wb_title_shown(void)
 {
     struct Window *a = IntuitionBase->ActiveWindow;
     const char *t;
-    if (!a || a->WScreen != scr || a == logo_w || a == clock_w) a = last_other;
+    if (!a || a->WScreen != scr || a == logo_w || a == clock_w || a == net_w || a == pop_w) a = last_other;
     t = (const char *)(a && a->WScreen == scr && a->ScreenTitle ? a->ScreenTitle : scr->Title);
     return t && !strncmp(t, LOGO_PAD, strlen(LOGO_PAD));
 }
@@ -497,26 +739,43 @@ int main(void)
             close_all();
             read_prefs();
             apply_title();
-            if (!prefs.logo && !prefs.memory && !prefs.clock && !prefs.border_black) break;
+            if (!prefs.logo && !prefs.memory && !prefs.clock && !prefs.network && !prefs.border_black) break;
             if (!open_all()) break;
         }
         events(logo_w);
         events(clock_w);
+        events(net_w);
+        if (pop_w) events(pop_w);
         act = IntuitionBase->ActiveWindow;
-        if (act && act != logo_w && act != clock_w) last_other = act;
+        if (act && act != logo_w && act != clock_w && act != net_w && act != pop_w) last_other = act;
+        if (pop_w && ++pop_ticks > 20) pop_close();     /* the panel goes after 10 s */
         if (last_other && !is_window(last_other)) last_other = NULL;
         logo_follow();
         draw_clock(0);
         if (++tick % 4 == 0) {                 /* every 2 s: the tray and OpenMenus' bar may have moved */
             int edge = read_bar_edge();
             WORD ox = cx, oy = cy, ow = cw, oh = ch;
-            if (edge != bar_edge && clock_w) { close_all(); if (!open_all()) break; }
-            else if (clock_w) {
-                place();
-                if (cx != ox || cy != oy || cw != ow || ch != oh) { ChangeWindowBox(clock_w, cx, cy, cw, ch); shown[0] = 0; }
+            if (edge != bar_edge && (clock_w || net_w)) { close_all(); if (!open_all()) break; }
+            else {
+                if (net_w) {
+                    WORD px = nx, py = ny, pw = nw, ph = nh;
+                    if (tick % 20 == 0) net_poll();               /* every 10 s */
+                    net_place();
+                    if (nx != px || ny != py || nw != pw || nh != ph) {
+                        ChangeWindowBox(net_w, nx, ny, nw, nh);
+                        tray("Network", nw, NET_ORDER);
+                        net_drawn = -100;
+                    }
+                    draw_net(0);
+                }
+                if (clock_w) {
+                    place();
+                    if (cx != ox || cy != oy || cw != ow || ch != oh) { ChangeWindowBox(clock_w, cx, cy, cw, ch); shown[0] = 0; }
+                }
             }
             keep_in_front(logo_w);
             keep_in_front(clock_w);
+            keep_in_front(net_w);
         }
         Delay(TICKS_PER_SECOND / 2);
     }
@@ -524,6 +783,7 @@ int main(void)
     RemPort(port);
     DeleteMsgPort(port);
 out:
+    if (SocketBase) CloseLibrary(SocketBase);
     if (UtilityBase) CloseLibrary(UtilityBase);
     if (LayersBase) CloseLibrary(LayersBase);
     if (GfxBase) CloseLibrary((struct Library *)GfxBase);
