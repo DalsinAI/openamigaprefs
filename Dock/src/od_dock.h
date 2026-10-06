@@ -14,6 +14,7 @@
 enum { OD_BOTTOM = 0, OD_TOP = 1, OD_LEFT = 2, OD_RIGHT = 3 };
 enum { OD_SMALL = 0, OD_MEDIUM = 1, OD_LARGE = 2 };          /* 40, 56, 72 pixel cells */
 enum { OD_WB = 0, OD_CLI = 1, OD_AREXX = 2, OD_SEPARATOR = 3 };
+enum { OD_BG_SOLID = 0, OD_BG_CLEAR = 1, OD_BG_GLASS = 2 };   /* the screen's colour; see-through; see-through, frosted */
 
 #define OD_MAX 48                                         /* buttons on one dock */
 
@@ -30,6 +31,9 @@ typedef struct od_dock {
     int place;                                            /* OD_BOTTOM ... */
     int size;                                             /* OD_SMALL ... */
     int labels;                                           /* names under the icons */
+    int hover;                                            /* a name above the icon the pointer is on */
+    int hop;                                              /* an icon hops when its program starts */
+    int background;                                       /* OD_BG_* */
     int running;                                          /* a mark under programs that are running */
     int magnify;                                          /* reserved: never with Lite */
     char imported[96];                                    /* the file taken over, so the first start does it once */

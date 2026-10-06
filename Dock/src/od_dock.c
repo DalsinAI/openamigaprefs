@@ -9,6 +9,7 @@
 static const char *const place_words[] = { "bottom", "top", "left", "right" };
 static const char *const size_words[] = { "small", "medium", "large" };
 static const char *const kind_words[] = { "wb", "cli", "arexx", "separator" };
+static const char *const bg_words[] = { "solid", "see-through", "glass" };
 
 int od_cell(int size) { return size == OD_LARGE ? 72 : size == OD_MEDIUM ? 56 : 40; }
 
@@ -18,6 +19,9 @@ void od_defaults(od_dock *d)
     d->place = OD_BOTTOM;
     d->size = OD_MEDIUM;
     d->running = 1;
+    d->hover = 1;
+    d->hop = 1;
+    d->background = OD_BG_GLASS;
 }
 
 /* ---- small helpers ------------------------------------------------------------------- */
@@ -171,6 +175,9 @@ int od_parse(od_dock *d, const char *text)
                 else if (same(k, "size")) d->size = pick(v, size_words, 3, d->size);
                 else if (same(k, "labels")) d->labels = on;
                 else if (same(k, "running")) d->running = on;
+                else if (same(k, "names-on-hover")) d->hover = on;
+                else if (same(k, "hop")) d->hop = on;
+                else if (same(k, "background")) d->background = pick(v, bg_words, 3, d->background);
                 else if (same(k, "magnify")) d->magnify = on;
                 else if (same(k, "imported")) copy(d->imported, v, sizeof d->imported);
             }
@@ -192,6 +199,9 @@ int od_write(const od_dock *d, char *out, int size)
     ADD("size %s\n", size_words[d->size >= 0 && d->size < 3 ? d->size : 1]);
     ADD("labels %s\n", onoff[!!d->labels]);
     ADD("running %s\n", onoff[!!d->running]);
+    ADD("names-on-hover %s\n", onoff[!!d->hover]);
+    ADD("hop %s\n", onoff[!!d->hop]);
+    ADD("background %s\n", bg_words[d->background >= 0 && d->background < 3 ? d->background : 2]);
     ADD("magnify %s\n", onoff[!!d->magnify]);
     if (d->imported[0]) ADD("imported \"%s\"\n", quoted(d->imported, q, sizeof q));
     for (int i = 0; i < d->n; i++) {
