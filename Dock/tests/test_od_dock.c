@@ -29,7 +29,7 @@ static void test_own_format(void)
 {
     od_defaults(&d);
     od_starter(&d);
-    CHECK(d.n == 4 && d.b[0].kind == OD_WB && !strcmp(d.b[0].label, "Shell"));
+    CHECK(d.n == 4 && d.b[0].kind == OD_CLI && !strcmp(d.b[0].label, "Shell") && d.b[1].kind == OD_WB);
     d.place = OD_LEFT; d.size = OD_LARGE; d.labels = 1; d.running = 0;
     strcpy(d.imported, "ENVARC:ToolManager.prefs");
     d.b[1].kind = OD_SEPARATOR;

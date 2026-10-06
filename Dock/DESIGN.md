@@ -24,7 +24,9 @@ over the docks people already have. MIT, Copyright (c) 2026 Dalsin Limited.
   it. Starting a second OpenDock only tells the first to read its settings
   again.
 - There is no magnification and no see-through. It draws with the screen's
-  pens and the icons as they are (`DrawIconStateA`), so it costs a real
+  pens and the icons as they are, laid out for the screen
+  (`GetIconTags` with `ICONGETA_Screen`, which OS 3.5 colour and PNG icons
+  need) and drawn with `DrawIconStateA`, so it costs a real
   68040 nothing on its native chipset or a graphics card. Magnification
   stays off with Lite once it exists.
 - It needs icon.library 44 and workbench.library 44 (AmigaOS 3.5 or
@@ -72,8 +74,10 @@ program that wrote the file.
 | AmiStart | `sm.prefs`, found from its icon's `PREFS` tooltype (`PROGDIR:` is the icon's drawer; `DATAPATH` is where relative icons start); also AmiKit's `sm.config` and Icaros's `ENVARC:Icaros/sm.prefs`. It is text: `NEWDIR NAME="TASKBAR"` ... `ITEM` ... `ENDDIR` | The taskbar's `ITEM`s with `FILE=`: `EXECMODE="0"` becomes Workbench, `"1"` becomes Shell with `ARG=` (hex) as its arguments. With no taskbar programs, the start menu's (`MAIN`). Submenus, drawers (`SYSDIR`) and modules (`EXTERNAL`) are left out |
 
 On the first start, when there is no `ENVARC:OpenDock/Dock`, Dock takes
-over the first of these it finds, once. Otherwise it starts with Shell,
-Prefs, MultiView and Look. **Take over its buttons** does it on request:
+over the first of these it finds, once. Otherwise it starts with Shell
+(`NewShell`), Prefs, MultiView and Look. Workbench buttons whose program
+isn't on the machine are left out, both from the starter set and from a
+take-over. **Take over its buttons** does it on request:
 the buttons are added after the dock's own, and when the file isn't where
 it usually is, a requester asks for it. From the Shell,
 `Dock TOOLMANAGER ENVARC:ToolManager.prefs SAVE` does it with no window
