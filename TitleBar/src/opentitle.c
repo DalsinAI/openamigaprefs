@@ -47,7 +47,7 @@
 #include "om_prefs.h"
 #include "logo.h"
 
-const char version[] __attribute__((used)) = "$VER: OpenTitle 0.2 (6.10.2026) OpenPrefs, Dalsin Limited";
+const char version[] __attribute__((used)) = "$VER: OpenTitle 0.3 (6.10.2026) OpenPrefs, Dalsin Limited";
 
 struct IntuitionBase *IntuitionBase;
 struct GfxBase *GfxBase;
@@ -131,7 +131,10 @@ static void tray(int width)
     char t[24];
     if (width > 0) {
         if ((lock = Lock((STRPTR)TRAY_DIR, ACCESS_READ))) UnLock(lock);
-        else if ((lock = CreateDir((STRPTR)TRAY_DIR))) UnLock(lock);
+        else {                                 /* ENV:OpenMenus is there only once OpenMenus has settings */
+            if ((lock = CreateDir((STRPTR)"ENV:OpenMenus"))) UnLock(lock);
+            if ((lock = CreateDir((STRPTR)TRAY_DIR))) UnLock(lock);
+        }
         if ((fh = Open((STRPTR)TRAY_MINE, MODE_NEWFILE))) {
             LONG n = snprintf(t, sizeof t, "%d %d\n", width, MY_ORDER);
             Write(fh, t, n);
