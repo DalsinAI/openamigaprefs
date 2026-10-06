@@ -34,6 +34,11 @@ prefs format with `target` lines (opengadtools DESIGN.md section 2i).
 Holding Shift while OpenLook starts gives the OS's own look until the look
 is changed again (safe start).
 
+**Views (0.2).** Look opens in Simple: the theme with its preview, the mode,
+and the profiles. View > Advanced (Amiga-A, or `ADVANCED` from the Shell)
+shows every setting. The choice is shared by all OpenPrefs editors as
+`simple` or `advanced` in `ENV:OpenAmiga/PrefsView` (and `ENVARC:`).
+
 ## Next
 
 Windows (snapping, Amiga+Tab, wheel under the pointer, remembered window
