@@ -93,9 +93,8 @@ places itself after the widths of those with a lower order (on a side bar,
 one row above each), looks again every two seconds, and deletes its file
 when it quits. OpenSpeaker writes `Speaker` and sends OpenMenus Ctrl-F.
 OpenMenus' own bar keeps room for the sum of the widths (a row each on a
-side bar): a small engine change, asked of its owner. Until then, OpenMenus'
-own bar at an edge keeps itself in front and covers the tray. In the title
-bar, the default, the programs only keep clear of each other.
+side bar), since openamigaprefs #19. In the title bar, the default, the
+programs only keep clear of each other.
 
 Ctrl-C or Exchange quits it. Ctrl-F (sent by Sound prefs on Save or Use)
 reads the settings again, and it quits when "Show the speaker on the menu
@@ -107,8 +106,8 @@ bar" is off. Sound prefs starts it when that is switched on.
   build and the instance tests).
 - OpenUp: `SYS:Prefs/Sound` in place of the old two (moved to
   `SYS:Prefs/Classic`), `C:OpenSpeaker`, and `Sound USE` in the startup.
-- The tray in the OpenMenus engine (above). Phase 2 of the menu bar, the
-  start pop-up from OpenDock, may carry the speaker too.
+- Phase 2 of the menu bar, the start pop-up from OpenDock, may carry the
+  speaker too.
 - AHI's per-unit Monitor, Input gain and inputs in the Advanced view; the
   echo and DSP effects are AHI's own, set by programs.
 - OpenLook's theme colours for the speaker (it uses the screen's bar pens).
