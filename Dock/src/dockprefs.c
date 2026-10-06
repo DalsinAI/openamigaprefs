@@ -639,7 +639,7 @@ out:
 int main(void)
 {
     LONG args[8] = { 0, 0, 0, 0, 0, 0, 0, 0 };
-    struct RDArgs *rd = ReadArgs((STRPTR)"FROM,TOOLMANAGER/K,AMIDOCK/K,AMISTART/K,USE/S,SAVE/S,ADVANCED/S,ADD/M", args, NULL);
+    struct RDArgs *rd = ReadArgs((STRPTR)"FROM/K,TOOLMANAGER/K,AMIDOCK/K,AMISTART/K,USE/S,SAVE/S,ADVANCED/S,ADD/M", args, NULL);
     char *text, err[120];
     int rc = RETURN_OK, first;
     if (!rd) { PrintFault(IoErr(), (STRPTR)"Dock"); return RETURN_FAIL; }
@@ -679,7 +679,7 @@ int main(void)
         od_report r;
         for (int s = 0; s < SRC_COUNT; s++)
             if (find_source(s, file, sizeof file, base, sizeof base)) {
-                od_dock t;
+                static od_dock t;                /* 30 KB: not on a Shell's 4 KB stack */
                 od_defaults(&t);
                 t.place = cur.place; t.size = cur.size;
                 if (take_over(&t, file, base, &r, err, sizeof err)) {
