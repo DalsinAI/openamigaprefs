@@ -44,7 +44,7 @@ We considered putting Display inside Appearance. We kept it apart because a scre
 
 ## How each editor looks
 
-Every editor uses one frame, the one the Sound mockup drew: a GadTools window with Project, Edit, View and Settings menus, the page, a status line and Save, Use, Test and Cancel along the foot. Save writes `ENV:` and `ENVARC:`; Use writes `ENV:` and lasts until the reboot; Test puts things back after 15 seconds unless Use or Save follows; Cancel puts back what a Test changed. This is how Look, Menus and Windows already behave.
+Every editor uses one frame: a GadTools window whose Project, Edit, View and Settings menus sit on the screen bar, with the page, a status line and Save, Use, Test and Cancel along the foot. Save writes `ENV:` and `ENVARC:`; Use writes `ENV:` and lasts until the reboot; Test puts things back after 15 seconds unless Use or Save follows; Cancel puts back what a Test changed. This is how Look, Menus and Windows already behave.
 
 **Simple** is one page with the five to eight settings people change most, gathered from every section, with the theme first where there is one. **Advanced** adds a list of sections down the left; each section holds every setting of the editor it replaces, in that editor's own words where they are clear. The choice is still shared by every editor in `ENV:OpenAmiga/PrefsView`.
 
@@ -81,6 +81,16 @@ Every editor uses one frame, the one the Sound mockup drew: a GadTools window wi
 **Screen modes (Dale, 6 October).** Display lists every mode by size, largest first, written as width x height with where it comes from: `1920x1080 (OpenRTG)`, `800x600 (OpenRTG)`, `640x512 (AGA)`, `640x256 (AGA)`. The source is the chipset or card that gives the mode (OpenRTG, Picasso96, AGA, ECS or OCS). Modes of the same size are ordered by colours, most first. The mode's full name, such as PAL: High Res Laced, shows below the list with its colours and scan rates.
 
 The pictures are taken from the interactive mockup, drawn 640 pixels wide. We plan every page to fit a 640 by 256 screen, as the Menus editor does; that is an estimate until a built page is measured on an instance.
+
+## The look: AmigaOS 4.1
+
+Dale asked on 6 October that, theme-wise, we replicate how AmigaOS 4.1 looks. The pictures in this document are already drawn that way. We propose:
+
+- **A new OpenLook theme in the manner of OS 4.1** (working name *Open 4*). It has shaded title bars, with the close gadget on the left and iconify, zoom and depth on the right. Buttons, cycle gadgets and lists are rounded and shaded, groups sit in titled frames, and the backdrop is deep blue. Menus stay on the screen bar, as on every Amiga.
+- **The editors follow OS 4.1's prefs layout:** a page list with small icons down the left, titled groups on the page, and Save, Use, Test and Cancel along the foot. The editors are GadTools, and OpenLook draws the theme over GadTools, so they need nothing special to look this way.
+- **Open 4 becomes the Modern profile's theme.** The Lite 68040 profile keeps the same shapes but drawn flat, with no gradients or shadows, as the Lite rules say. Classic 3.2 is untouched.
+- **We draw every image ourselves.** The look is matched; no file, image or icon from OS 4.1 is copied, since those belong to Hyperion.
+- Taller, shaded title bars need the frame and title sizes that Look's notes list as theme format 2. That work belongs to OpenLook (opengadtools), and Appearance's Theme page simply offers the new theme.
 
 ## Keeping old programs working
 
