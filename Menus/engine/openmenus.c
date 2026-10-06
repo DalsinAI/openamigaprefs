@@ -70,6 +70,7 @@
 static const char version[] = "$VER: OpenMenus 0.4 (6.10.2026) MIT, Copyright (c) 2026 Dalsin Limited";
 
 #define PREFS_ENV "ENV:OpenMenus/Menus"
+#define TRAY_DIR "ENV:OpenMenus/Tray"     /* one file per tray program: "width order" (OpenSpeaker, the clock) */
 #define LOOK_ENV "ENV:OpenGadTools/Look"
 #define THEME_DIR "SYS:Prefs/Presets/Themes"
 
@@ -104,13 +105,38 @@ static om_prefs prefs;                   /* static: Run gives a commodity 4 KB o
 static ogt_theme theme;
 static int theme_loaded, theme_dark, lite_on;
 static IX kbd_ix;                        /* keyboard.key, parsed */
+static WORD tray_w, tray_n;              /* the tray programs' summed width and their number (TRAY_DIR) */
 static volatile int kbd_ix_ok;
+
+/* The tray: every file in TRAY_DIR is a program at the title bar's right end
+ * whose first number is its width in pixels. */
+static void read_tray(void)
+{
+    struct FileInfoBlock *fib = AllocDosObject(DOS_FIB, NULL);
+    BPTR dir = fib ? Lock((STRPTR)TRAY_DIR, ACCESS_READ) : 0;
+    tray_w = tray_n = 0;
+    if (dir && Examine(dir, fib) && fib->fib_DirEntryType > 0) {
+        while (ExNext(dir, fib)) {
+            char path[96], *t;
+            long v;
+            if (fib->fib_DirEntryType > 0) continue;
+            snprintf(path, sizeof path, TRAY_DIR "/%s", fib->fib_FileName);
+            if (!(t = read_file(path))) continue;
+            v = strtol(t, NULL, 10);
+            FreeVec(t);
+            if (v > 0 && v < 1024 && tray_w + v < 2048) { tray_w += (WORD)v; tray_n++; }
+        }
+    }
+    if (dir) UnLock(dir);
+    if (fib) FreeDosObject(DOS_FIB, fib);
+}
 
 static void read_settings(void)
 {
     char *t = read_file(PREFS_ENV), *look, name[48] = "Open", mode[8] = "light", path[128], err[80];
     om_defaults(&prefs);
     if (t) { om_parse(&prefs, t); FreeVec(t); }
+    read_tray();
     if (theme_loaded) { ogt_theme_free(&theme); theme_loaded = 0; }
     lite_on = 0;
     if ((look = read_file(LOOK_ENV))) {
@@ -1017,6 +1043,7 @@ static void edge_box(struct Screen *sc, struct TextFont *f, int n, const char *c
     if (!vertical(prefs.bar)) {
         *h = sc->BarHeight + 1; *x = 0;
         *w = sc->Width - (prefs.bar == OM_BAR_TOP ? 2 * sc->BarHeight : 0);   /* top: the screen's depth gadget stays usable */
+        *w -= tray_w;                                  /* and the tray programs' places stay clear */
         *y = prefs.bar == OM_BAR_BOTTOM ? sc->Height - *h : 0;
         return;
     }
@@ -1031,6 +1058,7 @@ static void edge_box(struct Screen *sc, struct TextFont *f, int n, const char *c
         if (*w > sc->Width / 3) *w = sc->Width / 3;
         *y = sc->BarHeight + 1;                        /* the screen's title bar above it stays the screen's */
         *h = sc->Height - *y;
+        *h -= tray_n * (sc->BarHeight + 1);            /* a row for each tray program */
         *x = prefs.bar == OM_BAR_LEFT ? 0 : sc->Width - *w;
     }
 }
