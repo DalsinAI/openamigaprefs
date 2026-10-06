@@ -227,7 +227,7 @@ so it is 251 lines high (Topaz 8) wherever it is measured.
     # once, at install: MagicMenu's settings taken over (does nothing without them)
     #   SYS:Prefs/Menus MAGICMENU ENVARC:MagicMenu.prefs SAVE
 
-## Where the menu bar sits (designed, not built)
+## Where the menu bar sits (phase 1 in OpenMenus 0.4)
 
 We, 6 October 2026: "we should support the same menu bar options as Windows
 and Linux, top and bottom, left and right sides of the screen, or as a 'start'
@@ -263,6 +263,17 @@ same way, along whichever edge is chosen:
   title text) still have it with `title`; with an OpenMenus bar on top, the
   title bar's own text shows at the bar's far end.
 
+**What 0.4 does (6 October 2026),** tried on OS 3.2.3 at all four edges:
+- `bar title|top|bottom|left|right` and `bar.autohide on|off` in `ENV:OpenMenus/Menus`; the editor's **Menu bar** cycle (Title bar, Top, Bottom, Left, Right) and **Hide** beside it, in both views. Use or Save moves the bar at once.
+- Our bar is a borderless window on the **Workbench screen** that never takes the activation. It shows the active window's menu titles, follows them every 100 ms, and comes back in front when a window covers it.
+- Either button on a title opens that menu: the left button keeps it open until the next click, the right button is hold-and-release or sticky as the settings say. The click never reaches Intuition, so the window under the pointer keeps the activation.
+- The right button's pull-down on the Workbench screen opens from our bar too; other screens keep their title bar.
+- Menus open on the side facing the screen: down from the top, up from the bottom, out to the right of a left bar, to the left of a right bar.
+- The top bar leaves the screen's depth gadget uncovered; the side bars start below the screen's title bar, so the screen can still be dragged.
+- Autohide: the bar shows when the pointer touches its edge, and goes when the pointer moves away.
+
+**Not yet:** `bar.screens` (only the Workbench screen has our bar); keeping windows and icons clear of a bottom or side bar (the left bar covers the disk icons); Up and Down to step along a side bar by key (Left and Right switch menus there too); the bar's own width and font in the Advanced view. The Workbench screen can't close (a screen mode change) while our bar is open: turn the bar off first.
+
 **Phase 2: a start-style menu from OpenDock.** A button at the dock's end opens
 a pop-up of programs, the Workbench menu's own items, and Shut down/Reboot,
 laid out as the dock's edge says (up from a bottom dock, across from a side
@@ -271,7 +282,7 @@ phase 1 bar, so the two share the edge rules and how the windows keep clear.
 
 ## Next
 
-- The menu bar at any edge (above, phase 1), then the start-style pop-up from
+- The menu bar's "not yet" list (above), then the start-style pop-up from
   OpenDock (phase 2).
 
 - In the engine: the opening delays, see-through and pictures, and a pop-up
