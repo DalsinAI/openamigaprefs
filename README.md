@@ -32,3 +32,7 @@ ask, as a courtesy rather than a condition, that a fork or a port say it is
 based on OpenPrefs by Dalsin Limited.
 
 OpenPrefs was created by Dalsin Limited, for AmigaChrome.
+
+## Contributors
+
+OpenPrefs is created and maintained by [SacredTrees](https://github.com/SacredTrees) with the AmigaChrome agent team, copyright Dalsin Limited. Everyone whose work it includes is credited in [`CONTRIBUTORS.md`](CONTRIBUTORS.md).
