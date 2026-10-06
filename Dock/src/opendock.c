@@ -419,10 +419,12 @@ static void draw(void) { show(-1, 0); }
 /* A started program's icon hops, as on the Mac. */
 static void hop(int i)
 {
-    static const int lifts[] = { 3, 6, 8, 9, 8, 6, 3, 0, 2, 3, 2, 0 };
+    /* two bounces and a small one, two video frames a step: about a second */
+    static const int lifts[] = { 3, 6, 8, 9, 8, 6, 3, 0, 3, 6, 8, 9, 8, 6, 3, 0, 2, 3, 2, 0 };
     if (!dock.hop || !back) return;
     bubble_off();
-    for (unsigned k = 0; k < sizeof lifts / sizeof lifts[0]; k++) { show(i, lifts[k]); Delay(1); }
+    for (unsigned k = 0; k < sizeof lifts / sizeof lifts[0]; k++) { show(i, lifts[k]); Delay(2); }
+    show(-1, 0);
 }
 
 /* ---- the name above the icon under the pointer -------------------------------------------- */

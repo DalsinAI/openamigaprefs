@@ -382,7 +382,7 @@ static int make_gadgets(struct Screen *scr, APTR vi, struct Gadget **glist, int 
     struct Gadget *g;
     struct NewGadget ng;
     int fh = scr->Font->ta_YSize, lh = fh + 6, top = scr->WBorTop + fh + 1 + 6, L = 10, R = 300, i, row, row2;
-    int gp = scr->Height < 320 ? 2 : 4, listh = (advanced ? 9 : 7) * (fh + 1) + 4;
+    int gp = scr->Height < 320 ? 2 : 4, listh = 7 * (fh + 1) + 4;
     memset(gad, 0, sizeof gad);
     g = CreateContext(glist);
     memset(&ng, 0, sizeof ng);
@@ -413,24 +413,27 @@ static int make_gadgets(struct Screen *scr, APTR vi, struct Gadget **glist, int 
         G(CHECKBOX_KIND, G_HOP, L + 220, row, 26, lh, "Hop", PLACETEXT_LEFT, GTCB_Scaled, TRUE);
         row += lh + gp;
     }
+    /* taking over another dock */
+    row += gp;
+    G(CYCLE_KIND, G_SOURCE, L + 60, row, R - L - 80, lh, "From", PLACETEXT_LEFT, GTCY_Labels, (ULONG)src_labels); row += lh + gp;
+    G(BUTTON_KIND, G_TAKEOVER, L + 60, row, R - L - 80, lh, "Take over its buttons", 0, GA_Disabled, FALSE); row += lh + gp;
 
-    /* the right column: the dock, and taking over */
+    /* the right column: the dock; in Advanced, the chosen button. Both columns
+     * are kept short enough for a 256-line PAL Workbench. */
     row2 = top;
     G(CYCLE_KIND, G_PLACE, R + 80, row2, W - R - 90, lh, "Place", PLACETEXT_LEFT, GTCY_Labels, (ULONG)place_labels); row2 += lh + gp;
     G(CYCLE_KIND, G_SIZE, R + 80, row2, W - R - 90, lh, "Size", PLACETEXT_LEFT, GTCY_Labels, (ULONG)size_labels); row2 += lh + gp;
     G(CHECKBOX_KIND, G_LABELS, R + 80, row2, 26, lh, "Names", PLACETEXT_LEFT, GTCB_Scaled, TRUE);
     if (advanced) G(CHECKBOX_KIND, G_RUNNING, R + 220, row2, 26, lh, "Running", PLACETEXT_LEFT, GTCB_Scaled, TRUE);
     row2 += lh + 2 * gp;
-    G(CYCLE_KIND, G_SOURCE, R + 80, row2, W - R - 90, lh, "From", PLACETEXT_LEFT, GTCY_Labels, (ULONG)src_labels); row2 += lh + gp;
-    G(BUTTON_KIND, G_TAKEOVER, R + 80, row2, W - R - 90, lh, "Take over its buttons", 0, GA_Disabled, FALSE); row2 += lh + 2 * gp;
     if (advanced) {
         /* the chosen button, in full */
-        G(CYCLE_KIND, G_KIND, R + 80, row2, W - R - 90, lh, "Starts", PLACETEXT_LEFT, GTCY_Labels, (ULONG)kind_labels); row2 += lh + gp;
+        G(CYCLE_KIND, G_KIND, R + 80, row2, W - R - 200, lh, "Starts", PLACETEXT_LEFT, GTCY_Labels, (ULONG)kind_labels);
+        G(INTEGER_KIND, G_STACK, W - 70, row2, 60, lh, "Stack", PLACETEXT_LEFT, GTIN_MaxChars, 7, GTIN_Number, 4096); row2 += lh + gp;
         G(STRING_KIND, G_NAME, R + 80, row2, W - R - 90, lh, "Name", PLACETEXT_LEFT, GTST_MaxChars, 46); row2 += lh + gp;
         G(STRING_KIND, G_COMMAND, R + 80, row2, W - R - 90, lh, "Command", PLACETEXT_LEFT, GTST_MaxChars, 254); row2 += lh + gp;
         G(STRING_KIND, G_ICON, R + 80, row2, W - R - 90, lh, "Icon", PLACETEXT_LEFT, GTST_MaxChars, 158); row2 += lh + gp;
         G(STRING_KIND, G_DIR, R + 80, row2, W - R - 90, lh, "Drawer", PLACETEXT_LEFT, GTST_MaxChars, 126); row2 += lh + gp;
-        G(INTEGER_KIND, G_STACK, R + 80, row2, 90, lh, "Stack", PLACETEXT_LEFT, GTIN_MaxChars, 7, GTIN_Number, 4096); row2 += lh + gp;
     }
     if (row2 > row) row = row2;
     row += gp;
