@@ -83,12 +83,19 @@ end: the right end of a top or bottom bar, the bottom of a side bar. It
 reads the bar's place from `ENV:OpenMenus/Menus` every two seconds, and
 moves when the bar does.
 
-**The tray:** so that OpenMenus' bar leaves room for it, OpenSpeaker writes
-its width in pixels to `ENV:OpenMenus/Tray` and sends OpenMenus Ctrl-F, and
-deletes the file when it quits. OpenMenus reading that file (keeping the
-room at the end of its bar) is a small change to the engine, asked of its
-owner; until then, OpenMenus' own bar (at any edge) keeps itself in front and
-covers the speaker. In the title bar, the default, nothing needs it.
+**The tray:** the end of the menu bar is shared with the other programs
+that sit there, first the clock (Workbench's title with free memory, and the
+date and time at the right). Each keeps a file in `ENV:OpenMenus/Tray/`,
+named for it, holding `width order`: its width in pixels, and its place,
+where a lower order is nearer the bar's end. The clock is order 0, so it
+stays rightmost; the speaker is order 10, just left of it. Each program
+places itself after the widths of those with a lower order (on a side bar,
+one row above each), looks again every two seconds, and deletes its file
+when it quits. OpenSpeaker writes `Speaker` and sends OpenMenus Ctrl-F.
+OpenMenus' own bar keeps room for the sum of the widths (a row each on a
+side bar): a small engine change, asked of its owner. Until then, OpenMenus'
+own bar at an edge keeps itself in front and covers the tray. In the title
+bar, the default, the programs only keep clear of each other.
 
 Ctrl-C or Exchange quits it. Ctrl-F (sent by Sound prefs on Save or Use)
 reads the settings again, and it quits when "Show the speaker on the menu

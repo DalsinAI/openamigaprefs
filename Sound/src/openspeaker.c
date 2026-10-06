@@ -62,7 +62,9 @@ struct GfxBase *GfxBase;
 struct Library *GadToolsBase, *LayersBase, *CxBase;
 
 #define MENUS_ENV "ENV:OpenMenus/Menus"
-#define TRAY_ENV  "ENV:OpenMenus/Tray"
+#define TRAY_DIR  "ENV:OpenMenus/Tray"        /* the tray: a file per program on the menu bar's end, "width order" */
+#define TRAY_MINE "ENV:OpenMenus/Tray/Speaker"
+#define MY_ORDER  10                          /* lower is nearer the bar's end: the clock is 0, so it stays rightmost */
 #define SOUND_PREFS "SYS:Prefs/Sound"
 #define NM_WHEEL_UP   0x7A                   /* the mouse wheel, as NewMouse and OS 3.2 send it */
 #define NM_WHEEL_DOWN 0x7B
@@ -190,12 +192,43 @@ static void tell_openmenus(void)
 
 static void tray(int width)
 {
-    BPTR fh;
-    char t[16];
+    BPTR fh, lock;
+    char t[24];
     if (width > 0) {
-        if ((fh = Open((STRPTR)TRAY_ENV, MODE_NEWFILE))) { LONG n = snprintf(t, sizeof t, "%d\n", width); Write(fh, t, n); Close(fh); }
-    } else DeleteFile((STRPTR)TRAY_ENV);
+        if ((lock = Lock((STRPTR)TRAY_DIR, ACCESS_READ))) UnLock(lock);
+        else if ((lock = CreateDir((STRPTR)TRAY_DIR))) UnLock(lock);
+        if ((fh = Open((STRPTR)TRAY_MINE, MODE_NEWFILE))) { LONG n = snprintf(t, sizeof t, "%d %d\n", width, MY_ORDER); Write(fh, t, n); Close(fh); }
+    } else DeleteFile((STRPTR)TRAY_MINE);
     tell_openmenus();
+}
+
+/* The room the tray's other programs nearer the bar's end take (the clock):
+ * their widths in pixels, and how many they are. */
+static int tray_before(int *count)
+{
+    struct FileInfoBlock *fib = AllocDosObject(DOS_FIB, NULL);
+    BPTR lock = Lock((STRPTR)TRAY_DIR, ACCESS_READ);
+    int sum = 0;
+    *count = 0;
+    if (fib && lock && Examine(lock, fib)) {
+        while (ExNext(lock, fib)) {
+            char path[96], buf[24];
+            BPTR fh;
+            int w = 0, order = 0;
+            LONG n;
+            if (fib->fib_DirEntryType > 0 || !strcmp((const char *)fib->fib_FileName, "Speaker")) continue;
+            snprintf(path, sizeof path, TRAY_DIR "/%s", (const char *)fib->fib_FileName);
+            if (!(fh = Open((STRPTR)path, MODE_OLDFILE))) continue;
+            n = Read(fh, buf, sizeof buf - 1);
+            Close(fh);
+            buf[n > 0 ? n : 0] = 0;
+            if (sscanf(buf, "%d %d", &w, &order) < 1 || w <= 0 || w > 400) continue;
+            if (order < MY_ORDER || (order == MY_ORDER && strcmp((const char *)fib->fib_FileName, "Speaker") < 0)) { sum += w; (*count)++; }
+        }
+    }
+    if (lock) UnLock(lock);
+    if (fib) FreeDosObject(DOS_FIB, fib);
+    return sum;
 }
 
 /* where the speaker goes: the bar's far end (OpenMenus keeps 2 bar heights for the screen's depth gadget) */
@@ -203,15 +236,16 @@ static void place(void)
 {
     struct RastPort rp;
     WORD bh = scr->BarHeight + 1;
+    int n, off = tray_before(&n);            /* left of the clock, or above it on a side bar */
     InitRastPort(&rp);
     SetFont(&rp, dri->dri_Font);
     sw = 5 + 17 + TextLength(&rp, (STRPTR)"100%", 4) + 6;
     switch (bar_edge) {
-    case OM_BAR_BOTTOM: sh = bh; sx = scr->Width - sw; sy = scr->Height - bh; break;
-    case OM_BAR_LEFT:   sh = bh; sx = 0; sy = scr->Height - bh; break;
-    case OM_BAR_RIGHT:  sh = bh; sx = scr->Width - sw; sy = scr->Height - bh; break;
-    case OM_BAR_TOP:    sh = bh; sx = scr->Width - 2 * scr->BarHeight - sw; sy = 0; break;
-    default:            sh = scr->BarHeight; sx = scr->Width - 2 * scr->BarHeight - sw; sy = 0; break;   /* in the title bar, above its line */
+    case OM_BAR_BOTTOM: sh = bh; sx = scr->Width - sw - off; sy = scr->Height - bh; break;
+    case OM_BAR_LEFT:   sh = bh; sx = 0; sy = scr->Height - bh * (n + 1); break;
+    case OM_BAR_RIGHT:  sh = bh; sx = scr->Width - sw; sy = scr->Height - bh * (n + 1); break;
+    case OM_BAR_TOP:    sh = bh; sx = scr->Width - 2 * scr->BarHeight - sw - off; sy = 0; break;
+    default:            sh = scr->BarHeight; sx = scr->Width - 2 * scr->BarHeight - sw - off; sy = 0; break;   /* in the title bar, above its line */
     }
     hx0 = sx; hy0 = sy; hx1 = sx + sw; hy1 = sy + sh;
 }
@@ -241,7 +275,7 @@ static int open_speaker(void)
     SetFont(spk->RPort, dri->dri_Font);
     draw_speaker();
     hscr = s;
-    tray(bar_edge == OM_BAR_TITLE ? 0 : sw);
+    tray(sw);                                /* in the title bar too: the clock and others keep clear of us */
     return 1;
 }
 
@@ -526,6 +560,11 @@ int main(void)
             if (++ticks % 10 == 0 && !pop) {                 /* every 2 s: OpenMenus' bar moved? */
                 int e = read_bar_edge();
                 if (e != bar_edge) { close_speaker(); open_speaker(); }
+                else if (spk) {                     /* the clock came or went, or changed its width */
+                    WORD ox = sx, oy = sy;
+                    place();
+                    if (ox != sx || oy != sy) { ChangeWindowBox(spk, sx, sy, sw, sh); draw_speaker(); }
+                }
             }
             keep_in_front();
             tr->tr_node.io_Command = TR_ADDREQUEST; tr->tr_time.tv_secs = 0; tr->tr_time.tv_micro = 200000;
