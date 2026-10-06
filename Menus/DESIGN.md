@@ -192,7 +192,8 @@ only, or the whole selection) and **Name at the top**; the line shows on the
 status bar when Icon menus is switched. To fit a 256-line PAL Workbench with
 these, the two delays share a row, Open on last sits beside Programs run on,
 the shadow's size and strength share a row, and Take over MagicMenu's moves
-under the preview.
+under the preview. The Advanced view keeps PAL's tighter spacing on every screen,
+so it is 251 lines high (Topaz 8) wherever it is measured.
 
 ### For the OpenUp part (to add in openamigaup)
 

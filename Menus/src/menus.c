@@ -471,7 +471,8 @@ static int make_gadgets(struct Screen *scr, APTR vi, struct Gadget **glist, int 
     struct Gadget *g;
     struct NewGadget ng;
     int fh = scr->Font->ta_YSize, lh = fh + 6, bl = scr->WBorLeft, top = scr->WBorTop + fh + 1 + 6, row, row2, i;
-    int gp = scr->Height < 320 ? 2 : 4, cb = 26, slv = 3 * scr->RastPort.TxWidth + 8;    /* a checkbox; a slider's number */
+    /* the Advanced view is packed tight on every screen, so it measures the same as on a 256-line PAL Workbench */
+    int gp = scr->Height < 320 || advanced ? 2 : 4, cb = 26, slv = 3 * scr->RastPort.TxWidth + 8;    /* a checkbox; a slider's number */
     /* the left column: labels, then gadgets as wide as the widest choice */
     int lx = bl + 8 + widest(scr, left_words) + 8;
     int cw = widest(scr, open_labels) > widest(scr, use_labels) ? widest(scr, open_labels) : widest(scr, use_labels);
