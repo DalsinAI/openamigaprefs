@@ -36,7 +36,7 @@ void om_defaults(om_prefs *p)
     strcpy(p->key, "ramiga space");
     p->keyboard_ralt = 1;
     p->keep_running = 1;
-    p->rightclick = 0;                      /* off until switched on in Menus prefs */
+    p->rightclick = 1;                      /* on: Dale approved the design, 6 Oct 2026 ("build it") */
     p->rightclick_extras = 1;
     p->rightclick_selection = 1;
     p->rightclick_name = 1;
