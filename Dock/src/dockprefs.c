@@ -260,13 +260,15 @@ static int take_over(od_dock *d, const char *file, const char *base, od_report *
 /* ---- the window ---------------------------------------------------------------------------- */
 
 enum {
-    G_PLACE, G_SIZE, G_LABELS, G_RUNNING, G_SHELF, G_HOVER, G_HOP, G_LIST, G_UP, G_DOWN, G_REMOVE, G_SEPARATOR,
+    G_PLACE, G_SIZE, G_ITEMS, G_BORDER, G_LABELS, G_RUNNING, G_SHELF, G_HOVER, G_HOP, G_LIST, G_UP, G_DOWN, G_REMOVE, G_SEPARATOR,
     G_SOURCE, G_TAKEOVER, G_KIND, G_NAME, G_COMMAND, G_ICON, G_DIR, G_STACK,
     G_STATUS, G_SAVE, G_USE, G_TEST, G_CANCEL, G_COUNT
 };
 
 static const char *place_labels[] = { "Bottom", "Top", "Left", "Right", NULL };
 static const char *size_labels[] = { "Small", "Medium", "Large", NULL };
+static const char *items_labels[] = { "100%", "75%", "50%", "25%", NULL };   /* the icons' size on the dock */
+static const int items_scale[] = { 100, 75, 50, 25 };
 static const char *kind_labels[] = { "Workbench", "Shell", "ARexx", NULL };
 static const char *shelf_labels[] = { "Solid", "See-through", "Glass", NULL };   /* OD_BG_ order */
 
@@ -308,6 +310,8 @@ static void show(void)
     SET(G_LIST, GTLV_Labels, (ULONG)&list, GTLV_Selected, b ? (ULONG)sel : ~0UL);
     SET(G_PLACE, GTCY_Active, cur.place);
     SET(G_SIZE, GTCY_Active, cur.size);
+    SET(G_ITEMS, GTCY_Active, cur.scale == 75 ? 1 : cur.scale == 50 ? 2 : cur.scale == 25 ? 3 : 0);
+    SET(G_BORDER, GTCB_Checked, cur.border);
     SET(G_LABELS, GTCB_Checked, cur.labels);
     SET(G_RUNNING, GTCB_Checked, cur.running);
     SET(G_SHELF, GTCY_Active, cur.background);
@@ -426,6 +430,8 @@ static int make_gadgets(struct Screen *scr, APTR vi, struct Gadget **glist, int 
     row2 = top;
     G(CYCLE_KIND, G_PLACE, R + 80, row2, W - R - 90, lh, "Place", PLACETEXT_LEFT, GTCY_Labels, (ULONG)place_labels); row2 += lh + gp;
     G(CYCLE_KIND, G_SIZE, R + 80, row2, W - R - 90, lh, "Size", PLACETEXT_LEFT, GTCY_Labels, (ULONG)size_labels); row2 += lh + gp;
+    G(CYCLE_KIND, G_ITEMS, R + 80, row2, W - R - 90, lh, "Items", PLACETEXT_LEFT, GTCY_Labels, (ULONG)items_labels); row2 += lh + gp;
+    G(CHECKBOX_KIND, G_BORDER, R + 80, row2, 26, lh, "Edges", PLACETEXT_LEFT, GTCB_Scaled, TRUE); row2 += lh + gp;
     G(CHECKBOX_KIND, G_LABELS, R + 80, row2, 26, lh, "Names", PLACETEXT_LEFT, GTCB_Scaled, TRUE);
     if (advanced) G(CHECKBOX_KIND, G_RUNNING, R + 220, row2, 26, lh, "Running", PLACETEXT_LEFT, GTCB_Scaled, TRUE);
     row2 += lh + 2 * gp;
@@ -567,6 +573,8 @@ static int gui(void)
             switch (id) {
             case G_PLACE: cur.place = code; break;
             case G_SIZE: cur.size = code; break;
+            case G_ITEMS: cur.scale = items_scale[code < 4 ? code : 0]; break;
+            case G_BORDER: cur.border = (gg->Flags & GFLG_SELECTED) != 0; break;
             case G_LABELS: cur.labels = (gg->Flags & GFLG_SELECTED) != 0; break;
             case G_RUNNING: cur.running = (gg->Flags & GFLG_SELECTED) != 0; break;
             case G_SHELF: cur.background = code; break;

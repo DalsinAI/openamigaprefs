@@ -36,7 +36,7 @@ static void test_own_format(void)
     CHECK(od_ensure(&d, "SYS:Utilities/MultiView") == 1 && d.n == 6 && !strcmp(d.b[5].label, "MultiView") && d.b[5].kind == OD_WB);
     CHECK(od_ensure(&d, "SYS:Utilities/MultiView") == 0 && d.n == 6);
     CHECK(d.background == OD_BG_GLASS && d.hover == 1 && d.hop == 1);
-    d.place = OD_LEFT; d.size = OD_LARGE; d.labels = 1; d.running = 0;
+    d.place = OD_LEFT; d.size = OD_LARGE; d.labels = 1; d.running = 0; d.scale = 50; d.border = 0;
     d.background = OD_BG_CLEAR; d.hover = 0; d.hop = 0;
     strcpy(d.imported, "ENVARC:ToolManager.prefs");
     d.b[1].kind = OD_SEPARATOR;
@@ -45,6 +45,7 @@ static void test_own_format(void)
     CHECK(od_write(&d, buf, sizeof buf) > 0);
     od_parse(&e, buf);
     CHECK(e.place == OD_LEFT && e.size == OD_LARGE && e.labels == 1 && e.running == 0);
+    CHECK(e.scale == 50 && e.border == 0);
     CHECK(e.background == OD_BG_CLEAR && e.hover == 0 && e.hop == 0);
     CHECK(!strcmp(e.imported, d.imported));
     CHECK(e.n == 6 && e.b[1].kind == OD_SEPARATOR);
@@ -53,6 +54,9 @@ static void test_own_format(void)
     CHECK(od_write(&d, buf, 40) == -1);
     od_parse(&e, "; comment\nplace nowhere\nsize huge\nfuture 7\nbutton telepathy \"x\"\nbutton wb \"Work:Thing\"\n");
     CHECK(e.place == OD_BOTTOM && e.size == OD_MEDIUM && e.n == 1 && !strcmp(e.b[0].label, "Thing"));
+    CHECK(e.scale == 100 && e.border == 1);
+    od_parse(&e, "item-size 70\nborders off\n");
+    CHECK(e.scale == 75 && e.border == 0 && od_scaled(64, 25) == 16);
     CHECK(!od_parse(&e, NULL) && e.n == 0);
     CHECK(od_cell(OD_SMALL) == 40 && od_cell(OD_LARGE) == 72);
 }
