@@ -184,28 +184,41 @@ static void read_profiles(void)
         }
 }
 
-/* The chosen profile through Look (Look FROM <file> SAVE), with "profile auto" when by machine. */
+/* The chosen profile through Look (Look FROM <file> SAVE), with "profile auto"
+ * when by machine. With no profile chosen, by machine still applies: to the
+ * Look settings in use. 1 when done, or when there is nothing to do. */
 static int apply_profile(void)
 {
-    char path[160], cmd[220], *text;
-    if (profile_sel < 0 || !exists(LOOK_TOOL)) return 1;
-    snprintf(path, sizeof path, PROFILE_DIR "/%s.profile", profile_names[profile_sel]);
-    if (!(text = read_file(path, NULL))) return 0;
-    {
-        size_t n = strlen(text);
-        char *both = AllocVec(n + 32, MEMF_ANY);
-        if (!both) { FreeVec(text); return 0; }
-        strcpy(both, text);
-        if (n && both[n - 1] != '\n') strcat(both, "\n");
-        if (by_machine) strcat(both, "profile auto\n");
-        write_file(LOOK_TEMP, both, strlen(both));
-        FreeVec(both);
+    char path[160], cmd[220], *text, *both, *o;
+    const char *p;
+    if (profile_sel < 0 && !by_machine) return 1;
+    if (!exists(LOOK_TOOL)) return profile_sel < 0;
+    if (profile_sel >= 0) {
+        snprintf(path, sizeof path, PROFILE_DIR "/%s.profile", profile_names[profile_sel]);
+        text = read_file(path, NULL);
+    } else if (!(text = read_file("ENV:OpenGadTools/Look", NULL)))
+        text = read_file("ENVARC:OpenGadTools/Look", NULL);
+    if (!text) return profile_sel < 0;              /* no Look settings yet: OpenLook chooses as it starts */
+    if (!(both = AllocVec(strlen(text) + 32, MEMF_ANY))) { FreeVec(text); return 0; }
+    /* the text without its own profile lines, then ours */
+    for (o = both, p = text; *p; ) {
+        const char *e = strchr(p, '\n');
+        int n = e ? (int)(e - p) + 1 : (int)strlen(p);
+        if (strncmp(p, "profile ", 8)) { memcpy(o, p, n); o += n; }
+        p += n;
     }
+    *o = 0;
+    if (o > both && o[-1] != '\n') strcat(both, "\n");
+    if (by_machine) strcat(both, "profile auto\n");
     FreeVec(text);
+    if (!write_file(LOOK_TEMP, both, strlen(both))) { FreeVec(both); return 0; }
+    FreeVec(both);
     snprintf(cmd, sizeof cmd, "\"%s\" FROM \"%s\" SAVE", LOOK_TOOL, LOOK_TEMP);
-    SystemTags((STRPTR)cmd, TAG_DONE);
-    DeleteFile((STRPTR)LOOK_TEMP);
-    return 1;
+    {
+        LONG rc = SystemTags((STRPTR)cmd, TAG_DONE);
+        DeleteFile((STRPTR)LOOK_TEMP);
+        return rc == 0;
+    }
 }
 
 /* ---- startup switches ---------------------------------------------------------------------- */
@@ -213,7 +226,7 @@ static int apply_profile(void)
 #define MAX_LINES 32
 
 typedef struct sline {
-    char text[200];                 /* the command, without ";OFF " */
+    char text[256];                 /* the command, without ";OFF " */
     int on, was_on;
     char shown[120];                /* what the list shows */
 } sline;
@@ -263,11 +276,11 @@ static void read_startup(void)
         else if (in && len == (int)strlen(BLOCK_END) && !strncmp(p, BLOCK_END, len)) in = 0;
         else if (in && len) {
             int off = !strncmp(p, OFF_MARK, strlen(OFF_MARK));
-            if (off || p[0] != ';') {
+            const char *s = off ? p + strlen(OFF_MARK) : p;
+            int n = len - (int)(s - p);
+            /* a command too long to hold whole isn't offered: a cut one would never match */
+            if ((off || p[0] != ';') && n < (int)sizeof lines[0].text) {
                 sline *l = &lines[nlines++];
-                const char *s = off ? p + strlen(OFF_MARK) : p;
-                int n = len - (int)(s - p);
-                if (n > (int)sizeof l->text - 1) n = sizeof l->text - 1;
                 memcpy(l->text, s, n); l->text[n] = 0;
                 l->on = l->was_on = !off;
                 show_line(l);
@@ -321,13 +334,15 @@ static int write_startup(void)
         if (!ok) return 0;
     }
     {
-        char list[MAX_LINES * 204], *l = list;
+        static char list[MAX_LINES * 260];
+        char *l = list;
         *l = 0;
         strcpy(l, "; Lines of OpenUp's startup block switched off in OpenUp Setup. OpenUpTool STARTUP keeps them off.\n");
         l += strlen(l);
         for (int i = 0; i < nlines; i++)
             if (!lines[i].on) { strcpy(l, lines[i].text); l += strlen(l); *l++ = '\n'; *l = 0; }
-        write_file(OFF_LIST, list, strlen(list));
+        /* without the list, OpenUpTool STARTUP would put the lines back on */
+        if (!write_file(OFF_LIST, list, strlen(list))) return 0;
     }
     return 1;
 }
@@ -396,12 +411,14 @@ static void build_lists(void)
     for (int i = 0; i < nlines; i++) { line_nodes[i].ln_Name = lines[i].shown; AddTail(&line_list, &line_nodes[i]); }
 }
 
+static int say_limit;                             /* no words below this row, when set */
+
 /* Words in the page area, wrapped to its width; returns the next free row. */
 static int say(struct RastPort *rp, int x, int y, int w, const char *text, int pen)
 {
     const char *p = text;
     SetAPen(rp, pen); SetDrMd(rp, JAM1);
-    while (*p) {
+    while (*p && (!say_limit || y + rp->TxHeight <= say_limit)) {
         int n = 0, fit = 0;
         while (p[n] && p[n] != '\n') {
             n++;
@@ -435,9 +452,12 @@ static void draw_page(void)
     y = say(rp, cx, y, cw, step, text) + 6;
     switch (page) {
     case P_WELCOME:
+        /* a long summary is cut short above the Simple and Advanced choice */
+        say_limit = cy + ch - (rp->TxHeight + 6) - 2 * (rp->TxHeight + 6) - 14;
         y = say(rp, cx, y, cw, summary, text) + 6;
         y = say(rp, cx, y, cw, "OpenUp Setup takes you through the few choices that make this Amiga yours. Nothing changes until you choose Finish, and you can run it again from Prefs at any time.", text) + 6;
         say(rp, cx, y, cw, "How much would you like to see? You can change this later in any OpenPrefs editor's View menu.", text);
+        say_limit = 0;
         break;
     case P_DESKTOP:
         say(rp, cx + 230, y + 2, cw - 230,
@@ -493,7 +513,8 @@ static int finish(void)
     int ok = apply_profile();
     write_view();
     ok = write_startup() && ok;
-    write_file(DONE_FILE, "OpenUp Setup finished\n", 22);
+    /* only when everything is in place, so the next start offers it again otherwise */
+    if (ok) ok = write_file(DONE_FILE, "OpenUp Setup finished\n", 22);
     return ok;
 }
 
@@ -503,12 +524,15 @@ static int gui(void)
     APTR vi = scr ? GetVisualInfoA(scr, NULL) : NULL;
     struct Gadget *g;
     struct NewGadget ng;
-    int fh, lh, top, W = 560, H, L = 12, quit = 0, rc = RETURN_OK, i, row;
+    int fh, lh, top, W = 560, H, L = 12, quit = 0, rc = RETURN_OK, i, row, wtop;
     if (!vi) { if (scr) UnlockPubScreen(NULL, scr); return RETURN_FAIL; }
     fh = scr->Font->ta_YSize;
     lh = fh + 6;
     top = scr->WBorTop + fh + 1 + 8;
-    cx = L; cy = top; cw = W - 2 * L; ch = 12 * (fh + 2) + 8 * lh;
+    cx = L; cy = top; cw = W - 2 * L;
+    /* as tall as the tallest page (Desktop: its list, the tick and two rows of
+     * buttons), so the window fits a 256-line PAL Workbench with an 8-point font */
+    ch = 2 * (fh + 2) + 8 + 8 * (fh + 1) + 20 + lh + (lh + 6) + lh + 4;
     H = cy + ch + 10 + lh + 8;
     build_lists();
     memset(&ng, 0, sizeof ng);
@@ -568,8 +592,14 @@ static int gui(void)
     }
     if (!g || !page_glist[P_WELCOME] || !page_glist[P_DESKTOP] || !adv_glist[P_DESKTOP] || !page_glist[P_DEVICES] || !page_glist[P_STARTUP]) { rc = RETURN_FAIL; goto out; }
 
+    {
+        /* the whole window on the screen: higher up, over the screen bar if need be */
+        int tall = H + scr->WBorBottom;
+        wtop = scr->BarHeight + 20;
+        if (wtop + tall > scr->Height) wtop = scr->Height - tall > 0 ? scr->Height - tall : 0;
+    }
     win = OpenWindowTags(NULL, WA_Title, (ULONG)"OpenUp Setup", WA_ScreenTitle, (ULONG)"OpenUp Setup 0.1", WA_PubScreen, (ULONG)scr,
-                         WA_Left, (scr->Width - W) / 2 > 0 ? (scr->Width - W) / 2 : 0, WA_Top, scr->BarHeight + 20,
+                         WA_Left, (scr->Width - W) / 2 > 0 ? (scr->Width - W) / 2 : 0, WA_Top, wtop,
                          WA_InnerWidth, W, WA_InnerHeight, H - scr->WBorTop - fh - 1,
                          WA_Gadgets, (ULONG)nav_glist, WA_DragBar, TRUE, WA_DepthGadget, TRUE, WA_CloseGadget, TRUE,
                          WA_Activate, TRUE, WA_SmartRefresh, TRUE,

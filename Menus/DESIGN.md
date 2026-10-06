@@ -67,20 +67,24 @@ spread across all four bytes. MagicMenu 1.x's binary file (it starts with
 | MagicMenu | OpenMenus |
 | --- | --- |
 | `MenuType` 0 pulldown, 1 popup, 2 pointer-dependent | `open` |
-| `PDMode`/`PUMode` (3.0), or the shared `MenuMode`: 0 hold, 1 sticky on move, 2 sticky on click (3 keyboard: hold, with `keyboard on`) | `pulldown`, `popup` |
-| `PDDelay`/`PUDelay`: 255 none, 1-10 tenths | `delay.*` |
-| `PULastSelect`, `CenterSubMenus`, `MarkSub` | `popup.last`, `submenus.*` |
-| `PDLook`/`PULook` 1 Old 3D or 2 Multicolor: double border | `border` |
-| `MenuShadow`/`PDShadow` (0 unset, 1 off, 2 on), `ShadowSize`, `ShadowStrength` | `shadow*` |
-| `PDBackground`: 1 colour, 2 see-through, 3 image, 4 see-through image; `PDImage` | `background*` |
-| `BoldSeparators` | `separators` |
-| `UseScreenColours` or own colours (`PDFill`, `PDText`, `PDSelFill`, `PDSelText`, `PDLight`, `PDDark`, `Shadow`) | `colours`, `colour.*` |
-| `KCEnabled`, `KCKey`, `KCRAltRCommand`, `KCGoTop` | `keyboard*` |
+| `PDMode`, `PUMode`: 0 hold, 1 sticky on move, 2 sticky on click (3 keyboard: hold) | `pulldown`, `popup` |
+| `PDOpenDelay`, `PUOpenDelay`: 255 none, 1-10 tenths; unset: the old `Delayed` switch | `delay.*` |
+| `KCPUCenter`, or 3.0's `PUCenterBox` (0 unset, 1 off, 2 on): a pop-up centred on the item last chosen | `popup.last` |
+| `MarkSub`, or `PDMarkSub` | `submenus.mark` (MagicMenu has no centred submenus: `submenus.centre` stays) |
+| `DblBorder`, or `PDDblBorder` | `border` |
+| `CastShadows`, or `PDCastShadows`; `ShadowDistance`/`PDShadowDist`, `ShadowIntensity`/`PDShadowInt` | `shadow*` |
+| `PDBackground` 1 colour, 2 see-through, 3 image, 4 see-through image; or `Transparency`, `PDTransparent`, `TransBackfill`; `Backfill` | `background*` |
+| `SeparatorBarStyle`, or `PDSeparatorStyle` | `separators` |
+| `PDLook` 2 Multicolor (without `PreferScreenColours`): its own colours `Background`, `Text`, `Fill`, `HighText`, `LightEdge`, `DarkEdge`, `ShadowCol`; otherwise the screen's | `colours`, `colour.*` |
+| `KCEnabled`, `KCKeyStr`, `KCAltRCommand`, `KCGoTop` | `keyboard*` |
 | `NonBlocking` | `programs.keep-running` |
 
-`tests/run.sh` runs 42 checks on the host's `cc`. They cover reading and
+A quoted value in OpenMenus' own file escapes `"` as `\"` and `\` as `\\`, so a
+picture's name with a quote in it survives Save.
+
+`tests/run.sh` runs 46 checks on the host's `cc`. They cover reading and
 writing the format, a sample MagicMenu file (`tests/sample-MagicMenu.prefs`),
-the 1.x binary refusal, and escapes.
+the 1.x binary refusal, and escapes both ways.
 
 ### Simple and Advanced
 
