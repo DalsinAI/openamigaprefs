@@ -85,6 +85,21 @@ stove):
 - **Found:** commands run from a script have 4 KB of stack. Undo overflowed
   it, so large buffers are static.
 
+## 4b. OpenTypes 0.2 (6 October 2026): SWITCH
+
+We, 6 October 2026: replace MultiView with OpenView, keeping MultiView.
+
+- `OpenTypes SWITCH <program> TO <program> [SAVE] [IN <drawer>]` moves every
+  kind of file whose default icon names the first program to the second.
+  Sounds, music, video and fonts keep their program, since OpenView doesn't
+  play them. A kind someone set to another program on purpose is left alone.
+- With `IN`, icons under that drawer that still name the first program, and
+  whose kind was switched, change too. They're found first and changed after
+  the walk.
+- Every change is backed up and listed like SET's, so `UNDO` puts it all back.
+- OpenUp runs `SWITCH MultiView TO SYS:Utilities/OpenPrint/OpenView SAVE IN
+  SYS:` when it installs OpenPrint, and `UNDO` when it is uninstalled.
+
 ## 5. Phases
 
 | Phase | Delivers | Done when |

@@ -29,22 +29,27 @@ static void test_own_format(void)
 {
     od_defaults(&d);
     od_starter(&d);
-    CHECK(d.n == 4 && d.b[0].kind == OD_CLI && !strcmp(d.b[0].label, "Shell") && d.b[1].kind == OD_WB);
+    CHECK(d.n == 5 && d.b[0].kind == OD_CLI && !strcmp(d.b[0].label, "Shell") && d.b[1].kind == OD_WB);
+    CHECK(!strcmp(d.b[1].label, "OpenFiles") && !strcmp(d.b[2].command, "SYS:Utilities/OpenPrint/OpenView"));
+    /* ADD: once only, whatever the case, at the end */
+    CHECK(od_ensure(&d, "sys:utilities/openfiles") == 0 && d.n == 5);
+    CHECK(od_ensure(&d, "SYS:Utilities/MultiView") == 1 && d.n == 6 && !strcmp(d.b[5].label, "MultiView") && d.b[5].kind == OD_WB);
+    CHECK(od_ensure(&d, "SYS:Utilities/MultiView") == 0 && d.n == 6);
     CHECK(d.background == OD_BG_GLASS && d.hover == 1 && d.hop == 1);
     d.place = OD_LEFT; d.size = OD_LARGE; d.labels = 1; d.running = 0;
     d.background = OD_BG_CLEAR; d.hover = 0; d.hop = 0;
     strcpy(d.imported, "ENVARC:ToolManager.prefs");
     d.b[1].kind = OD_SEPARATOR;
     d.b[2].kind = OD_CLI; strcpy(d.b[2].command, "Echo \"hi\" \\ there"); strcpy(d.b[2].dir, "RAM:"); d.b[2].stack = 20000;
-    strcpy(d.b[3].icon, "SYS:Prefs/Look");
+    strcpy(d.b[4].icon, "SYS:Prefs/Look");
     CHECK(od_write(&d, buf, sizeof buf) > 0);
     od_parse(&e, buf);
     CHECK(e.place == OD_LEFT && e.size == OD_LARGE && e.labels == 1 && e.running == 0);
     CHECK(e.background == OD_BG_CLEAR && e.hover == 0 && e.hop == 0);
     CHECK(!strcmp(e.imported, d.imported));
-    CHECK(e.n == 4 && e.b[1].kind == OD_SEPARATOR);
+    CHECK(e.n == 6 && e.b[1].kind == OD_SEPARATOR);
     CHECK(e.b[2].kind == OD_CLI && !strcmp(e.b[2].command, d.b[2].command) && !strcmp(e.b[2].dir, "RAM:") && e.b[2].stack == 20000);
-    CHECK(!strcmp(e.b[3].icon, "SYS:Prefs/Look") && !strcmp(e.b[3].label, "Look"));
+    CHECK(!strcmp(e.b[4].icon, "SYS:Prefs/Look") && !strcmp(e.b[4].label, "Look"));
     CHECK(od_write(&d, buf, 40) == -1);
     od_parse(&e, "; comment\nplace nowhere\nsize huge\nfuture 7\nbutton telepathy \"x\"\nbutton wb \"Work:Thing\"\n");
     CHECK(e.place == OD_BOTTOM && e.size == OD_MEDIUM && e.n == 1 && !strcmp(e.b[0].label, "Thing"));
@@ -107,11 +112,11 @@ static void test_amistart(const char *dir)
     od_defaults(&d);
     od_starter(&d);
     CHECK(od_from_amistart(&d, text, "SYS:Utilities/AmiStart", &r, err, sizeof err));
-    /* after the four it had, a separator, then the taskbar's two programs */
-    CHECK(d.n == 7 && d.b[4].kind == OD_SEPARATOR);
-    CHECK(d.b[5].kind == OD_CLI && !strcmp(d.b[5].command, "c:NewShell FROM s:Shell-amistart") && d.b[5].stack == 8192);
-    CHECK(!strcmp(d.b[5].icon, "SYS:Utilities/AmiStart/icons/Default/Shell"));
-    CHECK(d.b[6].kind == OD_WB && !strcmp(d.b[6].label, "Text Editor") && d.b[6].icon[0] == 0);
+    /* after the five it had, a separator, then the taskbar's two programs */
+    CHECK(d.n == 8 && d.b[5].kind == OD_SEPARATOR);
+    CHECK(d.b[6].kind == OD_CLI && !strcmp(d.b[6].command, "c:NewShell FROM s:Shell-amistart") && d.b[6].stack == 8192);
+    CHECK(!strcmp(d.b[6].icon, "SYS:Utilities/AmiStart/icons/Default/Shell"));
+    CHECK(d.b[7].kind == OD_WB && !strcmp(d.b[7].label, "Text Editor") && d.b[7].icon[0] == 0);
     CHECK(r.added == 2 && r.skipped == 3);
     /* no taskbar programs: the start menu's */
     od_defaults(&d);

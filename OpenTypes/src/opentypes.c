@@ -6,6 +6,10 @@
  *   OpenTypes SCAN <type> IN <drawer> [APPLY]
  *   OpenTypes TYPE <file>             what kind of file it is
  *   OpenTypes UNDO                    puts back every icon OpenTypes changed
+ *   OpenTypes SWITCH <program> TO <program> [SAVE] [IN <drawer>]
+ *                                     every kind of file the first program
+ *                                     opens goes to the second, sounds and
+ *                                     fonts aside; with IN, icons there too
  *
  * - The kinds of file are the OS's default icons for projects
  *   (ENVARC:Sys/def_<type>.info): a file without an icon gets one, and its
@@ -43,7 +47,7 @@
 
 #include <string.h>
 
-static const char version[] = "$VER: OpenTypes 0.1 (5.10.2026) MIT, Copyright (c) 2026 Dalsin Limited";
+static const char version[] = "$VER: OpenTypes 0.2 (6.10.2026) MIT, Copyright (c) 2026 Dalsin Limited";
 
 #define STATE "ENVARC:OpenTypes"
 #define BACKUP "ENVARC:OpenTypes/Backup"
@@ -60,6 +64,7 @@ typedef struct {
     char tool[200];              /* what opens it now */
     char pick[200];              /* what the window has chosen */
     char label[260];
+    int switched;                /* SWITCH changed it */
 } ftype;
 static ftype types[MAXTYPES];
 static int ntypes;
@@ -420,6 +425,118 @@ static int apply_found(const char *tool)
     return done;
 }
 
+/* ---- SWITCH: one program's kinds of file to another ---------------------------------- */
+
+/* Kinds a viewer doesn't take over from MultiView: sounds, music, video and
+ * fonts stay with what plays or shows them (OpenPlay, MultiView). */
+static int keeps_its_program(const char *name)
+{
+    static const char *const keep[] = { "sound", "music", "audio", "8svx", "wav", "aif", "mp3", "ogg", "flac",
+                                        "mid", "mod", "video", "movie", "font", NULL };
+    char low[32];
+    int i;
+    for (i = 0; name[i] && i < 31; i++) low[i] = (name[i] >= 'A' && name[i] <= 'Z') ? name[i] + 32 : name[i];
+    low[i] = 0;
+    for (i = 0; keep[i]; i++)
+        if (strstr(low, keep[i])) return 1;
+    return 0;
+}
+
+static int switched_icons;
+/* Icons to change, found first and changed after the walk: rewriting an icon
+ * while ExNext walks its drawer can make ExNext skip or repeat entries. */
+struct to_switch { struct to_switch *next; char path[1]; };
+static struct to_switch *pending;
+/* One path for the whole walk, not one per level: Installer's commands run
+ * with 4 KB of stack (as UNDO found, 5 Oct 2026). */
+static char walk_path[256];
+
+/* Icons under walk_path naming the old program, of a kind SWITCH changed. */
+static void switch_dir(const char *from, const char *to, int depth)
+{
+    BPTR l;
+    struct FileInfoBlock *fib;
+    int len = strlen(walk_path);
+    if (depth > 8 || !(l = Lock((STRPTR)walk_path, ACCESS_READ)))
+        return;
+    if (!(fib = AllocDosObject(DOS_FIB, NULL))) { UnLock(l); return; }
+    if (Examine(l, fib)) {
+        while (ExNext(l, fib)) {
+            int n = strlen((char *)fib->fib_FileName);
+            walk_path[len] = 0;
+            if (!AddPart((STRPTR)walk_path, fib->fib_FileName, sizeof walk_path))
+                continue;
+            if (fib->fib_DirEntryType > 0) {
+                switch_dir(from, to, depth + 1);
+            } else if (n > 5 && !Stricmp(fib->fib_FileName + n - 5, (STRPTR)".info")) {
+                struct DiskObject *dob;
+                int match = 0;
+                walk_path[strlen(walk_path) - 5] = 0;                   /* the file the icon belongs to */
+                if ((dob = GetDiskObject((STRPTR)walk_path))) {
+                    match = dob->do_Type == WBPROJECT && dob->do_DefaultTool &&
+                            !Stricmp((STRPTR)base((char *)dob->do_DefaultTool), (STRPTR)base(from));
+                    FreeDiskObject(dob);
+                }
+                if (match) {
+                    const char *k = file_type(walk_path);
+                    ftype *t = k ? find_type(k) : NULL;
+                    struct to_switch *p;
+                    if (t && t->switched && (p = AllocVec(sizeof *p + strlen(walk_path), MEMF_ANY))) {
+                        strcpy(p->path, walk_path);
+                        p->next = pending;
+                        pending = p;
+                    }
+                }
+            }
+        }
+    }
+    walk_path[len] = 0;
+    FreeDosObject(DOS_FIB, fib);
+    UnLock(l);
+}
+
+/* SWITCH <from> TO <to> [SAVE] [IN <drawer>]: every kind whose default icon
+ * names from goes to to, except those keeps_its_program() leaves. Kinds
+ * someone set to another program on purpose are left alone. Backed up as SET
+ * and SCAN are, so UNDO puts it all back. */
+static int shell_switch(LONG *a)
+{
+    const char *from = (const char *)a[9], *to = (const char *)a[2];
+    int i, n = 0, failed = 0;
+    if (!to) { PutStr((STRPTR)"OpenTypes: SWITCH needs TO <program>\n"); return RETURN_ERROR; }
+    if (!exists(to)) Printf((STRPTR)"OpenTypes: note: %s isn't there (yet)\n", (LONG)to);
+    for (i = 0; i < ntypes; i++) {
+        ftype *t = &types[i];
+        if (!t->tool[0] || Stricmp((STRPTR)base(t->tool), (STRPTR)base(from)) || keeps_its_program(t->name))
+            continue;
+        if (set_type(t, to, a[3] != 0)) {
+            t->switched = 1;
+            n++;
+            Printf((STRPTR)"  %s\n", (LONG)t->name);
+        } else
+            failed++;
+    }
+    Printf((STRPTR)"OpenTypes: %ld kind%s of file now open with %s%s\n", (LONG)n, (LONG)(n == 1 ? "" : "s"), (LONG)to,
+           (LONG)(a[3] ? " (saved)" : " (until reboot)"));
+    if (a[5] && n) {
+        switched_icons = 0;
+        strncpy(walk_path, (const char *)a[5], sizeof walk_path - 1);
+        walk_path[sizeof walk_path - 1] = 0;
+        switch_dir(from, to, 0);
+        while (pending) {
+            struct to_switch *p = pending;
+            pending = p->next;
+            if (set_tool(p->path, to))
+                switched_icons++;
+            FreeVec(p);
+        }
+        Printf((STRPTR)"OpenTypes: %ld icon%s in %s changed from %s\n", (LONG)switched_icons,
+               (LONG)(switched_icons == 1 ? "" : "s"), a[5], (LONG)from);
+    }
+    if (failed) { Printf((STRPTR)"OpenTypes: %ld default icon%s couldn't be changed\n", (LONG)failed, (LONG)(failed == 1 ? "" : "s")); return RETURN_WARN; }
+    return RETURN_OK;
+}
+
 /* ---- the Shell -------------------------------------------------------------------------- */
 
 static int shell(LONG *a)
@@ -704,7 +821,7 @@ out:
 
 int main(void)
 {
-    LONG a[9] = { 0 };
+    LONG a[10] = { 0 };
     struct RDArgs *rda;
     int rc = RETURN_FAIL;
     IconBase = OpenLibrary((STRPTR)"icon.library", 44);
@@ -716,11 +833,13 @@ int main(void)
         goto out;
     }
     load_types();
-    if (!(rda = ReadArgs((STRPTR)"LIST/S,SET/K,TO/K,SAVE/S,SCAN/K,IN/K,APPLY/S,TYPE/K,UNDO/S", a, NULL))) {
+    if (!(rda = ReadArgs((STRPTR)"LIST/S,SET/K,TO/K,SAVE/S,SCAN/K,IN/K,APPLY/S,TYPE/K,UNDO/S,SWITCH/K", a, NULL))) {
         PrintFault(IoErr(), (STRPTR)"OpenTypes");
         goto out;
     }
-    if (a[0] || a[1] || a[4] || a[7] || a[8])
+    if (a[9])
+        rc = shell_switch(a);
+    else if (a[0] || a[1] || a[4] || a[7] || a[8])
         rc = a[4] && a[6] ? shell_apply(a) : shell(a);
     else
         rc = gui();

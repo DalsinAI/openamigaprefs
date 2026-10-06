@@ -137,9 +137,29 @@ void od_starter(od_dock *d)
 {
     d->n = 0;
     add_program(d, NULL, OD_CLI, "Shell", "NewShell");      /* the Shell's icon moves between OS releases; NewShell doesn't */
+    add_program(d, NULL, OD_WB, "OpenFiles", "SYS:Utilities/OpenFiles");
+    add_program(d, NULL, OD_WB, "OpenView", "SYS:Utilities/OpenPrint/OpenView");
     add_program(d, NULL, OD_WB, "Prefs", "SYS:Prefs");
-    add_program(d, NULL, OD_WB, "MultiView", "SYS:Utilities/MultiView");
     add_program(d, NULL, OD_WB, "Look", "SYS:Prefs/Look");
+}
+
+/* AmigaDOS names: the same letters in either case are the same name. */
+static int same_name(const char *a, const char *b)
+{
+    for (; *a && *b; a++, b++) {
+        int x = (unsigned char)*a, y = (unsigned char)*b;
+        if (x >= 'A' && x <= 'Z') x += 32;
+        if (y >= 'A' && y <= 'Z') y += 32;
+        if (x != y) return 0;
+    }
+    return *a == *b;
+}
+
+int od_ensure(od_dock *d, const char *command)
+{
+    for (int i = 0; i < d->n; i++)
+        if (d->b[i].kind == OD_WB && same_name(d->b[i].command, command)) return 0;
+    return add_program(d, NULL, OD_WB, NULL, command) ? 1 : -1;
 }
 
 /* ---- OpenDock's own format ------------------------------------------------------------ */

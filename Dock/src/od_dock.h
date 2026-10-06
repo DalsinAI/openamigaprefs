@@ -51,6 +51,9 @@ int od_cell(int size);                                    /* the cell's width an
 
 void od_defaults(od_dock *d);                             /* the place and size; no buttons */
 void od_starter(od_dock *d);                              /* the buttons a new dock starts with */
+/* A Workbench button for command at the dock's end, unless one is there
+ * already: 1 added, 0 already there, -1 the dock is full. */
+int od_ensure(od_dock *d, const char *command);
 /* Reads the settings text; unknown lines are skipped. 1, or 0 when text is NULL. */
 int od_parse(od_dock *d, const char *text);
 /* Writes the settings text. Its length, or -1 when out is too small. */
