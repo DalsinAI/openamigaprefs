@@ -5,6 +5,7 @@
  *   memory on|off          free chip and fast memory after Workbench's title
  *   clock on|off           the time at the right end, left of OpenSpeaker
  *   clock.date on|off      the day and date before the time
+ *   network on|off         LAN and Wi-Fi icons between the clock and OpenSpeaker
  *   border.black on|off    the display's border around the screen black
  *
  * MIT, Copyright (c) 2026 Dalsin Limited. */
@@ -20,12 +21,12 @@
 #define TB_TOOL   "SYS:C/OpenTitle"
 
 typedef struct {
-    int logo, memory, clock, date, border_black;
+    int logo, memory, clock, date, network, border_black;
 } tb_prefs;
 
 static __attribute__((unused)) void tb_defaults(tb_prefs *p)
 {
-    p->logo = p->memory = p->clock = p->date = 1;
+    p->logo = p->memory = p->clock = p->date = p->network = 1;
     p->border_black = 0;
 }
 
@@ -45,6 +46,7 @@ static __attribute__((unused)) void tb_parse(tb_prefs *p, char *text)
         else if (!strcmp(line, "memory")) p->memory = !strncmp(v, "on", 2);
         else if (!strcmp(line, "clock")) p->clock = !strncmp(v, "on", 2);
         else if (!strcmp(line, "clock.date")) p->date = !strncmp(v, "on", 2);
+        else if (!strcmp(line, "network")) p->network = !strncmp(v, "on", 2);
         else if (!strcmp(line, "border.black")) p->border_black = !strncmp(v, "on", 2);
     }
 }
@@ -53,8 +55,8 @@ static __attribute__((unused)) int tb_text(const tb_prefs *p, char *out, int siz
 {
     static const char *const oo[2] = { "off", "on" };
     return snprintf(out, size, "; OpenPrefs Title bar 0.1: what OpenTitle shows\n"
-                    "logo %s\nmemory %s\nclock %s\nclock.date %s\nborder.black %s\n",
-                    oo[!!p->logo], oo[!!p->memory], oo[!!p->clock], oo[!!p->date], oo[!!p->border_black]);
+                    "logo %s\nmemory %s\nclock %s\nclock.date %s\nnetwork %s\nborder.black %s\n",
+                    oo[!!p->logo], oo[!!p->memory], oo[!!p->clock], oo[!!p->date], oo[!!p->network], oo[!!p->border_black]);
 }
 
 #endif
