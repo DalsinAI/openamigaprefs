@@ -38,7 +38,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-static const char version[] = "$VER: OpenWindows 0.1 (6.10.2026) MIT, Copyright (c) 2026 Dalsin Limited";
+static const char version[] = "$VER: OpenWindows 0.2 (6.10.2026) MIT, Copyright (c) 2026 Dalsin Limited";
 
 #define PREFS_ENV "ENV:OpenPrefs/Windows"
 #define PLACES_ENV "ENV:OpenPrefs/WindowPlaces"
@@ -419,7 +419,8 @@ static void make_key(struct Window *w, const char *prog, char *key, int size)
    least the drawer size); every known window's place is noted. */
 static void watch(void)
 {
-    struct { struct Window *w; WORD l, t, wd, ht, minw, minh, maxw, maxh, sw, sh; ULONG flags; char prog[32]; char key[64]; int wb; } now[MAX_SEEN];
+    /* static: Run gives a commodity a 4 KB stack, and this is 12 KB */
+    static struct { struct Window *w; WORD l, t, wd, ht, minw, minh, maxw, maxh, sw, sh; ULONG flags; char prog[32]; char key[64]; int wb; } now[MAX_SEEN];
     int n = 0, i, j;
     struct Screen *s;
     struct Window *w;
@@ -579,7 +580,8 @@ int main(void)
                 switch (id) {
                 case CXCMD_DISABLE: ActivateCxObj(broker, 0); on = 0; break;
                 case CXCMD_ENABLE: ActivateCxObj(broker, 1); on = 1; break;
-                case CXCMD_KILL: case CXCMD_UNIQUE: quit = 1; break;
+                case CXCMD_KILL: quit = 1; break;
+                case CXCMD_UNIQUE: read_prefs(); hotkeys(port); break;   /* started again: read the settings again, stay */
                 }
             }
         }
