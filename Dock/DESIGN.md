@@ -35,9 +35,12 @@ over the docks people already have. MIT, Copyright (c) 2026 Dalsin Limited.
     in room kept above the shelf (on the side away from the edge).
   - What is behind the dock is copied from the screen as the dock opens
     (and again whenever it opens anew: new settings, a button added or
-    removed), so seeing through costs one blit and the screen is never
-    read again. A window later moved behind the dock isn't seen through
-    it until the dock next opens. Everything is drawn into a bitmap of the
+    removed), so seeing through costs one blit. Ten times a second the
+    dock looks at the windows over its place (where each is, how big, in
+    what order, under Intuition's lock; no pixels are read). When that
+    changes and then stays put for 0.3 seconds, a window has been dropped
+    there, and the dock copies what is behind it afresh by opening again:
+    it blinks once, briefly. Everything is drawn into a bitmap of the
     dock's size and copied in at once, so nothing flickers. Without the
     memory for that bitmap, the dock is solid and drawn straight in.
 - There is no magnification yet. It draws with the screen's
@@ -154,5 +157,5 @@ saves the result.
 - The theme's colours from OpenLook.
 - Magnification, off with Lite.
 - Hiding the dock until the pointer reaches the edge.
-- A live see-through (the dock copying what is behind it again when a
-  window moves under it).
+- A see-through that follows a window while it is dragged, and what
+  changes inside a window behind the dock.
