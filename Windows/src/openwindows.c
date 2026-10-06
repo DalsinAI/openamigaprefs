@@ -126,6 +126,7 @@ static int over_active(void)
     struct Screen *s = w ? w->WScreen : NULL;
     WORD x, y;
     if (!w || !s || s != IntuitionBase->FirstScreen) return 1;      /* nothing better to offer */
+    if (s->LayerInfo.top_layer != w->WLayer) return 0;             /* something may cover it: ask the layers */
     x = s->MouseX; y = s->MouseY;
     return x >= w->LeftEdge && y >= w->TopEdge && x < w->LeftEdge + w->Width && y < w->TopEdge + w->Height;
 }
@@ -274,33 +275,36 @@ static void buttons(void)
     }
 }
 
+/* A window Amiga+Tab offers: not a backdrop, not tiny, and not Workbench's
+   own root window (a Workbench window with no close gadget). */
+static int switchable(struct Window *w)
+{
+    if (!w || (w->Flags & WFLG_BACKDROP) || w->Width < 8 || w->Height < 8) return 0;
+    if ((w->Flags & WFLG_WBENCHWINDOW) && !(w->Flags & WFLG_CLOSEGADGET)) return 0;
+    return 1;
+}
+
 /* Amiga+Tab: the screen's windows from front to back, by their layers. */
 static void switcher(int back)
 {
     struct Screen *s = IntuitionBase->FirstScreen;
     struct Layer *l;
-    struct Window *front = NULL, *rear = NULL;
+    struct Window *front = NULL, *second = NULL, *rear = NULL;
     if (!s) return;
     LockLayerInfo(&s->LayerInfo);
     for (l = s->LayerInfo.top_layer; l; l = l->back) {
         struct Window *w = (struct Window *)l->Window;
-        if (!w || (w->Flags & WFLG_BACKDROP) || w->Width < 8 || w->Height < 8) continue;
+        if (!switchable(w)) continue;
         if (!front) front = w;
+        else if (!second) second = w;
         rear = w;
     }
     UnlockLayerInfo(&s->LayerInfo);
     if (!front || front == rear) { if (front) ActivateWindow(front); return; }
-    if (back) {
+    if (back) {                       /* the front one to the back; the one behind it comes up */
         WindowToBack(front);
-        Delay(1);
-        LockLayerInfo(&s->LayerInfo);
-        for (front = NULL, l = s->LayerInfo.top_layer; l && !front; l = l->back) {
-            struct Window *w = (struct Window *)l->Window;
-            if (w && !(w->Flags & WFLG_BACKDROP) && w->Width >= 8 && w->Height >= 8) front = w;
-        }
-        UnlockLayerInfo(&s->LayerInfo);
-        if (front) ActivateWindow(front);
-    } else {
+        ActivateWindow(second);
+    } else {                          /* the one at the back to the front */
         WindowToFront(rear);
         ActivateWindow(rear);
     }
@@ -320,7 +324,7 @@ static void program_of(struct Window *w, char *out, int size)
 {
     struct Task *t = w->UserPort ? (struct Task *)w->UserPort->mp_SigTask : NULL;
     *out = 0;
-    if (!t) return;
+    if (!t) { strncpy(out, "window", size - 1); return; }     /* no IDCMP (a console, say): known by its title */
     Forbid();
     if (t->tc_Node.ln_Type == NT_PROCESS && ((struct Process *)t)->pr_CLI) {
         struct CommandLineInterface *cli = BADDR(((struct Process *)t)->pr_CLI);
@@ -359,7 +363,11 @@ static void read_places(void)
         if (*p) *p++ = 0;
         if (*line != '"' || !(q = strchr(line + 1, '"'))) continue;
         *q = 0;
-        if (sscanf(q + 1, "%d %d %d %d", &l, &t, &w, &h) != 4) continue;
+        {   /* four numbers (no sscanf: libnix's pulls in FPU code a 68020 without an FPU lacks) */
+            char *e = q + 1;
+            l = strtol(e, &e, 10); t = strtol(e, &e, 10); w = strtol(e, &e, 10); h = strtol(e, &e, 10);
+            if (w <= 0 || h <= 0) continue;
+        }
         strncpy(pl->key, line + 1, sizeof pl->key - 1);
         pl->l = l; pl->t = t; pl->w = w; pl->h = h; pl->used = nplaces;
         nplaces++;
@@ -448,7 +456,7 @@ static void watch(void)
                     if (is_window(now[i].w)) ChangeWindowBox(now[i].w, l, t, wd, ht);
                     now[i].l = l; now[i].t = t; now[i].wd = wd; now[i].ht = ht;
                 }
-            } else if (known >= 0 && cfg.places && !now[i].wb && now[i].prog[0] && !never(now[i].prog)) {
+            } else if (cfg.places && !now[i].wb && now[i].prog[0] && !never(now[i].prog)) {
                 int p = place_index(now[i].key, 0);
                 if (p >= 0) {
                     struct place *pl = &places[p];
@@ -481,8 +489,8 @@ static void watch(void)
     }
     nseen = 0;
     for (i = 0; i < n; i++) { seen[nseen].w = now[i].w; seen[nseen].l = now[i].l; seen[nseen].t = now[i].t; seen[nseen].wd = now[i].wd; seen[nseen].ht = now[i].ht; nseen++; }
-    if (places_dirty && places_clock % 5 == 0) write_places(PLACES_ENV);
-    if (places_dirty && places_clock % 60 == 0) { write_places(PLACES_ENVARC); places_dirty = 0; }
+    if (places_dirty && places_clock % 2 == 0) write_places(PLACES_ENV);
+    if (places_dirty && places_clock % 10 == 0) { write_places(PLACES_ENV); write_places(PLACES_ENVARC); places_dirty = 0; }
 }
 
 /* ---- the commodity --------------------------------------------------------------------------- */

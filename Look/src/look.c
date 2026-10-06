@@ -49,7 +49,7 @@
 
 #include "ogt_theme.h"
 
-const char version[] __attribute__((used)) = "$VER: Look 0.1 (5.10.2026) OpenPrefs, Dalsin Limited";
+const char version[] __attribute__((used)) = "$VER: Look 0.2 (5.10.2026) OpenPrefs, Dalsin Limited";
 
 #define PREFS_ENV "ENV:OpenGadTools/Look"
 #define PREFS_ENVARC "ENVARC:OpenGadTools/Look"
@@ -61,6 +61,8 @@ const char version[] __attribute__((used)) = "$VER: Look 0.1 (5.10.2026) OpenPre
 #define AP_TOOL "SYS:Tools/Commodities/AutoPoint"
 #define WBSTARTUP "SYS:WBStartup/"
 #define TEST_SECONDS 15
+#define VIEW_ENV "ENV:OpenAmiga/PrefsView"           /* shared by every OpenPrefs editor: simple or advanced */
+#define VIEW_ENVARC "ENVARC:OpenAmiga/PrefsView"
 
 /* ---- the settings --------------------------------------------------------------------- */
 
@@ -529,7 +531,33 @@ static int px, py, pw, ph;               /* the preview's box */
 static int label_now, label_orig;
 static int ctf_on, ctf_qual, ap_on, ctf_orig, ap_orig;
 
-#define SET(id, ...) GT_SetGadgetAttrs(gad[id], win, NULL, __VA_ARGS__, TAG_DONE)
+#define SET(id, ...) do { if (gad[id]) GT_SetGadgetAttrs(gad[id], win, NULL, __VA_ARGS__, TAG_DONE); } while (0)
+static int advanced;                     /* the view: Simple shows theme, mode and profiles; Advanced every setting */
+
+static int read_view(void)
+{
+    char *t = read_file(VIEW_ENV, NULL);
+    int a = t && !strncmp(t, "advanced", 8);
+    if (t) FreeVec(t);
+    return a;
+}
+
+static void write_view(int a)
+{
+    write_file(VIEW_ENV, a ? "advanced\n" : "simple\n", a ? 9 : 7);
+    write_file(VIEW_ENVARC, a ? "advanced\n" : "simple\n", a ? 9 : 7);
+}
+
+static struct NewMenu menus[] = {
+    { NM_TITLE, (STRPTR)"Project", NULL, 0, 0, NULL },
+    { NM_ITEM, (STRPTR)"Save", (STRPTR)"S", 0, 0, (APTR)1 },
+    { NM_ITEM, (STRPTR)"Use", (STRPTR)"U", 0, 0, (APTR)2 },
+    { NM_ITEM, NM_BARLABEL, NULL, 0, 0, NULL },
+    { NM_ITEM, (STRPTR)"Quit", (STRPTR)"Q", 0, 0, (APTR)3 },
+    { NM_TITLE, (STRPTR)"View", NULL, 0, 0, NULL },
+    { NM_ITEM, (STRPTR)"Advanced", (STRPTR)"A", CHECKIT | MENUTOGGLE, 0, (APTR)4 },
+    { NM_END, NULL, NULL, 0, 0, NULL }
+};
 
 static void show(const struct look *l)
 {
@@ -606,7 +634,8 @@ static void focus_now(void)
     ctf_orig = ctf_on; ap_orig = ap_on;
 }
 
-static int gui(void)
+/* RETURN_OK or RETURN_FAIL, or 99 when the view changed (open again) */
+static int gui_once(void)
 {
     struct Screen *scr = LockPubScreen(NULL);
     APTR vi = scr ? GetVisualInfoA(scr, NULL) : NULL;
@@ -616,7 +645,9 @@ static int gui(void)
     struct MsgPort *tport = NULL;
     struct timerequest *tr = NULL;
     int timer = 0;
+    struct Menu *menu = NULL;
     if (!vi) { if (scr) UnlockPubScreen(NULL, scr); return RETURN_FAIL; }
+    memset(gad, 0, sizeof gad);
     fh = scr->Font->ta_YSize;
     lh = fh + 6;
     top = scr->WBorTop + fh + 1 + 6;
@@ -645,6 +676,7 @@ static int gui(void)
     G(CYCLE_KIND, G_MODE, R + 110, row, 200, lh, "Mode", PLACETEXT_LEFT, GTCY_Labels, (ULONG)mode_labels); row += lh + 4;
     G(INTEGER_KIND, G_FROM, R + 110, row, 50, lh, "Dark from", PLACETEXT_LEFT, GTIN_MaxChars, 2);
     G(INTEGER_KIND, G_TO, R + 220, row, 50, lh, "to", PLACETEXT_LEFT, GTIN_MaxChars, 2); row += lh + 8;
+    if (advanced) {
     G(CHECKBOX_KIND, G_OWNACCENT, R + 110, row, 26, lh, "Own accent", PLACETEXT_LEFT, GTCB_Scaled, TRUE);
     G(STRING_KIND, G_ACCENT, R + 150, row, 90, lh, NULL, 0, GTST_MaxChars, 7); row += lh + 8;
     G(CYCLE_KIND, G_LITE, R + 110, row, 200, lh, "Lite", PLACETEXT_LEFT, GTCY_Labels, (ULONG)lite_labels); row += lh + 4;
@@ -656,13 +688,16 @@ static int gui(void)
     G(CYCLE_KIND, G_CUSTOM, R + 110, row, 200, lh, "Game screens", PLACETEXT_LEFT, GTCY_Labels, (ULONG)themed_labels); row += lh + 4;
     G(STRING_KIND, G_NEVER, R + 110, row, 200, lh, "Never touch", PLACETEXT_LEFT, GTST_MaxChars, 150); row += lh + 8;
     G(CYCLE_KIND, G_LABELS, R + 110, row, 200, lh, "Icon labels", PLACETEXT_LEFT, GTCY_Labels, (ULONG)label_labels); row += lh + 8;
+    }
     G(CYCLE_KIND, G_PROFILE, R + 110, row, 130, lh, "Profile", PLACETEXT_LEFT, GTCY_Labels, (ULONG)profile_labels);
     G(BUTTON_KIND, G_APPLYPROFILE, R + 244, row, 66, lh, "Load", 0, GA_Disabled, profile_labels[0][0] == '('); row += lh + 2;
     G(CHECKBOX_KIND, G_PROFILEAUTO, R + 110, row, 26, lh, "By machine", PLACETEXT_LEFT, GTCB_Scaled, TRUE); row += lh + 8;
+    if (advanced) {
     G(CHECKBOX_KIND, G_CTF, R + 110, row, 26, lh, "Click to front", PLACETEXT_LEFT, GTCB_Scaled, TRUE, GA_Disabled, !exists(CTF_TOOL));
     G(CYCLE_KIND, G_CTFQUAL, R + 150, row, 160, lh, NULL, 0, GTCY_Labels, (ULONG)qual_labels, GA_Disabled, !exists(CTF_TOOL)); row += lh + 4;
     G(CHECKBOX_KIND, G_AP, R + 110, row, 26, lh, "Focus follows", PLACETEXT_LEFT, GTCB_Scaled, TRUE, GA_Disabled, !exists(AP_TOOL)); row += lh + 10;
 
+    }
     if (py + ph + 10 > row) row = py + ph + 10;
     G(TEXT_KIND, G_STATUS, L, row, W - 20, lh, NULL, 0, GTTX_Text, (ULONG)status_text, GTTX_Border, TRUE); row += lh + 6;
     {
@@ -673,14 +708,16 @@ static int gui(void)
         row += lh + 8;
     }
     if (!g) { rc = RETURN_FAIL; goto out; }
-    win = OpenWindowTags(NULL, WA_Title, (ULONG)"Look", WA_ScreenTitle, (ULONG)"OpenPrefs Look 0.1", WA_PubScreen, (ULONG)scr,
+    menus[6].nm_Flags = CHECKIT | MENUTOGGLE | (advanced ? CHECKED : 0);
+    win = OpenWindowTags(NULL, WA_Title, (ULONG)"Look", WA_ScreenTitle, (ULONG)"OpenPrefs Look 0.2", WA_PubScreen, (ULONG)scr,
                          WA_Left, 40, WA_Top, scr->BarHeight + 10, WA_InnerWidth, W, WA_InnerHeight, row - scr->WBorTop - fh - 1,
                          WA_Gadgets, (ULONG)glist, WA_DragBar, TRUE, WA_DepthGadget, TRUE, WA_CloseGadget, TRUE, WA_Activate, TRUE,
-                         WA_SmartRefresh, TRUE,
-                         WA_IDCMP, IDCMP_CLOSEWINDOW | IDCMP_REFRESHWINDOW | LISTVIEWIDCMP | BUTTONIDCMP | CYCLEIDCMP | STRINGIDCMP |
+                         WA_SmartRefresh, TRUE, WA_NewLookMenus, TRUE,
+                         WA_IDCMP, IDCMP_CLOSEWINDOW | IDCMP_REFRESHWINDOW | IDCMP_MENUPICK | LISTVIEWIDCMP | BUTTONIDCMP | CYCLEIDCMP | STRINGIDCMP |
                                    CHECKBOXIDCMP | INTEGERIDCMP,
                          TAG_DONE);
     if (!win) { rc = RETURN_FAIL; goto out; }
+    if ((menu = CreateMenus(menus, TAG_DONE)) && LayoutMenus(menu, vi, GTMN_NewLookMenus, TRUE, TAG_DONE)) SetMenuStrip(win, menu);
     GT_RefreshWindow(win, NULL);
     show(&cur);
     SET(G_LABELS, GTCY_Active, label_now);
@@ -716,6 +753,20 @@ static int gui(void)
             struct Gadget *gg = (struct Gadget *)m->IAddress;
             GT_ReplyIMsg(m);
             if (cls == IDCMP_CLOSEWINDOW) { if (test_until) go_back(); quit = 1; }
+            else if (cls == IDCMP_MENUPICK) {
+                UWORD mc = code;
+                while (mc != MENUNULL && !quit) {
+                    struct MenuItem *it = ItemAddress(menu, mc);
+                    if (!it) break;
+                    switch ((ULONG)GTMENUITEM_USERDATA(it)) {
+                    case 1: put_in_place(1); focus_now(); test_until = 0; quit = 1; break;
+                    case 2: put_in_place(0); focus_now(); test_until = 0; quit = 1; break;
+                    case 3: if (test_until) go_back(); quit = 1; break;
+                    case 4: advanced = (it->Flags & CHECKED) != 0; write_view(advanced); rc = 99; quit = 1; break;
+                    }
+                    mc = it->NextSelect;
+                }
+            }
             else if (cls == IDCMP_REFRESHWINDOW) { GT_BeginRefresh(win); GT_EndRefresh(win, TRUE); draw_preview(win, px, py, pw, ph, &cur); }
             else if (cls == IDCMP_GADGETUP || cls == IDCMP_GADGETDOWN) {
                 int redraw = 1;
@@ -771,17 +822,25 @@ out:
     if (timer) CloseDevice((struct IORequest *)tr);
     if (tr) DeleteIORequest((struct IORequest *)tr);
     if (tport) DeleteMsgPort(tport);
-    if (win) { free_pens(win->WScreen); CloseWindow(win); }
+    if (win) { free_pens(win->WScreen); ClearMenuStrip(win); CloseWindow(win); win = NULL; }
+    if (menu) FreeMenus(menu);
     FreeGadgets(glist);
     FreeVisualInfo(vi);
     UnlockPubScreen(NULL, scr);
     return rc;
 }
 
+static int gui(void)
+{
+    int r;
+    while ((r = gui_once()) == 99) ;
+    return r;
+}
+
 int main(void)
 {
-    LONG args[3] = { 0, 0, 0 };
-    struct RDArgs *rd = ReadArgs((STRPTR)"FROM,USE/S,SAVE/S", args, NULL);
+    LONG args[4] = { 0, 0, 0, 0 };
+    struct RDArgs *rd = ReadArgs((STRPTR)"FROM,USE/S,SAVE/S,ADVANCED/S", args, NULL);
     char *text;
     int rc;
     if (!rd) { PrintFault(IoErr(), (STRPTR)"Look"); return RETURN_FAIL; }
@@ -797,6 +856,7 @@ int main(void)
         FreeArgs(rd);
         return RETURN_OK;
     }
+    advanced = args[3] ? 1 : read_view();
     FreeArgs(rd);
     list_dir(THEME_DIR, ".theme", theme_names, MAX_THEMES, &nthemes);
     list_dir(PROFILE_DIR, ".profile", profile_names, MAX_PROFILES, &nprofiles);

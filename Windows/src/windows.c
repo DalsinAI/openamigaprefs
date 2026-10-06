@@ -1,7 +1,11 @@
 /* OpenPrefs Windows: the editor for OpenWindows (snapping, Amiga+Tab, the
  * wheel under the pointer, remembered window places, drawer sizes).
  *
- *   Windows [FROM file] [USE] [SAVE]
+ *   Windows [FROM file] [USE] [SAVE] [ADVANCED]
+ *
+ * It opens in the Simple view (the four switches); View > Advanced (Amiga-A)
+ * or ADVANCED shows every setting. The view is shared by all OpenPrefs
+ * editors: "simple" or "advanced" in ENV:OpenAmiga/PrefsView (and ENVARC:).
  *
  * Save writes ENV:OpenPrefs/Windows and ENVARC:; Use writes ENV: only;
  * Cancel leaves both. Either way OpenWindows is told (Ctrl-F to the task of
@@ -31,6 +35,8 @@ static const char version[] = "$VER: Windows 0.1 (6.10.2026) OpenPrefs, MIT, Cop
 #define PLACES_ENV "ENV:OpenPrefs/WindowPlaces"
 #define PLACES_ENVARC "ENVARC:OpenPrefs/WindowPlaces"
 #define TOOL "SYS:Tools/Commodities/OpenWindows"
+#define VIEW_ENV "ENV:OpenAmiga/PrefsView"           /* shared by every OpenPrefs editor: simple or advanced */
+#define VIEW_ENVARC "ENVARC:OpenAmiga/PrefsView"
 
 struct wprefs {
     int snap, snap_dist, halves, switcher, wheel, places, drawer_w, drawer_h;
@@ -167,7 +173,33 @@ static struct Gadget *gad[G_COUNT];
 static struct Window *win;
 static char status_text[120];
 
-#define SET(id, ...) GT_SetGadgetAttrs(gad[id], win, NULL, __VA_ARGS__, TAG_DONE)
+#define SET(id, ...) do { if (gad[id]) GT_SetGadgetAttrs(gad[id], win, NULL, __VA_ARGS__, TAG_DONE); } while (0)
+static int advanced;                     /* the view: Simple shows the four switches, Advanced every setting */
+
+static int read_view(void)
+{
+    char *t = read_file(VIEW_ENV);
+    int a = t && !strncmp(t, "advanced", 8);
+    if (t) FreeVec(t);
+    return a;
+}
+
+static void write_view(int a)
+{
+    write_file(VIEW_ENV, a ? "advanced\n" : "simple\n");
+    write_file(VIEW_ENVARC, a ? "advanced\n" : "simple\n");
+}
+
+static struct NewMenu menus[] = {
+    { NM_TITLE, (STRPTR)"Project", NULL, 0, 0, NULL },
+    { NM_ITEM, (STRPTR)"Save", (STRPTR)"S", 0, 0, (APTR)1 },
+    { NM_ITEM, (STRPTR)"Use", (STRPTR)"U", 0, 0, (APTR)2 },
+    { NM_ITEM, NM_BARLABEL, NULL, 0, 0, NULL },
+    { NM_ITEM, (STRPTR)"Quit", (STRPTR)"Q", 0, 0, (APTR)3 },
+    { NM_TITLE, (STRPTR)"View", NULL, 0, 0, NULL },
+    { NM_ITEM, (STRPTR)"Advanced", (STRPTR)"A", CHECKIT | MENUTOGGLE, 0, (APTR)4 },
+    { NM_END, NULL, NULL, 0, 0, NULL }
+};
 
 static void status(const char *s)
 {
@@ -205,14 +237,17 @@ static void forget_places(void)
     status("Window places forgotten: programs open where they choose.");
 }
 
-static int gui(void)
+/* 1 quit, 2 the view changed (open again) */
+static int gui_once(void)
 {
     struct Screen *scr = LockPubScreen(NULL);
     APTR vi = scr ? GetVisualInfoA(scr, NULL) : NULL;
     struct Gadget *glist = NULL, *g;
     struct NewGadget ng;
-    int fh, lh, top, row, quit = 0, rc = RETURN_OK, W = 460, X = 190, i;
-    if (!vi) { if (scr) UnlockPubScreen(NULL, scr); return RETURN_FAIL; }
+    int fh, lh, top, row, quit = 0, rc = 1, W = 480, X = 200, i;
+    struct Menu *menu = NULL;
+    if (!vi) { if (scr) UnlockPubScreen(NULL, scr); return -1; }
+    memset(gad, 0, sizeof gad);
     fh = scr->Font->ta_YSize;
     lh = fh + 6;
     top = scr->WBorTop + fh + 1 + 8;
@@ -228,16 +263,21 @@ static int gui(void)
 
     row = top;
     G(CHECKBOX_KIND, G_SNAP, X, row, 26, lh, "Snap to edges", PLACETEXT_LEFT, GTCB_Scaled, TRUE);
-    G(INTEGER_KIND, G_DIST, X + 150, row, 50, lh, "within (pixels)", PLACETEXT_LEFT, GTIN_MaxChars, 2); row += lh + 4;
-    G(CHECKBOX_KIND, G_HALVES, X, row, 26, lh, "Fill a half at the side", PLACETEXT_LEFT, GTCB_Scaled, TRUE); row += lh + 10;
+    if (advanced) G(INTEGER_KIND, G_DIST, X + 160, row, 50, lh, "within", PLACETEXT_LEFT, GTIN_MaxChars, 2);
+    row += lh + 4;
+    if (advanced) { G(CHECKBOX_KIND, G_HALVES, X, row, 26, lh, "Fill a half", PLACETEXT_LEFT, GTCB_Scaled, TRUE); row += lh + 10; }
     G(CHECKBOX_KIND, G_SWITCH, X, row, 26, lh, "Window switcher", PLACETEXT_LEFT, GTCB_Scaled, TRUE);
-    G(STRING_KIND, G_KEY, X + 100, row, 160, lh, "key", PLACETEXT_LEFT, GTST_MaxChars, 46); row += lh + 10;
-    G(CHECKBOX_KIND, G_WHEEL, X, row, 26, lh, "Wheel under pointer", PLACETEXT_LEFT, GTCB_Scaled, TRUE); row += lh + 10;
+    if (advanced) G(STRING_KIND, G_KEY, X + 100, row, 160, lh, "key", PLACETEXT_LEFT, GTST_MaxChars, 46);
+    row += lh + (advanced ? 10 : 4);
+    G(CHECKBOX_KIND, G_WHEEL, X, row, 26, lh, "Wheel under pointer", PLACETEXT_LEFT, GTCB_Scaled, TRUE); row += lh + (advanced ? 10 : 4);
     G(CHECKBOX_KIND, G_PLACES, X, row, 26, lh, "Remember places", PLACETEXT_LEFT, GTCB_Scaled, TRUE);
-    G(BUTTON_KIND, G_FORGET, X + 120, row, 140, lh, "Forget all", 0, GA_Disabled, FALSE); row += lh + 4;
-    G(STRING_KIND, G_NEVER, X, row, 260, lh, "Never for", PLACETEXT_LEFT, GTST_MaxChars, 158); row += lh + 10;
-    G(INTEGER_KIND, G_DRAWW, X, row, 60, lh, "Drawers at least", PLACETEXT_LEFT, GTIN_MaxChars, 4);
-    G(INTEGER_KIND, G_DRAWH, X + 90, row, 60, lh, "x", PLACETEXT_LEFT, GTIN_MaxChars, 4); row += lh + 10;
+    if (advanced) {
+        G(BUTTON_KIND, G_FORGET, X + 120, row, 140, lh, "Forget all", 0, GA_Disabled, FALSE); row += lh + 4;
+        G(STRING_KIND, G_NEVER, X, row, 260, lh, "Never for", PLACETEXT_LEFT, GTST_MaxChars, 158); row += lh + 10;
+        G(INTEGER_KIND, G_DRAWW, X, row, 60, lh, "Drawers at least", PLACETEXT_LEFT, GTIN_MaxChars, 4);
+        G(INTEGER_KIND, G_DRAWH, X + 90, row, 60, lh, "x", PLACETEXT_LEFT, GTIN_MaxChars, 4);
+    }
+    row += lh + 10;
     G(TEXT_KIND, G_STATUS, 10, row, W - 20, lh, NULL, 0, GTTX_Text, (ULONG)status_text, GTTX_Border, TRUE); row += lh + 6;
     {
         static const char *const names[3] = { "Save", "Use", "Cancel" };
@@ -246,14 +286,17 @@ static int gui(void)
         for (i = 0; i < 3; i++) G(BUTTON_KIND, ids[i], 10 + i * (bw + 10), row, bw, lh, names[i], 0, GA_Disabled, FALSE);
         row += lh + 8;
     }
-    if (!g) { rc = RETURN_FAIL; goto out; }
+    if (!g) { rc = -1; goto out; }
+    menus[6].nm_Flags = CHECKIT | MENUTOGGLE | (advanced ? CHECKED : 0);
     win = OpenWindowTags(NULL, WA_Title, (ULONG)"Windows", WA_ScreenTitle, (ULONG)"OpenPrefs Windows 0.1", WA_PubScreen, (ULONG)scr,
                          WA_Left, 60, WA_Top, scr->BarHeight + 20, WA_InnerWidth, W, WA_InnerHeight, row - scr->WBorTop - fh - 1,
                          WA_Gadgets, (ULONG)glist, WA_DragBar, TRUE, WA_DepthGadget, TRUE, WA_CloseGadget, TRUE, WA_Activate, TRUE,
                          WA_SmartRefresh, TRUE,
-                         WA_IDCMP, IDCMP_CLOSEWINDOW | IDCMP_REFRESHWINDOW | BUTTONIDCMP | STRINGIDCMP | CHECKBOXIDCMP | INTEGERIDCMP,
+                         WA_NewLookMenus, TRUE,
+                         WA_IDCMP, IDCMP_CLOSEWINDOW | IDCMP_REFRESHWINDOW | IDCMP_MENUPICK | BUTTONIDCMP | STRINGIDCMP | CHECKBOXIDCMP | INTEGERIDCMP,
                          TAG_DONE);
-    if (!win) { rc = RETURN_FAIL; goto out; }
+    if (!win) { rc = -1; goto out; }
+    if ((menu = CreateMenus(menus, TAG_DONE)) && LayoutMenus(menu, vi, GTMN_NewLookMenus, TRUE, TAG_DONE)) SetMenuStrip(win, menu);
     GT_RefreshWindow(win, NULL);
     show();
 
@@ -265,6 +308,20 @@ static int gui(void)
             struct Gadget *gg = (struct Gadget *)m->IAddress;
             GT_ReplyIMsg(m);
             if (cls == IDCMP_CLOSEWINDOW) quit = 1;
+            else if (cls == IDCMP_MENUPICK) {
+                UWORD code = m->Code;
+                while (code != MENUNULL && !quit) {
+                    struct MenuItem *it = ItemAddress(menu, code);
+                    if (!it) break;
+                    switch ((ULONG)GTMENUITEM_USERDATA(it)) {
+                    case 1: put_in_place(1); quit = 1; break;
+                    case 2: put_in_place(0); quit = 1; break;
+                    case 3: quit = 1; break;
+                    case 4: advanced = (it->Flags & CHECKED) != 0; write_view(advanced); rc = 2; quit = 1; break;
+                    }
+                    code = it->NextSelect;
+                }
+            }
             else if (cls == IDCMP_REFRESHWINDOW) { GT_BeginRefresh(win); GT_EndRefresh(win, TRUE); }
             else if (cls == IDCMP_GADGETUP) {
                 int sel = (gg->Flags & GFLG_SELECTED) != 0;
@@ -293,17 +350,25 @@ static int gui(void)
         }
     }
 out:
-    if (win) CloseWindow(win);
+    if (win) { ClearMenuStrip(win); CloseWindow(win); win = NULL; }
+    if (menu) FreeMenus(menu);
     FreeGadgets(glist);
     FreeVisualInfo(vi);
     UnlockPubScreen(NULL, scr);
     return rc;
 }
 
+static int gui(void)
+{
+    int r;
+    while ((r = gui_once()) == 2) ;
+    return r < 0 ? RETURN_FAIL : RETURN_OK;
+}
+
 int main(void)
 {
-    LONG args[3] = { 0, 0, 0 };
-    struct RDArgs *rd = ReadArgs((STRPTR)"FROM,USE/S,SAVE/S", args, NULL);
+    LONG args[4] = { 0, 0, 0, 0 };
+    struct RDArgs *rd = ReadArgs((STRPTR)"FROM,USE/S,SAVE/S,ADVANCED/S", args, NULL);
     char *text;
     int rc;
     (void)version;
@@ -316,6 +381,7 @@ int main(void)
         FreeArgs(rd);
         return rc;
     }
+    advanced = args[3] ? 1 : read_view();
     FreeArgs(rd);
     return gui();
 }
