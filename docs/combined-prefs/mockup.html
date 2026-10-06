@@ -1,12 +1,12 @@
 <title>Combined Prefs Mockup</title>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Sora:wght@600;700&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600&family=JetBrains+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;600&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Sora:wght@600;700&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600&family=JetBrains+Mono:wght@400;500&family=Noto+Sans:wght@400;600&family=IBM+Plex+Mono&display=swap">
 <style>
 /* Layout: brand page chrome (AmigaChrome document tokens) around an Amiga screen stage that keeps its own fixed Workbench colours */
 :root{
   --paper:#FFFFFF;--ink:#16191D;--steel:#3D4752;--steelmid:#6B7682;--silver:#D9DEE3;--wash:#F3F5F7;--red:#C8202B;--redtint:#FBE9EA;--ok:#1E7A46;--warn:#9A5F05;
   --display:'Sora','Helvetica Neue',Arial,sans-serif;--read:'Source Serif 4',Georgia,serif;--mono:'JetBrains Mono',Menlo,monospace;
   /* Amiga screen, fixed in both themes */
-  --wb-desk:#8fa3c4;--wb-win:#e8e8e8;--wb-panel:#f0f0f0;--wb-title:#3a63a8;--wb-edge:#333;--wb-shadow:#4a5a78;--wb-ink:#111;--wb-sel:#3a63a8;
+  --wb-desk:#2e4a6e;--wb-win:#dcdcdc;--wb-panel:#e6e6e6;--wb-title:#6f8fb8;--wb-edge:#5a5a5a;--wb-shadow:rgba(0,0,0,.45);--wb-ink:#111;--wb-sel:#5d82b5;
 }
 @media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--paper:#121519;--ink:#E6E9EC;--steel:#9AA6B2;--steelmid:#8F9AA6;--silver:#2C333B;--wash:#1B2026;--red:#F0646B;--redtint:#3A1C1F;--ok:#5BC08A;--warn:#E0A84A;color-scheme:dark}}
 :root[data-theme="dark"]{--paper:#121519;--ink:#E6E9EC;--steel:#9AA6B2;--steelmid:#8F9AA6;--silver:#2C333B;--wash:#1B2026;--red:#F0646B;--redtint:#3A1C1F;--ok:#5BC08A;--warn:#E0A84A;color-scheme:dark}
@@ -32,23 +32,25 @@ nav.eds button:focus-visible{outline:2px solid var(--red);outline-offset:2px}
 .seg button[aria-pressed="true"]{background:var(--steel);color:var(--paper)}
 .seg button:focus-visible{outline:2px solid var(--red)}
 .stagebox{overflow-x:auto;border:1px solid var(--silver);background:var(--wb-desk)}
-.stage{width:720px;margin:0 auto;min-height:340px;background:var(--wb-desk);padding:18px 40px 22px;box-sizing:border-box;font-family:'IBM Plex Sans',sans-serif;font-size:12px;color:var(--wb-ink)}
-.wbbar{height:18px;background:#fff;border-bottom:1px solid #333;margin:-18px -40px 14px;display:flex;align-items:center;gap:16px;padding:0 8px;font-size:11.5px}
+.stage{width:720px;margin:0 auto;min-height:340px;background:linear-gradient(180deg,#3d5f8c,#1f3350);padding:18px 40px 22px;box-sizing:border-box;font-family:'Noto Sans','DejaVu Sans',sans-serif;font-size:12px;color:var(--wb-ink)}
+.wbbar{height:20px;background:linear-gradient(#f4f4f4,#c9c9c9);border-bottom:1px solid #6a6a6a;margin:-18px -40px 14px;display:flex;align-items:center;gap:16px;padding:0 8px;font-size:11.5px}
 .wbbar b{font-weight:600}
-.win{width:640px;background:var(--wb-win);border:1px solid var(--wb-edge);box-shadow:2px 2px 0 var(--wb-shadow)}
-.tbar{height:20px;background:var(--wb-title);color:#fff;display:flex;align-items:center;justify-content:space-between;padding:0 8px;font-weight:600}
-.tbar span:last-child{font-weight:400;opacity:.85;font-size:11px}
+.win{width:640px;background:var(--wb-win);border:1px solid var(--wb-edge);border-radius:4px 4px 0 0;box-shadow:0 4px 14px var(--wb-shadow);overflow:hidden}
+.tbar{height:22px;background:linear-gradient(#a9c0de,#6f8fb8 55%,#5b7aa3);color:#fff;text-shadow:0 1px 0 rgba(0,0,0,.35);display:flex;align-items:center;gap:6px;padding:0 4px;font-weight:600;border-bottom:1px solid #46618a}
+.tbar .t{flex:1}.tbar .g{width:14px;height:14px;border:1px solid #3e5779;border-radius:3px;background:linear-gradient(#e8eef6,#a9bcd6);box-sizing:border-box}
+
 .mbar{height:20px;background:#f4f4f4;border-bottom:1px solid #999;display:flex;align-items:center;gap:16px;padding:0 8px}
 .mbar .on{background:var(--wb-sel);color:#fff;padding:0 4px}
 .body{display:flex;gap:10px;padding:10px 12px 12px}
-.secs{width:132px;flex-shrink:0;background:#fff;border:1px solid #777;align-self:flex-start;display:flex;flex-direction:column}
-.secs button{all:unset;cursor:pointer;padding:3px 7px;font-size:12px}
+.secs{width:140px;flex-shrink:0;background:#fff;border:1px solid #8a8a8a;border-radius:3px;align-self:flex-start;display:flex;flex-direction:column}
+.secs button{all:unset;cursor:pointer;padding:4px 7px;font-size:12px;display:flex;gap:7px;align-items:center}
+.secs i{width:14px;height:14px;border-radius:3px;border:1px solid rgba(0,0,0,.35);flex-shrink:0}
 .secs button[aria-pressed="true"]{background:var(--wb-sel);color:#fff}
 .secs button:focus-visible{outline:1px dotted #000;outline-offset:-2px}
 .secs .eng{font-size:10px;opacity:.75}
 .page{flex:1;min-width:0;display:flex;flex-direction:column;gap:7px}
-.box{border:1px solid #999;background:var(--wb-panel);padding:7px 10px;display:flex;flex-direction:column;gap:6px}
-.box h4{margin:0;font-size:12px;font-weight:600}
+.box{border:1px solid #a8a8a8;border-radius:4px;background:var(--wb-panel);padding:12px 10px 7px;margin-top:6px;display:flex;flex-direction:column;gap:6px;position:relative}
+.box h4{margin:0;font-size:12px;font-weight:600;position:absolute;top:-8px;left:10px;background:var(--wb-win);padding:0 4px}
 .row{display:grid;grid-template-columns:150px minmax(0,1fr);gap:8px;align-items:center}
 .row>.l{text-align:right}
 .row .ctl{display:flex;flex-wrap:wrap;gap:6px 12px;align-items:center;min-width:0}
@@ -64,6 +66,11 @@ nav.eds button:focus-visible{outline:2px solid var(--red);outline-offset:2px}
 .lst div{padding:1px 6px}.lst div.on{background:var(--wb-sel);color:#fff}
 .buttons{display:flex;justify-content:space-between;padding:0 12px 12px}
 .buttons button{font-family:inherit;font-size:12px;padding:4px 18px}
+.stage button,.stage select{border:1px solid #7a7a7a;border-radius:3px;background:linear-gradient(#fafafa,#d2d2d2);color:#111}
+.stage input[type=text]{border:1px solid #7a7a7a;border-radius:2px}
+.stage .lst{border-radius:3px}
+.stage .secs button{background:none;border:0;border-radius:0;padding:4px 7px}
+.stage .secs button[aria-pressed="true"]{background:var(--wb-sel);color:#fff}
 .status{border-top:1px solid #bbb;margin:0 12px 8px;padding-top:5px;font-size:11.5px;color:#333}
 .side{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:14px;margin-top:16px}
 .card{border:1px solid var(--silver);background:var(--wash);padding:10px 14px}
@@ -72,7 +79,7 @@ nav.eds button:focus-visible{outline:2px solid var(--red);outline-offset:2px}
 .card code,.mono{font-family:var(--mono);font-size:12.5px}
 .drawer{margin-top:28px}
 .drawer h2{font-family:var(--display);font-size:21px;margin:0 0 8px;padding-top:10px;border-top:2px solid var(--red)}
-.icons{display:flex;flex-wrap:wrap;gap:10px;background:var(--wb-desk);padding:14px;border:1px solid var(--silver);font-family:'IBM Plex Sans',sans-serif;font-size:12px;color:#111}
+.icons{display:flex;flex-wrap:wrap;gap:10px;background:var(--wb-desk);padding:14px;border:1px solid var(--silver);font-family:'Noto Sans','DejaVu Sans',sans-serif;font-size:12px;color:#fff}
 .ic{width:86px;text-align:center;display:flex;flex-direction:column;align-items:center;gap:4px}
 .ic i{width:34px;height:28px;background:#e8e8e8;border:1px solid #333;box-shadow:2px 2px 0 #4a5a78;display:block}
 .ic.new i{background:#fff;border-color:#1f3f7a}
@@ -91,7 +98,7 @@ footer{margin-top:30px;font-family:var(--mono);font-size:11px;color:var(--steelm
   <div><div class="brand"><b>Amiga</b>Chrome · OpenPrefs</div><div class="kind">Design for review · not built</div><h1>Combined preferences</h1></div>
   <div class="mono" style="color:var(--steelmid)">6 October 2026</div>
 </header>
-<p class="lede">We propose nine preferences editors in place of twenty-three. Each one gathers settings people think of together, writes the same files the OS's own editors write, and keeps the old editors in a Classic drawer. Pick an editor, switch between Simple and Advanced, and click the sections to see every page.</p>
+<p class="lede">We propose nine preferences editors in place of twenty-three. Each one gathers settings people think of together, writes the same files the OS's own editors write, and keeps the old editors in a Classic drawer. Pick an editor, switch between Simple and Advanced, and click the sections to see every page. The windows are drawn in the manner of AmigaOS 4.1, which is the look Dale asked the theme to follow.</p>
 
 <div class="grid">
   <div>
@@ -216,11 +223,10 @@ function render(){const e=E[cur];const names=Object.keys(e.secs);if(sec>=names.l
  document.querySelectorAll('#eds button').forEach((b,i)=>b.setAttribute('aria-pressed',i===cur));
  vS.setAttribute('aria-pressed',!adv);vA.setAttribute('aria-pressed',adv);
  const rows=adv?e.secs[names[sec]]:e.simple;
- stage.innerHTML=`<div class="wbbar"><b>Workbench</b><span>Window</span><span>Icons</span><span>Tools</span></div>
+ stage.innerHTML=`<div class="wbbar"><b>Project</b><span>Edit</span><span>View</span><span>Settings</span><span style="margin-left:auto;opacity:.7">Menus of the active window, on the screen bar</span></div>
  <div class="win" role="img" aria-label="Mockup of the ${esc(e.name)} editor">
-  <div class="tbar"><span>${esc(e.name)}${adv?' (Advanced)':''}</span><span>Prefs</span></div>
-  <div class="mbar"><span>Project</span><span>Edit</span><span class="${adv?'on':''}">View</span><span>Settings</span></div>
-  <div class="body">${adv?`<div class="secs" role="group" aria-label="Sections">${names.map((n,i)=>`<button data-s="${i}" aria-pressed="${i===sec}">${esc(n)}</button>`).join('')}</div>`:''}
+  <div class="tbar"><span class="g" title="Close"></span><span class="t">${esc(e.name)}${adv?' (Advanced)':''}</span><span class="g" title="Iconify"></span><span class="g" title="Zoom"></span><span class="g" title="Depth"></span></div>
+  <div class="body">${adv?`<div class="secs" role="group" aria-label="Sections">${names.map((n,i)=>`<button data-s="${i}" aria-pressed="${i===sec}"><i style="background:${['#6f8fb8','#c8a03c','#5a9a6a','#b45a5a','#8a6fb8','#4f9aa8'][i%6]}"></i>${esc(n)}</button>`).join('')}</div>`:''}
    <div class="page">${rows.map(ctl).join('')}</div></div>
   <div class="status">${adv?'Section '+(sec+1)+' of '+names.length+'. ':''}Save keeps it after a reboot; Use lasts until the reboot; Test puts it back after 15 seconds.</div>
   <div class="buttons"><button>Save</button><button>Use</button><button>Test</button><button>Cancel</button></div></div>`;
