@@ -472,6 +472,42 @@ static void check_hover(void)
     if (i != bubble_for) { if (i >= 0) bubble_on(i); else bubble_off(); }
 }
 
+/* ---- seeing through, kept up to date ------------------------------------------------------- */
+
+/* The windows over the dock's place, as one number: where each is, how big,
+ * in their order. It changes when a window is moved, sized, opened or closed
+ * there, or brought in front of another. */
+static ULONG behind_sig(void)
+{
+    ULONG sig = 0, lock = LockIBase(0);
+    for (struct Window *w = scr->FirstWindow; w; w = w->NextWindow) {
+        if (w == win || w == bubble) continue;
+        if (w->LeftEdge >= win->LeftEdge + win->Width || w->LeftEdge + w->Width <= win->LeftEdge ||
+            w->TopEdge >= win->TopEdge + win->Height || w->TopEdge + w->Height <= win->TopEdge) continue;
+        sig = sig * 31 + (ULONG)w;
+        sig = sig * 31 + (((ULONG)(UWORD)w->LeftEdge << 16) | (UWORD)w->TopEdge);
+        sig = sig * 31 + (((ULONG)(UWORD)w->Width << 16) | (UWORD)w->Height);
+    }
+    UnlockIBase(lock);
+    return sig;
+}
+
+static ULONG seen_sig, moving_sig;
+static int still;
+
+/* Called ten times a second. True once a window has been dropped behind the
+ * dock (what is there changed, then stayed put for 0.3 seconds, so a window
+ * dragged solidly is copied once, where it lands): time to copy afresh. */
+static int behind_changed(void)
+{
+    ULONG sig;
+    if (!win || !behind) return 0;
+    sig = behind_sig();
+    if (sig == seen_sig) { still = 0; return 0; }
+    if (sig != moving_sig) { moving_sig = sig; still = 0; return 0; }
+    return ++still >= 3;
+}
+
 /* ---- opening and closing -------------------------------------------------------------------- */
 
 static struct MsgPort *appport;
@@ -511,6 +547,8 @@ static int open_dock(struct Menu *menus)
         behind = NULL;
     }
     draw();
+    seen_sig = moving_sig = behind_sig();
+    still = 0;
     if (WorkbenchBase && appport) aw = AddAppWindowA(0, 0, win, appport, NULL);
     return 1;
 }
@@ -629,6 +667,7 @@ int main(void)
         if (timer && CheckIO((struct IORequest *)tr)) {
             WaitIO((struct IORequest *)tr);
             check_hover();
+            if (behind_changed()) relayout(menus);
             if (++ticks >= 20) { ticks = 0; check_running(); }
             tr->tr_time.tv_secs = 0; tr->tr_time.tv_micro = 100000;
             SendIO((struct IORequest *)tr);
