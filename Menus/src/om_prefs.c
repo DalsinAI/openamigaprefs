@@ -36,6 +36,10 @@ void om_defaults(om_prefs *p)
     strcpy(p->key, "ramiga space");
     p->keyboard_ralt = 1;
     p->keep_running = 1;
+    p->rightclick = 0;                      /* off until switched on in Menus prefs */
+    p->rightclick_extras = 1;
+    p->rightclick_selection = 1;
+    p->rightclick_name = 1;
 }
 
 /* ---- small helpers ------------------------------------------------------------------- */
@@ -127,6 +131,10 @@ int om_parse(om_prefs *p, const char *text)
             else if (same(k, "keyboard.ralt")) p->keyboard_ralt = on;
             else if (same(k, "keyboard.top")) p->keyboard_top = on;
             else if (same(k, "programs.keep-running")) p->keep_running = on;
+            else if (same(k, "rightclick")) p->rightclick = on;
+            else if (same(k, "rightclick.extras")) p->rightclick_extras = on;
+            else if (same(k, "rightclick.selection")) p->rightclick_selection = !same(v, "one");
+            else if (same(k, "rightclick.name")) p->rightclick_name = on;
             else if (same(k, "imported")) { strncpy(p->imported, v, sizeof p->imported - 1); p->imported[sizeof p->imported - 1] = 0; }
         }
         if (!next) break;
@@ -177,6 +185,10 @@ int om_write(const om_prefs *p, char *out, int size)
     ADD("keyboard.ralt %s\n", onoff[!!p->keyboard_ralt]);
     ADD("keyboard.top %s\n", onoff[!!p->keyboard_top]);
     ADD("programs.keep-running %s\n", onoff[!!p->keep_running]);
+    ADD("rightclick %s\n", onoff[!!p->rightclick]);
+    ADD("rightclick.extras %s\n", onoff[!!p->rightclick_extras]);
+    ADD("rightclick.selection %s\n", p->rightclick_selection ? "all" : "one");
+    ADD("rightclick.name %s\n", onoff[!!p->rightclick_name]);
     if (p->imported[0]) ADD("imported \"%s\"\n", quoted(p->imported, q, sizeof q));
     return (int)(o - out);
 }

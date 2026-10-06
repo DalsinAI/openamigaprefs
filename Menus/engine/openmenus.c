@@ -41,15 +41,23 @@
 #include <proto/layers.h>
 #include <proto/commodities.h>
 #include <proto/timer.h>
+#include <proto/rexxsyslib.h>
+#include <rexx/storage.h>
+#include <rexx/rxslib.h>
+#include <dos/dostags.h>
+#include <libraries/asl.h>
+#include <proto/asl.h>
 
 #include <string.h>
+#include <stdarg.h>
+#include <strings.h>
 #include <stdio.h>
 #include <stdlib.h>
 
 #include "om_prefs.h"
 #include "ogt_theme.h"
 
-static const char version[] = "$VER: OpenMenus 0.1 (6.10.2026) MIT, Copyright (c) 2026 Dalsin Limited";
+static const char version[] = "$VER: OpenMenus 0.2 (6.10.2026) MIT, Copyright (c) 2026 Dalsin Limited";
 
 #define PREFS_ENV "ENV:OpenMenus/Menus"
 #define LOOK_ENV "ENV:OpenGadTools/Look"
@@ -59,6 +67,8 @@ struct IntuitionBase *IntuitionBase;
 struct GfxBase *GfxBase;
 struct Library *CxBase, *LayersBase;
 struct Device *TimerBase;
+struct RxsLib *RexxSysBase;
+struct Library *AslBase;
 
 /* ---- files and settings --------------------------------------------------- */
 
@@ -115,6 +125,7 @@ static ULONG sig_start, sig_event;
 static volatile int on = 1, session, cancelled;
 static volatile int rbutton, lbutton, rdown_seen, ldown_seen, moved;
 static volatile WORD start_x, start_y;
+static struct Window *volatile rc_window;        /* the Workbench window right-clicked (session 2) */
 
 static int menu_window(struct Window *w)
 {
@@ -130,6 +141,23 @@ static void custom(CxMsg *msg, CxObj *co)
         if (ie->ie_Class == IECLASS_RAWMOUSE) {
             UWORD code = ie->ie_Code;
             if (!session) {
+                if (code == IECODE_RBUTTON && prefs.rightclick) {
+                    /* on a Workbench window's icons or background (not its title bar, not
+                     * the screen bar): the icon or desktop menu (the layers are read
+                     * unlocked here: only to choose, and the choice is checked again) */
+                    struct Screen *s = IntuitionBase->FirstScreen;
+                    struct Layer *l = s ? WhichLayer(&s->LayerInfo, s->MouseX, s->MouseY) : NULL;
+                    struct Window *w = l ? (struct Window *)l->Window : NULL;
+                    if (w && (w->Flags & WFLG_WBENCHWINDOW) && s->MouseY > s->BarHeight &&
+                        s->MouseY >= w->TopEdge + w->BorderTop && s->MouseX >= w->LeftEdge + w->BorderLeft &&
+                        s->MouseX < w->LeftEdge + w->Width - w->BorderRight && s->MouseY < w->TopEdge + w->Height - w->BorderBottom) {
+                        session = 2; rc_window = w; rbutton = 1; lbutton = 0; rdown_seen = ldown_seen = moved = 0;
+                        start_x = s->MouseX; start_y = s->MouseY;
+                        ie->ie_Class = IECLASS_NULL;
+                        Signal(me, sig_start);
+                        continue;
+                    }
+                }
                 if (code == IECODE_RBUTTON && menu_window(IntuitionBase->ActiveWindow)) {
                     struct Screen *s = IntuitionBase->FirstScreen;
                     session = 1; rbutton = 1; lbutton = 0; rdown_seen = ldown_seen = moved = 0;
@@ -155,6 +183,8 @@ static void custom(CxMsg *msg, CxObj *co)
 
 /* ---- the menus, copied ----------------------------------------------------------------- */
 
+#define OM_HEADER 0x8000         /* our own items (icon menus): the name at the top */
+#define OM_SEPARATOR 0x0800      /* ... and a separator line */
 #define MAX_MENUS 31
 #define MAX_POOL 640             /* items and subitems, all menus together */
 #define MAX_TEXTS 2
@@ -354,6 +384,19 @@ static void draw_item(struct RastPort *rp, const struct citem *c, WORD x, WORD y
         WORD ay = y + c->height / 2;
         SetAPen(rp, text);
         for (int k = 0; k < 4; k++) { Move(rp, x1 - 7 + k, ay - 3 + k); Draw(rp, x1 - 7 + k, ay + 3 - k); }
+    }
+    if (c->flags & OM_SEPARATOR) {             /* a line, the item's whole box */
+        SetAPen(rp, pen[OM_C_BACKGROUND]); RectFill(rp, x, y, x1, y1);
+        SetAPen(rp, pen[OM_C_DARK]); Move(rp, x + 2, y + c->height / 2); Draw(rp, x1 - 2, y + c->height / 2);
+        return;
+    }
+    if (c->flags & OM_HEADER) {                /* the icon's name: dimmer, never chosen */
+        SetAPen(rp, pen[OM_C_BACKGROUND]); RectFill(rp, x, y, x1, y1);
+        SetAPen(rp, pen[OM_C_DARK]); SetDrMd(rp, JAM1);
+        Move(rp, x + c->text[0].left, y + c->text[0].top + rp->TxBaseline);
+        Text(rp, (STRPTR)c->text[0].s, strlen(c->text[0].s));
+        Move(rp, x + 2, y1); Draw(rp, x1 - 2, y1);
+        return;
     }
     if (!enabled) ghost(rp, x, y, x1, y1);
 }
@@ -724,10 +767,424 @@ out:
     session = 0;
 }
 
+/* ---- right-click on Workbench's icons and desktop -------------------------------------------- *
+ *
+ * Workbench is asked through its own ARexx port (WORKBENCH): which of its
+ * windows was clicked, where its icons are and which are selected; it is
+ * told to select the icon clicked and to carry out the menu item chosen
+ * ("MENU WINDOW ... INVOKE ICONS.INFORMATION"), as its own menus would. Other
+ * entries run a program on the selected files. Nothing of Workbench's is
+ * patched (Menus/DESIGN.md, "Right-click on icons and the desktop"). */
+
+/* One command to Workbench; its result in out. RC_OK is 0. */
+static LONG wbx(char *out, int size, const char *fmt, ...)
+{
+    char cmd[400];
+    struct MsgPort *wb, *rp;
+    struct RexxMsg *rm;
+    LONG rc = 20;
+    va_list ap;
+    if (out && size) out[0] = 0;
+    va_start(ap, fmt);
+    vsnprintf(cmd, sizeof cmd, fmt, ap);
+    va_end(ap);
+    if (!RexxSysBase && !(RexxSysBase = (struct RxsLib *)OpenLibrary((STRPTR)"rexxsyslib.library", 36))) return 20;
+    if (!(rp = CreateMsgPort())) return 20;
+    if ((rm = CreateRexxMsg(rp, NULL, NULL))) {
+        rm->rm_Action = RXCOMM | RXFF_RESULT;
+        if ((rm->rm_Args[0] = (STRPTR)CreateArgstring((STRPTR)cmd, strlen(cmd)))) {
+            Forbid();
+            if ((wb = FindPort((STRPTR)"WORKBENCH"))) PutMsg(wb, (struct Message *)rm);
+            Permit();
+            if (wb) {
+                /* Workbench busy with a requester answers nothing until it is
+                   closed: give up after a second, so the mouse is never held */
+                int t;
+                for (t = 0; t < 50 && !GetMsg(rp); t++) Delay(1);
+                if (t == 50) return 20;          /* the message and its port stay: a late reply lands there */
+                rc = rm->rm_Result1;
+                if (!rc && rm->rm_Result2) {
+                    if (out) { strncpy(out, (const char *)rm->rm_Result2, size - 1); out[size - 1] = 0; }
+                    DeleteArgstring((UBYTE *)rm->rm_Result2);
+                }
+            }
+            DeleteArgstring((UBYTE *)rm->rm_Args[0]);
+        }
+        DeleteRexxMsg(rm);
+    }
+    DeleteMsgPort(rp);
+    return rc;
+}
+
+static LONG wbnum(const char *fmt, const char *win, int i)
+{
+    char r[32];
+    if (wbx(r, sizeof r, fmt, i, win)) return -1;
+    return atol(r);
+}
+
+#define RC_MAX_ICONS 256
+struct rc_icon { char name[108]; WORD x, y, w, h; UBYTE selected, kind; };
+enum { K_OTHER, K_DISK, K_DRAWER, K_TOOL, K_PROJECT, K_GARBAGE, K_APPICON };
+static struct rc_icon rc_icons[RC_MAX_ICONS];
+static int rc_nicons;
+static char rc_win[256];                 /* Workbench's name for the window: "root" or a path */
+static char rc_paths[2048];              /* the selected files, each "quoted", for a command line */
+static int rc_npaths;
+
+/* An action: what an item does. */
+enum { A_NONE, A_WB, A_RUNFILES, A_RUN, A_EXTRACT, A_CHOOSE, A_SEND };
+struct rc_action { UBYTE kind; const char *arg; };
+static struct rc_action rc_acts[64];
+static int rc_nacts;
+
+static int add_act(int kind, const char *arg)
+{
+    if (rc_nacts >= 64) return 0;
+    rc_acts[rc_nacts].kind = (UBYTE)kind; rc_acts[rc_nacts].arg = arg;
+    return rc_nacts++;
+}
+
+static WORD rc_lh, rc_w;
+
+static struct citem *rc_item(struct citem *it, int *n, int top_index, const char *text, int kind, const char *arg, UWORD extra)
+{
+    struct citem *c = &it[(*n)++];
+    memset(c, 0, sizeof *c);
+    c->left = 0; c->top = (WORD)(top_index * rc_lh); c->width = rc_w; c->height = rc_lh;
+    c->flags = ITEMTEXT | extra | ((extra & (OM_HEADER | OM_SEPARATOR)) ? 0 : ITEMENABLED);
+    if (extra & OM_SEPARATOR) c->height = 6;
+    c->ntexts = 1;
+    c->text[0].left = 8; c->text[0].top = 2; c->text[0].pen = 1;
+    strncpy(c->text[0].s, text, sizeof c->text[0].s - 1);
+    c->exclude = kind ? add_act(kind, arg) : -1;
+    return c;
+}
+
+static int exists_file(const char *path)
+{
+    BPTR l = Lock((STRPTR)path, ACCESS_READ);
+    if (l) UnLock(l);
+    return l != 0;
+}
+
+static int is_archive(const char *name)
+{
+    static const char *const ext[] = { ".lha", ".lzh", ".zip", ".tar", ".gz", ".tgz", ".adf", ".adz", ".dms", NULL };
+    int n = strlen(name);
+    for (int i = 0; ext[i]; i++) {
+        int e = strlen(ext[i]);
+        if (n > e && !strcasecmp(name + n - e, ext[i])) return 1;
+    }
+    return 0;
+}
+
+/* The selected icons' full paths, quoted, in rc_paths (volumes in the root window get a colon). */
+static void selected_paths(void)
+{
+    rc_paths[0] = 0; rc_npaths = 0;
+    for (int i = 0; i < rc_nicons; i++) {
+        char p[300];
+        if (!rc_icons[i].selected || rc_icons[i].kind == K_APPICON) continue;
+        if (!strcmp(rc_win, "root")) snprintf(p, sizeof p, rc_icons[i].kind == K_DISK ? "%s:" : "%s", rc_icons[i].name);
+        else snprintf(p, sizeof p, "%s%s%s", rc_win, rc_win[strlen(rc_win) - 1] == ':' ? "" : "/", rc_icons[i].name);
+        if (strlen(rc_paths) + strlen(p) + 4 < sizeof rc_paths) {
+            strcat(rc_paths, rc_paths[0] ? " \"" : "\""); strcat(rc_paths, p); strcat(rc_paths, "\"");
+            rc_npaths++;
+        }
+    }
+}
+
+static void run_async(const char *cmd)
+{
+    BPTR nil = Open((STRPTR)"NIL:", MODE_NEWFILE);
+    if (SystemTags((STRPTR)cmd, SYS_Input, nil, SYS_Output, NULL, SYS_Asynch, TRUE, NP_StackSize, 32768, TAG_DONE) == -1 && nil) Close(nil);
+}
+
+static void do_action(int a)
+{
+    char cmd[2400];
+    if (a < 0 || a >= rc_nacts) return;
+    switch (rc_acts[a].kind) {
+    case A_WB:
+        /* Workbench carries a menu item out on its active window (6 Oct 2026:
+           MENU WINDOW <name> INVOKE did nothing on 3.2.3) */
+        wbx(NULL, 0, "WINDOW \"%s\" ACTIVATE", rc_win);
+        wbx(NULL, 0, "MENU INVOKE %s", rc_acts[a].arg);
+        break;
+    case A_RUN: run_async(rc_acts[a].arg); break;
+    case A_RUNFILES:
+        selected_paths();
+        if (rc_npaths) { snprintf(cmd, sizeof cmd, "%s %s", rc_acts[a].arg, rc_paths); run_async(cmd); }
+        break;
+    case A_SEND:
+        selected_paths();
+        if (rc_npaths) { snprintf(cmd, sizeof cmd, "C:ACDrop SEND %s", rc_paths); run_async(cmd); }
+        break;
+    case A_EXTRACT: {
+        /* each archive into the drawer it is in */
+        const char *dir = strcmp(rc_win, "root") ? rc_win : "RAM:";
+        selected_paths();
+        if (rc_npaths) { snprintf(cmd, sizeof cmd, "SYS:Utilities/OpenCompress x %s \"%s\"", rc_paths, dir); run_async(cmd); }
+        break;
+    }
+    case A_CHOOSE: {
+        struct FileRequester *fr;
+        if (!AslBase) AslBase = OpenLibrary((STRPTR)"asl.library", 38);
+        if (AslBase && (fr = AllocAslRequestTags(ASL_FileRequest, ASLFR_TitleText, (ULONG)"Open with which program?",
+                                                ASLFR_InitialDrawer, (ULONG)"SYS:Utilities", TAG_DONE))) {
+            if (AslRequest(fr, NULL)) {
+                char prog[300];
+                strncpy(prog, (const char *)fr->fr_Drawer, sizeof prog - 1); prog[sizeof prog - 1] = 0;
+                AddPart((STRPTR)prog, fr->fr_File, sizeof prog);
+                selected_paths();
+                snprintf(cmd, sizeof cmd, "\"%s\" %s", prog, rc_paths);
+                run_async(cmd);
+            }
+            FreeAslRequest(fr);
+        }
+        break;
+    }
+    }
+}
+
+/* Workbench's name for Intuition's window w, and its icons with their places on the screen. */
+static int rc_read(struct Window *w)
+{
+    LONG n = wbnum("GETATTR WINDOWS.COUNT%.0d%.0s", "", 0), vl, vt;
+    char r[300];
+    rc_win[0] = 0; rc_nicons = 0;
+    for (int i = 0; i < n; i++) {
+        char name[256];
+        if (wbx(name, sizeof name, "GETATTR WINDOWS.%ld", (LONG)i)) continue;
+        if (wbnum("GETATTR WINDOW.LEFT%.0d NAME \"%s\"", name, 0) == w->LeftEdge &&
+            wbnum("GETATTR WINDOW.TOP%.0d NAME \"%s\"", name, 0) == w->TopEdge &&
+            wbnum("GETATTR WINDOW.WIDTH%.0d NAME \"%s\"", name, 0) == w->Width) { strcpy(rc_win, name); break; }
+    }
+    if (!rc_win[0]) return 0;
+    vl = wbnum("GETATTR WINDOW.VIEW.LEFT%.0d NAME \"%s\"", rc_win, 0);
+    vt = wbnum("GETATTR WINDOW.VIEW.TOP%.0d NAME \"%s\"", rc_win, 0);
+    if (vl < 0) vl = 0;
+    if (vt < 0) vt = 0;
+    n = wbnum("GETATTR WINDOW.ICONS.ALL.COUNT%.0d NAME \"%s\"", rc_win, 0);
+    for (int i = 0; i < n && rc_nicons < RC_MAX_ICONS; i++) {
+        struct rc_icon *ic = &rc_icons[rc_nicons];
+        if (wbx(ic->name, sizeof ic->name, "GETATTR WINDOW.ICONS.ALL.%ld.NAME NAME \"%s\"", (LONG)i, rc_win)) continue;
+        ic->x = (WORD)(w->LeftEdge + w->BorderLeft + wbnum("GETATTR WINDOW.ICONS.ALL.%d.LEFT NAME \"%s\"", rc_win, i) - vl);
+        ic->y = (WORD)(w->TopEdge + w->BorderTop + wbnum("GETATTR WINDOW.ICONS.ALL.%d.TOP NAME \"%s\"", rc_win, i) - vt);
+        ic->w = (WORD)wbnum("GETATTR WINDOW.ICONS.ALL.%d.WIDTH NAME \"%s\"", rc_win, i);
+        ic->h = (WORD)wbnum("GETATTR WINDOW.ICONS.ALL.%d.HEIGHT NAME \"%s\"", rc_win, i);
+        wbx(r, sizeof r, "GETATTR WINDOW.ICONS.ALL.%ld.STATUS NAME \"%s\"", (LONG)i, rc_win);
+        ic->selected = !strncmp(r, "SELECTED", 8);
+        wbx(r, sizeof r, "GETATTR WINDOW.ICONS.ALL.%ld.TYPE NAME \"%s\"", (LONG)i, rc_win);
+        ic->kind = !strcmp(r, "DISK") ? K_DISK : !strcmp(r, "DRAWER") ? K_DRAWER : !strcmp(r, "TOOL") ? K_TOOL :
+                   !strcmp(r, "PROJECT") ? K_PROJECT : !strcmp(r, "GARBAGE") ? K_GARBAGE : !strcmp(r, "APPICON") ? K_APPICON : K_OTHER;
+        rc_nicons++;
+    }
+    return 1;
+}
+
+/* The icon under the pointer (its picture, and its name below it), or -1. */
+static int rc_hit(WORD x, WORD y)
+{
+    WORD lh = font ? font->tf_YSize + 2 : 10;
+    for (int i = rc_nicons - 1; i >= 0; i--) {
+        struct rc_icon *ic = &rc_icons[i];
+        WORD x0 = ic->x - 8, x1 = ic->x + ic->w + 8;
+        if (x >= x0 && x < x1 && y >= ic->y && y < ic->y + ic->h + lh) return i;
+    }
+    return -1;
+}
+
+/* Builds the menu in cmenus[0] for the icon hit (or the background). 1 when there is one. */
+static int rc_build(int hit)
+{
+    struct citem *it = pool, *st = pool + 200;   /* the menu's items, and the submenus' */
+    int n = 0, ns = 0, row = 0, nsel = 0, root = !strcmp(rc_win, "root");
+    struct RastPort trp;
+    char head[120];
+    static const char *const viewer[] = { "C:OpenView", "SYS:Utilities/MultiView", NULL };
+    InitRastPort(&trp); SetFont(&trp, font);
+    rc_lh = font->tf_YSize + 4; rc_w = 200;
+    rc_nacts = 0; npool = 0;
+    for (int i = 0; i < rc_nicons; i++) nsel += rc_icons[i].selected;
+#define ITEM(text, kind, arg) rc_item(it, &n, row++, text, kind, arg, 0)
+#define SEP() do { struct citem *s_ = rc_item(it, &n, 0, "", 0, NULL, OM_SEPARATOR); s_->top = (WORD)(row * rc_lh); row++; } while (0)
+    if (hit >= 0 && rc_icons[hit].kind == K_APPICON) return 0;          /* a program's own icon: its own menu */
+    if (hit >= 0) {
+        const struct rc_icon *ic = &rc_icons[hit];
+        int several = nsel > 1;
+        if (prefs.rightclick_name) {
+            if (several) snprintf(head, sizeof head, "%d icons", nsel); else strncpy(head, ic->name, sizeof head - 1), head[sizeof head - 1] = 0;
+            rc_item(it, &n, row++, head, 0, NULL, OM_HEADER);
+        }
+        ITEM("Open", A_WB, "ICONS.OPEN");
+        if (!several && ic->kind == K_PROJECT && prefs.rightclick_extras) {
+            struct citem *ow = ITEM("Open with", 0, NULL);
+            int k = 0;
+            ow->subs = &st[ns];
+            for (int v = 0; viewer[v]; v++)
+                if (exists_file(viewer[v])) rc_item(st, &ns, k++, (const char *)FilePart((STRPTR)viewer[v]), A_RUNFILES, viewer[v], 0);
+            rc_item(st, &ns, k++, "Choose a program...", A_CHOOSE, NULL, 0);
+            ow->nsubs = (UWORD)k;
+        }
+        ITEM("Information...", A_WB, "ICONS.INFORMATION");
+        if (!several) ITEM("Rename...", A_WB, "ICONS.RENAME");
+        if (ic->kind != K_DISK && ic->kind != K_GARBAGE) ITEM("Copy", A_WB, "ICONS.COPY");
+        ITEM("Snapshot", A_WB, "ICONS.SNAPSHOT");
+        if (ic->kind != K_DISK) ITEM(root ? "Put away" : "Leave out", A_WB, root ? "ICONS.PUTAWAY" : "ICONS.LEAVEOUT");
+        if (prefs.rightclick_extras && ic->kind != K_DISK) {
+            int any = 0;
+            if (is_archive(ic->name) && exists_file("SYS:Utilities/OpenCompress")) {
+                SEP(); any = 1;
+                ITEM("Extract here", A_EXTRACT, NULL);
+                ITEM("Open in OpenCompress", A_RUNFILES, "SYS:Utilities/OpenCompress");
+            }
+            if (exists_file("C:ACDrop") && ic->kind != K_GARBAGE) { if (!any) SEP(); ITEM("Send to PC", A_SEND, NULL); }
+        }
+        SEP();
+        if (ic->kind == K_DISK) { ITEM("Format disk...", A_WB, "ICONS.FORMATDISK"); ITEM("Eject", A_WB, "ICONS.EJECTDISK"); }
+        else if (ic->kind == K_GARBAGE) ITEM("Empty trash", A_WB, "ICONS.EMPTYTRASH");
+        else ITEM("Delete...", A_WB, "ICONS.DELETE");
+    } else {
+        struct citem *sub;
+        int k;
+        if (prefs.rightclick_name) {
+            strncpy(head, root ? "Workbench" : rc_win, sizeof head - 1); head[sizeof head - 1] = 0;
+            rc_item(it, &n, row++, head, 0, NULL, OM_HEADER);
+        }
+        if (root) { ITEM("Execute command...", A_WB, "WORKBENCH.EXECUTE"); ITEM("Shell", A_RUN, "NewShell"); }
+        else { ITEM("New drawer...", A_WB, "WINDOW.NEWDRAWER"); ITEM("Open parent", A_WB, "WINDOW.OPENPARENT"); }
+        SEP();
+        sub = ITEM("Arrange icons", 0, NULL); sub->subs = &st[ns]; k = 0;
+        { static const char *const t[] = { "Clean up", "By name", "By date", "By size", "By type" };
+          static const char *const m[] = { "WINDOW.CLEANUPBY.COLUMN", "WINDOW.CLEANUPBY.NAME", "WINDOW.CLEANUPBY.DATE", "WINDOW.CLEANUPBY.SIZE", "WINDOW.CLEANUPBY.TYPE" };
+          for (int j = 0; j < 5; j++) rc_item(st, &ns, k++, t[j], A_WB, m[j], 0); }
+        sub->nsubs = (UWORD)k;
+        sub = ITEM("Show", 0, NULL); sub->subs = &st[ns]; k = 0;
+        rc_item(st, &ns, k++, "Only icons", A_WB, "WINDOW.SHOW.ONLYICONS", 0);
+        rc_item(st, &ns, k++, "All files", A_WB, "WINDOW.SHOW.ALLFILES", 0);
+        sub->nsubs = (UWORD)k;
+        if (!root) {
+            sub = ITEM("View by", 0, NULL); sub->subs = &st[ns]; k = 0;
+            { static const char *const t[] = { "Icon", "Name", "Date", "Size", "Type" };
+              static const char *const m[] = { "WINDOW.VIEWBY.ICON", "WINDOW.VIEWBY.NAME", "WINDOW.VIEWBY.DATE", "WINDOW.VIEWBY.SIZE", "WINDOW.VIEWBY.TYPE" };
+              for (int j = 0; j < 5; j++) rc_item(st, &ns, k++, t[j], A_WB, m[j], 0); }
+            sub->nsubs = (UWORD)k;
+        }
+        ITEM("Select contents", A_WB, "WINDOW.SELECTCONTENTS");
+        if (root) { ITEM("Redraw all", A_WB, "WORKBENCH.REDRAWALL"); ITEM("Update all", A_WB, "WORKBENCH.UPDATEALL"); }
+        else { ITEM("Update", A_WB, "WINDOW.UPDATE"); ITEM("Snapshot window", A_WB, "WINDOW.SNAPSHOT.WINDOW"); }
+        if (root) {
+            SEP();
+            if (exists_file("SYS:Prefs/WBPattern")) ITEM("Backdrop picture...", A_RUN, "SYS:Prefs/WBPattern");
+            if (exists_file("SYS:Prefs/Look")) ITEM("Look...", A_RUN, "SYS:Prefs/Look");
+            if (exists_file("SYS:Prefs/ScreenMode")) ITEM("Screen mode...", A_RUN, "SYS:Prefs/ScreenMode");
+            SEP();
+            ITEM("Backdrop", A_WB, "WORKBENCH.BACKDROP");
+            ITEM("About...", A_WB, "WORKBENCH.ABOUT");
+        } else { SEP(); ITEM("Close", A_WB, "WINDOW.CLOSE"); }
+    }
+#undef ITEM
+#undef SEP
+    /* the widths: the widest text; each submenu beside its item */
+    {
+        WORD wmax = 120, smax = 100;
+        for (int i = 0; i < n; i++) { WORD t = TextLength(&trp, (STRPTR)it[i].text[0].s, strlen(it[i].text[0].s)) + 34; if (t > wmax) wmax = t; }
+        for (int i = 0; i < ns; i++) { WORD t = TextLength(&trp, (STRPTR)st[i].text[0].s, strlen(st[i].text[0].s)) + 24; if (t > smax) smax = t; }
+        for (int i = 0; i < n; i++) it[i].width = wmax;
+        for (int i = 0; i < ns; i++) st[i].width = smax;
+        for (int i = 0; i < n; i++)
+            for (int j = 0; j < it[i].nsubs; j++) { it[i].subs[j].left = wmax - 6; it[i].subs[j].top = (WORD)(j * rc_lh); }
+        rc_w = wmax;
+    }
+    cmenus[0].left = 0; cmenus[0].width = rc_w; cmenus[0].flags = MENUENABLED; cmenus[0].name[0] = 0;
+    cmenus[0].items = it; cmenus[0].nitems = n;
+    ncmenus = 1;
+    npool = 200 + ns;
+    return n;
+}
+
+static void rc_session(void)
+{
+    int chosen_act = -1;
+    struct Window *w = rc_window;
+    WORD mx = start_x, my = start_y, pad = prefs.border_double ? 4 : 2, h = 0;
+    int hit, sticky = 0, done = 0, mi = -1, ii = -1, si = -1, any_moved = 0, use = prefs.use[OM_PU];
+    ULONG s0, m0, s1, m1;
+    if (!w || !is_window(w)) { session = 0; return; }
+    scr = w->WScreen;
+    if (!(dri = GetScreenDrawInfo(scr))) { session = 0; return; }
+    font = OpenFont(scr->Font);
+    if (!font) font = dri->dri_Font;
+    target = w; target_strip = NULL;
+    if (!rc_read(w)) goto out;
+    hit = rc_hit(mx, my);
+    if (hit >= 0 && (!rc_icons[hit].selected || !prefs.rightclick_selection)) {
+        /* the icon clicked becomes the selection, as a click on it would make it */
+        LONG nw = wbnum("GETATTR WINDOWS.COUNT%.0d%.0s", "", 0);
+        for (int i = 0; i < nw; i++) {
+            char name[256];
+            if (!wbx(name, sizeof name, "GETATTR WINDOWS.%ld", (LONG)i)) wbx(NULL, 0, "MENU WINDOW \"%s\" INVOKE WINDOW.CLEARSELECTION", name);
+        }
+        wbx(NULL, 0, "ICON WINDOW \"%s\" NAMES \"%s\" SELECT", rc_win, rc_icons[hit].name);
+        for (int i = 0; i < rc_nicons; i++) rc_icons[i].selected = i == hit;
+    }
+    if (!rc_build(hit)) goto out;
+    choose_pens();
+    for (int i = 0; i < cmenus[0].nitems; i++) if (cmenus[0].items[i].top + cmenus[0].items[i].height > h) h = cmenus[0].items[i].top + cmenus[0].items[i].height;
+    npanels = 0;
+    open_panel(2, 0, -1, mx - 4, my - 4, rc_w + 2 * pad, h + 2 * pad, pad, pad);
+    if (!npanels) goto out;
+    follow(mx, my);
+    CurrentTime(&s0, &m0);
+    while (!done) {
+        ULONG got = Wait(sig_event | (1UL << tport->mp_SigBit) | SIGBREAKF_CTRL_C);
+        if (CheckIO((struct IORequest *)tr)) {
+            WaitIO((struct IORequest *)tr);
+            tr->tr_node.io_Command = TR_ADDREQUEST; tr->tr_time.tv_secs = 0; tr->tr_time.tv_micro = 20000;
+            SendIO((struct IORequest *)tr);
+        }
+        if (cancelled || (got & SIGBREAKF_CTRL_C)) { mi = -1; break; }
+        if (scr->MouseX != mx || scr->MouseY != my) {
+            if (abs(scr->MouseX - start_x) > 3 || abs(scr->MouseY - start_y) > 3) any_moved = 1;
+            mx = scr->MouseX; my = scr->MouseY;
+            follow(mx, my);
+        }
+        if (!sticky && !rbutton) {
+            ULONG ms;
+            CurrentTime(&s1, &m1);
+            ms = (s1 - s0) * 1000 + (m1 / 1000) - (m0 / 1000);
+            /* a quick click without moving leaves the menu open, as a pop-up's does */
+            if (ms < 400 && (!any_moved || use == OM_USE_STICKY)) { sticky = 1; rdown_seen = ldown_seen = 0; continue; }
+            if (!chosen(&mi, &ii, &si)) mi = -1;
+            done = 1;
+        } else if (sticky && (rdown_seen || ldown_seen) && !rbutton && !lbutton) {
+            if (hit_panel(mx, my) < 0 || !chosen(&mi, &ii, &si)) mi = -1;
+            done = 1;
+        }
+    }
+    close_panel(0);
+    if (mi == 0 && ii >= 0) {
+        const struct citem *c = si >= 0 ? &cmenus[0].items[ii].subs[si] : &cmenus[0].items[ii];
+        chosen_act = (int)c->exclude;
+    }
+out:
+    close_panel(0);
+    free_pens();
+    if (font && font != dri->dri_Font) CloseFont(font);
+    font = NULL;
+    FreeScreenDrawInfo(scr, dri);
+    dri = NULL;
+    cancelled = 0;
+    session = 0;                             /* the mouse is the user's again, then the action */
+    if (chosen_act >= 0) do_action(chosen_act);
+}
+
 /* ---- the commodity ----------------------------------------------------------------------------- */
 
 static struct NewBroker nb = {
-    NB_VERSION, (STRPTR)"OpenMenus", (STRPTR)"OpenMenus 0.1", (STRPTR)"The Open family's own menus",
+    NB_VERSION, (STRPTR)"OpenMenus", (STRPTR)"OpenMenus 0.2", (STRPTR)"The Open family's own menus",
     NBU_UNIQUE | NBU_NOTIFY, 0, 0, NULL, 0
 };
 
@@ -767,7 +1224,8 @@ int main(void)
         if (got & SIGBREAKF_CTRL_C) quit = 1;
         if (got & SIGBREAKF_CTRL_F) read_settings();
         reap();
-        if ((got & sig_start) && session) menu_session();
+        if ((got & sig_start) && session == 2) rc_session();
+        else if ((got & sig_start) && session) menu_session();
         while ((m = (CxMsg *)GetMsg(port))) {
             ULONG type = CxMsgType(m), id = CxMsgID(m);
             ReplyMsg((struct Message *)m);
@@ -800,6 +1258,8 @@ out:
     if (s2 >= 0) FreeSignal(s2);
     if (s1 >= 0) FreeSignal(s1);
     if (theme_loaded) ogt_theme_free(&theme);
+    if (RexxSysBase) CloseLibrary((struct Library *)RexxSysBase);
+    if (AslBase) CloseLibrary(AslBase);
     if (CxBase) CloseLibrary(CxBase);
     if (LayersBase) CloseLibrary(LayersBase);
     if (GfxBase) CloseLibrary((struct Library *)GfxBase);
