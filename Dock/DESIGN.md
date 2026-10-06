@@ -151,6 +151,12 @@ saves the result.
 
 ## Next
 
+- **Phase 2: a start-style menu.** A button at the dock's end opens a pop-up
+  of programs, the Workbench menu's items, and Shut down/Reboot, through
+  OpenMenus' panels, after the menu bar at any edge (`Menus/DESIGN.md`,
+  "Where the menu bar sits"). We, 6 October 2026: "or as a 'start' menu like
+  pop up from OpenDock. The latter might need to follow in a phase 2."
+
 - Taking over ToolManager 3 and AmigaOS 3.9's AmiDock once their files are
   known (a copy of each from a real machine).
 - DOpus button banks.

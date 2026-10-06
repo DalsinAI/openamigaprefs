@@ -227,8 +227,52 @@ so it is 251 lines high (Topaz 8) wherever it is measured.
     # once, at install: MagicMenu's settings taken over (does nothing without them)
     #   SYS:Prefs/Menus MAGICMENU ENVARC:MagicMenu.prefs SAVE
 
+## Where the menu bar sits (designed, not built)
+
+We, 6 October 2026: "we should support the same menu bar options as Windows
+and Linux, top and bottom, left and right sides of the screen, or as a 'start'
+menu like pop up from OpenDock. The latter might need to follow in a phase 2."
+
+**Phase 1: the bar at any edge.** Intuition always draws the menu titles in
+the screen's title bar, at the top. OpenMenus already draws its own panels
+(borderless windows that never take the focus), so it can draw the bar the
+same way, along whichever edge is chosen:
+
+| `bar` | What the user sees |
+| --- | --- |
+| `title` (the default) | The screen's own title bar, as now: nothing moves |
+| `top` | OpenMenus' own bar along the top, the screen's title bar hidden behind it |
+| `bottom` | The bar along the bottom, as Windows' taskbar sits |
+| `left`, `right` | A bar down the side, the menu titles one under another; a menu opens beside its title, towards the middle of the screen |
+
+- **Which titles:** the active window's MenuStrip, read as the pull-downs read
+  it now (copied under Forbid). With no window active, Workbench's own.
+- **On which screens:** `bar.screens workbench|all|rtg`. A game's own screen
+  never gets one: only screens that show a title bar of their own.
+- **Room for it:** for `bottom`, `left` and `right`, Workbench's backdrop
+  window and new windows keep clear of the bar, through OpenWindows' places
+  (it already places windows). The bar's width is the widest title.
+- **Autohide:** `bar.autohide on|off`. Hidden, it shows when the pointer
+  touches its edge, as a Linux panel does.
+- **Keyboard control (0.3)** moves along the bar whichever way it lies: Left
+  and Right across, Up and Down down the side.
+- **The editor:** a "Menu bar" cycle (Title bar, Top, Bottom, Left, Right),
+  the screens, and Autohide, in Simple view; the Advanced view adds the bar's
+  width and font.
+- **Programs that draw in the title bar** (a clock commodity, a screen's
+  title text) still have it with `title`; with an OpenMenus bar on top, the
+  title bar's own text shows at the bar's far end.
+
+**Phase 2: a start-style menu from OpenDock.** A button at the dock's end opens
+a pop-up of programs, the Workbench menu's own items, and Shut down/Reboot,
+laid out as the dock's edge says (up from a bottom dock, across from a side
+one). It reuses OpenMenus' panels and its keyboard control. It follows the
+phase 1 bar, so the two share the edge rules and how the windows keep clear.
+
 ## Next
 
+- The menu bar at any edge (above, phase 1), then the start-style pop-up from
+  OpenDock (phase 2).
 
 - In the engine: the opening delays, see-through and pictures, and a pop-up
   opening on the item last chosen. The editor keeps these settings already.
