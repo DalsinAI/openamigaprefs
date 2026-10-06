@@ -313,7 +313,7 @@ enum {
     G_OPEN, G_PDUSE, G_PUUSE, G_PDDELAY, G_PUDELAY, G_LAST, G_CENTRE, G_MARK, G_RUNNING,
     G_KEYBOARD, G_KEY, G_RALT, G_TOP,
     G_COLOURS, G_WHICH, G_HEX, G_BORDER, G_SHADOW, G_SSIZE, G_SSTRENGTH, G_BG, G_IMAGE, G_CHOOSE, G_SEPS,
-    G_RC, G_RCEXTRAS, G_RCSEL, G_RCNAME, G_RCNOTE1, G_RCNOTE2,
+    G_RC, G_RCEXTRAS, G_RCSEL, G_RCNAME, G_RCNOTE1, G_RCNOTE2, G_BAR, G_HIDE,
     G_ENABLED, G_TAKEOVER, G_FEEL, G_THEME, G_LOOK, G_STATUS, G_SAVE, G_USE, G_TEST, G_CANCEL, G_COUNT
 };
 
@@ -324,6 +324,8 @@ static const char *which_labels[] = { "Background", "Text", "Selected", "Selecte
 static const char *border_labels[] = { "Single", "Double", NULL };
 static const char *bg_labels[] = { "Solid", "See-through", "Image", "See-through image", NULL };
 static const char *seps_labels[] = { "Lite", "Bold", NULL };
+/* where the menu bar sits: bar title|top|bottom|left|right, in that order */
+static const char *bar_labels[] = { "Title bar", "Top", "Bottom", "Left", "Right", NULL };
 /* the right-click menus: rightclick.extras on|off, rightclick.selection all|one (in that order) */
 static const char *rcshow_labels[] = { "Workbench's only", "With Open's too", NULL };
 static const char *rcsel_labels[] = { "That icon only", "Whole selection", NULL };
@@ -347,6 +349,8 @@ static void show(const om_prefs *p)
 {
     int own = p->colours == OM_COL_OWN, img = p->background == OM_BG_IMAGE || p->background == OM_BG_SEEIMAGE;
     SET(G_OPEN, GTCY_Active, p->open);
+    SET(G_BAR, GTCY_Active, p->bar);
+    SET(G_HIDE, GTCB_Checked, p->bar_autohide, GA_Disabled, p->bar == OM_BAR_TITLE);
     SET(G_PDUSE, GTCY_Active, p->use[OM_PD], GA_Disabled, p->open == OM_OPEN_POPUP);
     SET(G_PUUSE, GTCY_Active, p->use[OM_PU], GA_Disabled, p->open == OM_OPEN_PULLDOWN);
     SET(G_PDDELAY, GTSL_Level, p->delay[OM_PD], GA_Disabled, p->open == OM_OPEN_POPUP);
@@ -466,7 +470,7 @@ static int make_gadgets(struct Screen *scr, APTR vi, struct Gadget **glist, int 
 {
     static const char *const left_words[] = { "Menus open", "From the bar", "At the pointer", "Bar delay", "Pointer delay", "Open on last",
                                               "Centre submenus", "Programs run on", "Keyboard", "R.Amiga+R.Alt", "Use OpenMenus", "They work",
-                                              "Colours", "Shadow", "Delays", "They show", "Selected", "Name at the top", NULL };
+                                              "Colours", "Shadow", "Delays", "They show", "Selected", "Name at the top", "Menu bar", NULL };
     static const char *const right_words[] = { "Colours", "Border", "Shadow", "Background", "Picture", NULL };
     struct Gadget *g;
     struct NewGadget ng;
@@ -516,6 +520,12 @@ static int make_gadgets(struct Screen *scr, APTR vi, struct Gadget **glist, int 
         int look = text_w(scr, "Look...") + 20;
         G(CHECKBOX_KIND, G_ENABLED, lx, row, cb, lh, "Use OpenMenus", PLACETEXT_LEFT, GTCB_Scaled, TRUE); row += lh + gp;
         G(CYCLE_KIND, G_OPEN, lx, row, lw, lh, "Menus open", PLACETEXT_LEFT, GTCY_Labels, (ULONG)open_labels); row += lh + gp;
+        {
+            /* where the menu bar sits, and Hide (bar.autohide) beside it */
+            int hw = text_w(scr, "Hide") + 8 + cb;
+            G(CYCLE_KIND, G_BAR, lx, row, lw - hw - 8, lh, "Menu bar", PLACETEXT_LEFT, GTCY_Labels, (ULONG)bar_labels);
+            G(CHECKBOX_KIND, G_HIDE, lx + lw - cb, row, cb, lh, "Hide", PLACETEXT_LEFT, GTCB_Scaled, TRUE); row += lh + gp;
+        }
         G(CYCLE_KIND, G_FEEL, lx, row, lw, lh, "They work", PLACETEXT_LEFT, GTCY_Labels, (ULONG)use_labels); row += lh + gp;
         G(CYCLE_KIND, G_COLOURS, lx, row, lw, lh, "Colours", PLACETEXT_LEFT, GTCY_Labels, (ULONG)colours_labels); row += lh + gp;
         G(CHECKBOX_KIND, G_SHADOW, lx, row, cb, lh, "Shadow", PLACETEXT_LEFT, GTCB_Scaled, TRUE); row += lh + gp;
@@ -539,6 +549,12 @@ static int make_gadgets(struct Screen *scr, APTR vi, struct Gadget **glist, int 
     } else {
         /* the left column: how menus open, and the keys */
         G(CYCLE_KIND, G_OPEN, lx, row, lw, lh, "Menus open", PLACETEXT_LEFT, GTCY_Labels, (ULONG)open_labels); row += lh + gp;
+        {
+            /* where the menu bar sits, and Hide (bar.autohide) beside it */
+            int hw = text_w(scr, "Hide") + 8 + cb;
+            G(CYCLE_KIND, G_BAR, lx, row, lw - hw - 8, lh, "Menu bar", PLACETEXT_LEFT, GTCY_Labels, (ULONG)bar_labels);
+            G(CHECKBOX_KIND, G_HIDE, lx + lw - cb, row, cb, lh, "Hide", PLACETEXT_LEFT, GTCB_Scaled, TRUE); row += lh + gp;
+        }
         G(CYCLE_KIND, G_PDUSE, lx, row, lw, lh, "From the bar", PLACETEXT_LEFT, GTCY_Labels, (ULONG)use_labels); row += lh + gp;
         G(CYCLE_KIND, G_PUUSE, lx, row, lw, lh, "At the pointer", PLACETEXT_LEFT, GTCY_Labels, (ULONG)use_labels); row += lh + gp;
         {
@@ -751,6 +767,8 @@ static int gui(void)
             case G_CHOOSE: choose_image(); break;
             case G_LOOK: SystemTags((STRPTR)"Run >NIL: <NIL: SYS:Prefs/Look", TAG_DONE); redraw = 0; break;
             case G_ENABLED: cur.enabled = (gg->Flags & GFLG_SELECTED) != 0; break;
+            case G_BAR: cur.bar = code; break;
+            case G_HIDE: cur.bar_autohide = (gg->Flags & GFLG_SELECTED) != 0; redraw = 0; break;
             case G_TAKEOVER: {
                 const char *f = magicmenu_file();
                 char err[100];

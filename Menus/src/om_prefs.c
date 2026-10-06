@@ -14,6 +14,7 @@ static const char *const open_words[] = { "pulldown", "popup", "pointer" };
 static const char *const use_words[] = { "hold", "sticky", "click" };
 static const char *const bg_words[] = { "solid", "see-through", "image", "see-through-image" };
 static const char *const col_words[] = { "theme", "screen", "own" };
+static const char *const bar_words[] = { "title", "top", "bottom", "left", "right" };
 
 void om_defaults(om_prefs *p)
 {
@@ -135,6 +136,8 @@ int om_parse(om_prefs *p, const char *text)
             else if (same(k, "rightclick.extras")) p->rightclick_extras = on;
             else if (same(k, "rightclick.selection")) p->rightclick_selection = !same(v, "one");
             else if (same(k, "rightclick.name")) p->rightclick_name = on;
+            else if (same(k, "bar")) p->bar = pick(v, bar_words, 5, p->bar);
+            else if (same(k, "bar.autohide")) p->bar_autohide = on;
             else if (same(k, "imported")) { strncpy(p->imported, v, sizeof p->imported - 1); p->imported[sizeof p->imported - 1] = 0; }
         }
         if (!next) break;
@@ -189,6 +192,8 @@ int om_write(const om_prefs *p, char *out, int size)
     ADD("rightclick.extras %s\n", onoff[!!p->rightclick_extras]);
     ADD("rightclick.selection %s\n", p->rightclick_selection ? "all" : "one");
     ADD("rightclick.name %s\n", onoff[!!p->rightclick_name]);
+    ADD("bar %s\n", bar_words[clamp(p->bar, 0, 4)]);
+    ADD("bar.autohide %s\n", onoff[!!p->bar_autohide]);
     if (p->imported[0]) ADD("imported \"%s\"\n", quoted(p->imported, q, sizeof q));
     return (int)(o - out);
 }

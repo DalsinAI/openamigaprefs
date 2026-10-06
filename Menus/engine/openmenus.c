@@ -21,6 +21,9 @@
  * menus from the bar; arrows, type-ahead, Return, Space, Esc and Help work
  * them, and work a menu opened with the mouse too. Where a key moves the
  * highlight is src/om_kbd.c, tested on the host.
+ * 0.4: the menu bar at any edge (prefs.bar: top, bottom, left, right; the
+ * screen's title bar by default), our own bar on the Workbench screen, and
+ * bar.autohide (Menus/DESIGN.md, "Where the menu bar sits").
  * Not yet: opening delays, see-through and pictures.
  *
  * Safe against a program changing its menus while one is open: the strip is
@@ -64,7 +67,7 @@
 #include "om_kbd.h"
 #include "ogt_theme.h"
 
-static const char version[] = "$VER: OpenMenus 0.3 (6.10.2026) MIT, Copyright (c) 2026 Dalsin Limited";
+static const char version[] = "$VER: OpenMenus 0.4 (6.10.2026) MIT, Copyright (c) 2026 Dalsin Limited";
 
 #define PREFS_ENV "ENV:OpenMenus/Menus"
 #define LOOK_ENV "ENV:OpenGadTools/Look"
@@ -139,6 +142,11 @@ static volatile int rbutton, lbutton, rdown_seen, ldown_seen, moved;
 static volatile WORD start_x, start_y;
 static struct Window *volatile rc_window;        /* the Workbench window right-clicked (session 2) */
 static volatile int kbd_session;                  /* the menus were opened by a key */
+/* Our own menu bar at an edge (prefs.bar), for the input handler: where it is
+ * on bar_screen while it shows, and whether a click on it opened the menus. */
+static struct Screen *volatile bar_screen;
+static volatile int bar_live, bar_session;
+static volatile WORD bar_bx0, bar_by0, bar_bx1, bar_by1;
 
 /* Keys pressed while a menu is open, for the menu's own task (MapRawKey there). */
 #define KQ 16
@@ -194,6 +202,19 @@ static void custom(CxMsg *msg, CxObj *co)
         if (ie->ie_Class == IECLASS_RAWMOUSE) {
             UWORD code = ie->ie_Code;
             if (!session) {
+                if ((code == IECODE_RBUTTON || code == IECODE_LBUTTON) && bar_live) {
+                    struct Screen *s = IntuitionBase->FirstScreen;
+                    if (s && s == bar_screen && s->MouseX >= bar_bx0 && s->MouseX < bar_bx1 && s->MouseY >= bar_by0 && s->MouseY < bar_by1) {
+                        ie->ie_Class = IECLASS_NULL;     /* ours: the window under the bar keeps the activation */
+                        if (kbd_window(IntuitionBase->ActiveWindow)) {
+                            session = 1; bar_session = 1; rbutton = code == IECODE_RBUTTON; lbutton = code == IECODE_LBUTTON;
+                            rdown_seen = ldown_seen = moved = 0;
+                            start_x = s->MouseX; start_y = s->MouseY;
+                            Signal(me, sig_start);
+                        }
+                        continue;
+                    }
+                }
                 if (code == IECODE_RBUTTON && prefs.rightclick) {
                     /* on a Workbench window's icons or background (not its title bar, not
                      * the screen bar): the icon or desktop menu (the layers are read
@@ -342,6 +363,55 @@ static struct Menu *target_strip;
 static struct panel panels[4];   /* bar or titles, items, subitems */
 static int npanels;
 
+/* The menu titles' boxes in the bar panel (panel 0, kind 0), in its window:
+ * the screen's own title bar, or our bar at prefs.bar's edge (panel_edge). */
+static WORD tr_x[MAX_MENUS], tr_y[MAX_MENUS], tr_w[MAX_MENUS], tr_h[MAX_MENUS];
+static int panel_edge;                   /* OM_BAR_TITLE, or the edge our bar is at */
+
+static void ghost(struct RastPort *rp, WORD x0, WORD y0, WORD x1, WORD y1);
+
+static int vertical(int edge) { return edge == OM_BAR_LEFT || edge == OM_BAR_RIGHT; }
+
+/* Lays the titles out: on the title bar where the program put them (lefts,
+ * widths); across our bar one after another; down a side bar one a line. */
+static void bar_layout(struct RastPort *rp, int n, const char *const *names, const WORD *lefts, const WORD *widths,
+                       int edge, WORD w, WORD h, WORD hborder)
+{
+    WORD x = 4, lh = rp->TxHeight + 6;
+    for (int i = 0; i < n; i++) {
+        if (edge == OM_BAR_TITLE) { tr_x[i] = lefts[i] + hborder; tr_y[i] = 0; tr_w[i] = widths[i]; tr_h[i] = h - 1; }
+        else if (!vertical(edge)) {
+            tr_w[i] = TextLength(rp, (STRPTR)names[i], strlen(names[i])) + 16;
+            tr_x[i] = x; tr_y[i] = edge == OM_BAR_BOTTOM ? 1 : 0; tr_h[i] = h - 1;
+            x += tr_w[i];
+        } else { tr_x[i] = edge == OM_BAR_LEFT ? 0 : 1; tr_w[i] = w - 1; tr_y[i] = 2 + i * lh; tr_h[i] = lh; }
+    }
+}
+
+/* The bar: its titles, the one at hot highlighted, a line on the side that faces the screen. */
+static void draw_bar(struct RastPort *rp, int n, const char *const *names, const UWORD *flags, int hot,
+                     int edge, WORD w, WORD h, const LONG *pens, WORD vborder)
+{
+    SetAPen(rp, pens[OM_C_BACKGROUND]);
+    RectFill(rp, 0, 0, w - 1, h - 1);
+    SetAPen(rp, pens[OM_C_DARK]);
+    switch (edge) {
+    case OM_BAR_BOTTOM: Move(rp, 0, 0); Draw(rp, w - 1, 0); break;
+    case OM_BAR_LEFT: Move(rp, w - 1, 0); Draw(rp, w - 1, h - 1); break;
+    case OM_BAR_RIGHT: Move(rp, 0, 0); Draw(rp, 0, h - 1); break;
+    default: Move(rp, 0, h - 1); Draw(rp, w - 1, h - 1);
+    }
+    for (int i = 0; i < n; i++) {
+        WORD x0 = tr_x[i], y0 = tr_y[i], x1 = x0 + tr_w[i] - 1, y1 = y0 + tr_h[i] - 1;
+        if (x0 >= w || y0 >= h) break;                 /* no room left for it */
+        if (i == hot) { SetAPen(rp, pens[OM_C_SELECTED]); RectFill(rp, x0, y0, x1, y1); }
+        SetAPen(rp, i == hot ? pens[OM_C_SELECTED_TEXT] : pens[OM_C_TEXT]); SetDrMd(rp, JAM1);
+        Move(rp, x0 + (edge == OM_BAR_TITLE ? 4 : 8), (edge == OM_BAR_TITLE ? vborder : y0 + (tr_h[i] - rp->TxHeight) / 2) + rp->TxBaseline);
+        Text(rp, (STRPTR)names[i], strlen(names[i]));
+        if (!(flags[i] & MENUENABLED)) ghost(rp, x0, y0, x1, y1);
+    }
+}
+
 static LONG pen_rgb(ogt_rgb c)
 {
     LONG p = ObtainBestPen(scr->ViewPort.ColorMap, (ULONG)c.r * 0x01010101UL, (ULONG)c.g * 0x01010101UL,
@@ -477,19 +547,13 @@ static void draw_panel(struct panel *p)
 {
     struct RastPort *rp = p->win->RPort;
     SetFont(rp, font);
-    if (p->kind == 0) {                      /* the screen bar's titles */
-        SetAPen(rp, pen[OM_C_BACKGROUND]);
-        RectFill(rp, 0, 0, p->w - 1, p->h - 1);
-        SetAPen(rp, pen[OM_C_DARK]);
-        Move(rp, 0, p->h - 1); Draw(rp, p->w - 1, p->h - 1);
-        for (int i = 0; i < ncmenus; i++) {
-            WORD x = cmenus[i].left + scr->BarHBorder;
-            if (i == p->hot) { SetAPen(rp, pen[OM_C_SELECTED]); RectFill(rp, x, 0, x + cmenus[i].width - 1, p->h - 2); }
-            SetAPen(rp, i == p->hot ? pen[OM_C_SELECTED_TEXT] : pen[OM_C_TEXT]); SetDrMd(rp, JAM1);
-            Move(rp, x + 4, scr->BarVBorder + rp->TxBaseline);
-            Text(rp, (STRPTR)cmenus[i].name, strlen(cmenus[i].name));
-            if (!(cmenus[i].flags & MENUENABLED)) ghost(rp, x, 0, x + cmenus[i].width - 1, p->h - 2);
-        }
+    if (p->kind == 0) {                      /* the bar's titles: the screen's title bar, or ours at an edge */
+        const char *names[MAX_MENUS];
+        UWORD flags[MAX_MENUS];
+        WORD lefts[MAX_MENUS], widths[MAX_MENUS];
+        for (int i = 0; i < ncmenus; i++) { names[i] = cmenus[i].name; flags[i] = cmenus[i].flags; lefts[i] = cmenus[i].left; widths[i] = cmenus[i].width; }
+        bar_layout(rp, ncmenus, names, lefts, widths, panel_edge, p->w, p->h, scr->BarHBorder);
+        draw_bar(rp, ncmenus, names, flags, p->hot, panel_edge, p->w, p->h, pen, scr->BarVBorder);
         return;
     }
     frame(rp, p->w, p->h);
@@ -557,7 +621,15 @@ static void open_items(int mi)
     struct panel *from = &panels[0];
     items_box(cmenus[mi].items, cmenus[mi].nitems, &minx, &miny, &maxx, &maxy);
     if (!cmenus[mi].nitems) return;
-    if (from->kind == 0) { x = cmenus[mi].left + scr->BarHBorder + minx - pad; y = scr->BarHeight + 1 + miny - pad; }
+    if (from->kind == 0) {                   /* beside the title, on the side of the bar that faces the screen */
+        WORD iw = maxx - minx + 2 * pad, ih = maxy - miny + 2 * pad;
+        switch (panel_edge) {
+        case OM_BAR_BOTTOM: x = from->x + tr_x[mi] + minx - pad; y = from->y - ih + 1; break;
+        case OM_BAR_LEFT: x = from->x + from->w - 1; y = from->y + tr_y[mi]; break;
+        case OM_BAR_RIGHT: x = from->x - iw + 1; y = from->y + tr_y[mi]; break;
+        default: x = from->x + tr_x[mi] + minx - pad; y = from->y + from->h + miny - pad;
+        }
+    }
     else {
         x = from->x + from->w - 2; y = from->y + from->oy + mi * (font->tf_YSize + 4) - pad;
         if (x + (maxx - minx + 2 * pad) > scr->Width) x = from->x - (maxx - minx + 2 * pad) + 2;   /* no room: on the left */
@@ -591,10 +663,8 @@ static int hit_entry(struct panel *p, WORD sx, WORD sy)
 {
     WORD x = sx - p->x, y = sy - p->y;
     if (p->kind == 0) {
-        for (int i = 0; i < ncmenus; i++) {
-            WORD l = cmenus[i].left + scr->BarHBorder;
-            if (x >= l && x < l + cmenus[i].width) return i;
-        }
+        for (int i = 0; i < ncmenus; i++)
+            if (x >= tr_x[i] && x < tr_x[i] + tr_w[i] && (panel_edge == OM_BAR_TITLE || (y >= tr_y[i] && y < tr_y[i] + tr_h[i]))) return i;
         return -1;
     }
     if (p->kind == 1) {
@@ -903,11 +973,181 @@ static void pointer_to_bar(int mi)
     struct IEPointerPixel pp;
     memset(&ev, 0, sizeof ev);
     pp.iepp_Screen = scr;
-    pp.iepp_Position.X = cmenus[mi].left + scr->BarHBorder + 4;
-    pp.iepp_Position.Y = scr->BarHeight / 2;
+    pp.iepp_Position.X = panels[0].x + tr_x[mi] + 4;
+    pp.iepp_Position.Y = panels[0].y + tr_y[mi] + tr_h[mi] / 2;
     ev.ie_Class = IECLASS_NEWPOINTERPOS; ev.ie_SubClass = IESUBCLASS_PIXEL;
     ev.ie_EventAddress = (APTR)&pp;
     AddIEvents(&ev);
+}
+
+/* ---- our own menu bar at an edge (prefs.bar) --------------------------------------------------- *
+ *
+ * We, 6 October 2026: "the same menu bar options as Windows and Linux, top
+ * and bottom, left and right sides of the screen" (Menus/DESIGN.md, "Where
+ * the menu bar sits"). On the Workbench screen a borderless window that never
+ * takes the activation shows the active window's menu titles at the chosen
+ * edge; a click on it (either button) opens that menu, and the window under
+ * the pointer keeps the activation because the click never reaches
+ * Intuition. A pull-down with the right button opens from it too. Kept in
+ * front, and, with bar.autohide, shown only while the pointer is at its edge. */
+
+static struct Window *bar_win;
+static struct DrawInfo *bar_dri;
+static struct TextFont *bar_font;
+static LONG bar_pen[OM_C_COUNT], bar_obt[OM_C_COUNT];
+static int bar_nobt;
+static WORD bar_x, bar_y, bar_w, bar_h;
+static char bar_names[MAX_MENUS][64];
+static UWORD bar_flags[MAX_MENUS];
+static int bar_n;
+static ULONG bar_sum = ~0UL;
+
+/* The Workbench screen, or NULL: looked up, not kept locked. */
+static struct Screen *wb_screen(void)
+{
+    struct Screen *s = LockPubScreen((STRPTR)"Workbench");
+    if (s) UnlockPubScreen(NULL, s);
+    return s;
+}
+
+/* Where our bar goes on sc, with titles names (the side bars are as wide as
+ * the widest, between 80 pixels and a third of the screen). */
+static void edge_box(struct Screen *sc, struct TextFont *f, int n, const char *const *names, WORD *x, WORD *y, WORD *w, WORD *h)
+{
+    if (!vertical(prefs.bar)) {
+        *h = sc->BarHeight + 1; *x = 0;
+        *w = sc->Width - (prefs.bar == OM_BAR_TOP ? 2 * sc->BarHeight : 0);   /* top: the screen's depth gadget stays usable */
+        *y = prefs.bar == OM_BAR_BOTTOM ? sc->Height - *h : 0;
+        return;
+    }
+    {
+        struct RastPort rp;
+        WORD widest = 0;
+        InitRastPort(&rp);
+        SetFont(&rp, f);
+        for (int i = 0; i < n; i++) { WORD t = TextLength(&rp, (STRPTR)names[i], strlen(names[i])); if (t > widest) widest = t; }
+        *w = widest + 24;
+        if (*w < 80) *w = 80;
+        if (*w > sc->Width / 3) *w = sc->Width / 3;
+        *y = sc->BarHeight + 1;                        /* the screen's title bar above it stays the screen's */
+        *h = sc->Height - *y;
+        *x = prefs.bar == OM_BAR_LEFT ? 0 : sc->Width - *w;
+    }
+}
+
+/* The active window's titles, when it is on the bar's screen; 1 when they changed. */
+static int bar_titles(struct Screen *sc)
+{
+    static char names[MAX_MENUS][64];
+    static UWORD flags[MAX_MENUS];
+    struct Window *w;
+    struct Menu *m;
+    ULONG sum = 17;
+    int n = 0;
+    Forbid();
+    w = IntuitionBase->ActiveWindow;
+    if (w && w->WScreen == sc)
+        for (m = w->MenuStrip; m && n < MAX_MENUS; m = m->NextMenu, n++) {
+            strncpy(names[n], m->MenuName ? (const char *)m->MenuName : "", 63); names[n][63] = 0;
+            flags[n] = m->Flags & MENUENABLED;
+        }
+    Permit();
+    for (int i = 0; i < n; i++) { for (const char *c = names[i]; *c; c++) sum = sum * 31 + (UBYTE)*c; sum = sum * 3 + flags[i]; }
+    sum = sum * 37 + n;
+    if (sum == bar_sum) return 0;
+    bar_sum = sum; bar_n = n;
+    memcpy(bar_names, names, sizeof names); memcpy(bar_flags, flags, sizeof flags);
+    return 1;
+}
+
+static void bar_draw(void)
+{
+    const char *names[MAX_MENUS];
+    struct RastPort *rp = bar_win->RPort;
+    for (int i = 0; i < bar_n; i++) names[i] = bar_names[i];
+    SetFont(rp, bar_font);
+    bar_layout(rp, bar_n, names, NULL, NULL, prefs.bar, bar_w, bar_h, 0);
+    draw_bar(rp, bar_n, names, bar_flags, -1, prefs.bar, bar_w, bar_h, bar_pen, 0);
+}
+
+static void bar_place(void)
+{
+    const char *names[MAX_MENUS];
+    for (int i = 0; i < bar_n; i++) names[i] = bar_names[i];
+    edge_box(bar_screen, bar_font, bar_n, names, &bar_x, &bar_y, &bar_w, &bar_h);
+    bar_bx0 = bar_x; bar_by0 = bar_y; bar_bx1 = bar_x + bar_w; bar_by1 = bar_y + bar_h;
+}
+
+static void bar_close(void)
+{
+    bar_live = 0;
+    if (bar_win) { CloseWindow(bar_win); bar_win = NULL; }
+    if (bar_screen) {
+        for (int i = 0; i < bar_nobt; i++) ReleasePen(bar_screen->ViewPort.ColorMap, bar_obt[i]);
+        if (bar_dri) FreeScreenDrawInfo(bar_screen, bar_dri);
+    }
+    bar_nobt = 0; bar_dri = NULL;
+    if (bar_font) { CloseFont(bar_font); bar_font = NULL; }
+    bar_screen = NULL;
+    bar_sum = ~0UL;
+}
+
+static void bar_open(void)
+{
+    struct Screen *sc = LockPubScreen((STRPTR)"Workbench");
+    if (!sc) return;
+    if ((bar_dri = GetScreenDrawInfo(sc)) && (bar_font = OpenFont(sc->Font))) {
+        /* its own pens, kept while it shows: choose_pens() with the session's globals lent */
+        scr = sc; dri = bar_dri;
+        choose_pens();
+        memcpy(bar_pen, pen, sizeof pen); memcpy(bar_obt, obtained, sizeof obtained);
+        bar_nobt = nobtained; nobtained = 0;
+        scr = NULL; dri = NULL;
+        bar_screen = sc;
+        bar_titles(sc);
+        bar_place();
+        bar_win = OpenWindowTags(NULL, WA_CustomScreen, (ULONG)sc, WA_Left, bar_x, WA_Top, bar_y, WA_Width, bar_w, WA_Height, bar_h,
+                                 WA_Borderless, TRUE, WA_Activate, FALSE, WA_RMBTrap, TRUE, WA_SmartRefresh, TRUE,
+                                 WA_NoCareRefresh, TRUE, WA_IDCMP, 0, TAG_DONE);
+    } else if (bar_dri) { FreeScreenDrawInfo(sc, bar_dri); bar_dri = NULL; }
+    if (!bar_win) bar_screen = sc;               /* bar_close() frees what was got */
+    UnlockPubScreen(NULL, sc);                   /* the window keeps the screen open */
+    if (!bar_win) { bar_close(); return; }
+    bar_draw();
+    bar_live = 1;
+}
+
+/* Every 100 ms, and after a menu: the bar shows, hides, follows the active window's titles, stays in front. */
+static void bar_tick(void)
+{
+    struct Screen *wb, *front;
+    int want;
+    if (!on || !prefs.enabled || prefs.bar == OM_BAR_TITLE) { if (bar_win || bar_screen) bar_close(); return; }
+    if (session) return;
+    wb = wb_screen();
+    front = IntuitionBase->FirstScreen;
+    want = wb != NULL;
+    if (want && prefs.bar_autohide) {
+        /* at its edge, or still over it: shown; else hidden */
+        WORD mx = wb->MouseX, my = wb->MouseY, m = 8;
+        int at_edge = front == wb && (prefs.bar == OM_BAR_TOP ? my <= 1 : prefs.bar == OM_BAR_BOTTOM ? my >= wb->Height - 2 :
+                                      prefs.bar == OM_BAR_LEFT ? mx <= 1 : mx >= wb->Width - 2);
+        int over = bar_win && front == wb && mx >= bar_x - m && mx < bar_x + bar_w + m && my >= bar_y - m && my < bar_y + bar_h + m;
+        want = at_edge || over;
+    }
+    if (bar_win && (!want || bar_screen != wb)) bar_close();
+    if (want && !bar_win) bar_open();
+    if (!bar_win) return;
+    if (bar_titles(bar_screen)) {
+        WORD ow = bar_w, oh = bar_h, ox = bar_x, oy = bar_y;
+        bar_place();
+        if (ow != bar_w || oh != bar_h || ox != bar_x || oy != bar_y) {
+            ChangeWindowBox(bar_win, bar_x, bar_y, bar_w, bar_h);
+            WaitTOF(); WaitTOF();                    /* Intuition sizes it as the input task runs */
+        }
+        bar_draw();
+    }
+    if (bar_win->WLayer->front) WindowToFront(bar_win);   /* a window came up over it */
 }
 
 /* ---- a menu, from the button going down to the choice ------------------------------------------ */
@@ -922,20 +1162,29 @@ static void menu_session(void)
     int mode, use, sticky = 0, done = 0, mi = -1, ii = -1, si = -1, any_moved = 0, help = 0, kbd = kbd_session;
     ULONG s0, m0, s1, m1;
     nchain = 0;
-    if (!(kbd ? kbd_window(w) : menu_window(w))) { session = 0; kbd_session = 0; return; }
+    if (!(kbd || bar_session ? kbd_window(w) : menu_window(w))) { session = 0; kbd_session = 0; bar_session = 0; return; }
     target = w; target_strip = w->MenuStrip;
-    if (!verify(w) || !copy_strip(target_strip)) { session = 0; kbd_session = 0; return; }
+    if (!verify(w) || !copy_strip(target_strip)) { session = 0; kbd_session = 0; bar_session = 0; return; }
     scr = w->WScreen;
-    if (!(dri = GetScreenDrawInfo(scr))) { session = 0; kbd_session = 0; return; }
+    if (!(dri = GetScreenDrawInfo(scr))) { session = 0; kbd_session = 0; bar_session = 0; return; }
     font = OpenFont(scr->Font);
     if (!font) font = dri->dri_Font;
     choose_pens();
     mx = start_x; my = start_y;
     mode = prefs.open == OM_OPEN_POINTER ? (my <= scr->BarHeight ? OM_OPEN_PULLDOWN : OM_OPEN_POPUP) : prefs.open;
     if (kbd) { mode = OM_OPEN_PULLDOWN; sticky = 1; }  /* by key, always from the bar, nothing held */
+    if (bar_session && lbutton) sticky = 1;            /* the left button on our bar: open until the next click */
     use = prefs.use[mode == OM_OPEN_PULLDOWN ? OM_PD : OM_PU];
     npanels = 0;
-    if (mode == OM_OPEN_PULLDOWN) {
+    if (bar_session) mode = OM_OPEN_PULLDOWN;          /* a click on our bar: its menus, from it */
+    panel_edge = mode == OM_OPEN_PULLDOWN && prefs.bar != OM_BAR_TITLE && scr == wb_screen() ? prefs.bar : OM_BAR_TITLE;
+    if (mode == OM_OPEN_PULLDOWN && panel_edge != OM_BAR_TITLE) {
+        const char *names[MAX_MENUS];
+        WORD bx, by, bw, bh;
+        for (int i = 0; i < ncmenus; i++) names[i] = cmenus[i].name;
+        edge_box(scr, font, ncmenus, names, &bx, &by, &bw, &bh);
+        open_panel(0, -1, -1, bx, by, bw, bh, 0, 0);
+    } else if (mode == OM_OPEN_PULLDOWN) {
         open_panel(0, -1, -1, 0, 0, scr->Width, scr->BarHeight + 1, 0, 0);
     } else {
         WORD lh = font->tf_YSize + 4, wmax = 0;
@@ -995,6 +1244,8 @@ out:
     }
     nchain = 0;
     kbd_session = 0;
+    bar_session = 0;
+    panel_edge = OM_BAR_TITLE;
     free_pens();
     if (font && font != dri->dri_Font) CloseFont(font);
     font = NULL;
@@ -1462,13 +1713,21 @@ int main(void)
     SendIO((struct IORequest *)tr);
     ActivateCxObj(broker, 1);
     while (!quit) {
-        ULONG got = Wait((1UL << port->mp_SigBit) | sig_start | sig_event | (1UL << reply_port->mp_SigBit) | SIGBREAKF_CTRL_C | SIGBREAKF_CTRL_F);
+        ULONG got = Wait((1UL << port->mp_SigBit) | sig_start | sig_event | (1UL << reply_port->mp_SigBit) | (1UL << tport->mp_SigBit) |
+                         SIGBREAKF_CTRL_C | SIGBREAKF_CTRL_F);
         CxMsg *m;
         if (got & SIGBREAKF_CTRL_C) quit = 1;
-        if (got & SIGBREAKF_CTRL_F) read_settings();
+        if (got & SIGBREAKF_CTRL_F) { read_settings(); bar_close(); }   /* the bar comes back as the settings say */
         reap();
         if ((got & sig_start) && session == 2) rc_session();
         else if ((got & sig_start) && session) menu_session();
+        if (CheckIO((struct IORequest *)tr)) {        /* the timer: kept going, so a menu's 20 ms ticks can follow on */
+            WaitIO((struct IORequest *)tr);
+            bar_tick();
+            tr->tr_node.io_Command = TR_ADDREQUEST; tr->tr_time.tv_secs = 0;
+            tr->tr_time.tv_micro = prefs.bar != OM_BAR_TITLE ? 100000 : 500000;
+            SendIO((struct IORequest *)tr);
+        }
         while ((m = (CxMsg *)GetMsg(port))) {
             ULONG type = CxMsgType(m), id = CxMsgID(m);
             ReplyMsg((struct Message *)m);
@@ -1483,6 +1742,7 @@ int main(void)
         }
     }
 out:
+    bar_close();
     if (broker) DeleteCxObjAll(broker);
     if (timer) { AbortIO((struct IORequest *)tr); WaitIO((struct IORequest *)tr); CloseDevice((struct IORequest *)tr); }
     if (tr) DeleteIORequest((struct IORequest *)tr);

@@ -14,6 +14,7 @@ enum { OM_USE_HOLD = 0, OM_USE_STICKY = 1, OM_USE_CLICK = 2 };
 enum { OM_PD = 0, OM_PU = 1 };              /* pull-down, pop-up */
 enum { OM_BG_SOLID = 0, OM_BG_SEE = 1, OM_BG_IMAGE = 2, OM_BG_SEEIMAGE = 3 };
 enum { OM_COL_THEME = 0, OM_COL_SCREEN = 1, OM_COL_OWN = 2 };
+enum { OM_BAR_TITLE = 0, OM_BAR_TOP = 1, OM_BAR_BOTTOM = 2, OM_BAR_LEFT = 3, OM_BAR_RIGHT = 4 };   /* where the menu bar sits */
 enum {
     OM_C_BACKGROUND, OM_C_TEXT, OM_C_SELECTED, OM_C_SELECTED_TEXT,
     OM_C_LIGHT, OM_C_DARK, OM_C_SHADOW, OM_C_COUNT
@@ -48,6 +49,8 @@ typedef struct om_prefs {
     int rightclick_extras;                  /* the Open family's entries too (Open with, Extract, Send to PC) */
     int rightclick_selection;               /* on a selected icon: the whole selection (else that icon only) */
     int rightclick_name;                    /* the icon's name at the top of its menu */
+    int bar;                                /* OM_BAR_*: the screen's title bar, or our own bar at an edge */
+    int bar_autohide;                       /* our bar hides until the pointer reaches its edge */
 } om_prefs;
 
 extern const char *const om_colour_keys[OM_C_COUNT];
