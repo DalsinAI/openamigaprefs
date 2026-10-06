@@ -59,14 +59,22 @@ static int pick(const char *w, const char *const *words, int n, int def)
 
 static int clamp(int v, int lo, int hi) { return v < lo ? lo : v > hi ? hi : v; }
 
-/* One word of a line, or a "quoted" one. NULL at the line's end. */
+/* One word of a line, or a "quoted" one, in which \" is a quote and \\ a
+ * backslash. NULL at the line's end. */
 static const char *word(const char **pp, char *out, int size)
 {
     const char *s = *pp;
     int n = 0;
     while (*s == ' ' || *s == '\t') s++;
     if (!*s || *s == '\n' || *s == '\r') { out[0] = 0; *pp = s; return NULL; }
-    if (*s == '"') { s++; while (*s && *s != '"' && *s != '\n' && n < size - 1) out[n++] = *s++; if (*s == '"') s++; }
+    if (*s == '"') {
+        s++;
+        while (*s && *s != '"' && *s != '\n' && n < size - 1) {
+            if (*s == '\\' && (s[1] == '"' || s[1] == '\\')) s++;
+            out[n++] = *s++;
+        }
+        if (*s == '"') s++;
+    }
     else while (*s && *s != ' ' && *s != '\t' && *s != '\n' && *s != '\r' && n < size - 1) out[n++] = *s++;
     out[n] = 0;
     *pp = s;
@@ -127,11 +135,23 @@ int om_parse(om_prefs *p, const char *text)
     return 1;
 }
 
+/* s with " and \ escaped, for a "quoted" value. */
+static const char *quoted(const char *s, char *out, int size)
+{
+    int n = 0;
+    for (; *s && n < size - 2; s++) {
+        if (*s == '"' || *s == '\\') out[n++] = '\\';
+        out[n++] = *s;
+    }
+    out[n] = 0;
+    return out;
+}
+
 #define ADD(...) do { int n_ = snprintf(o, size, __VA_ARGS__); if (n_ < 0 || n_ >= size) return -1; o += n_; size -= n_; } while (0)
 
 int om_write(const om_prefs *p, char *out, int size)
 {
-    char *o = out;
+    char *o = out, q[520];
     const char *onoff[2] = { "off", "on" };
     ADD("; OpenMenus settings, format 1. OpenPrefs Menus writes this file; OpenMenus reads it.\n");
     ADD("enabled %s\n", onoff[!!p->enabled]);
@@ -148,16 +168,16 @@ int om_write(const om_prefs *p, char *out, int size)
     ADD("shadow.size %d\n", clamp(p->shadow_size, 1, OM_SHADOW_SIZE_MAX));
     ADD("shadow.strength %d\n", clamp(p->shadow_strength, 1, OM_SHADOW_STRENGTH_MAX));
     ADD("background %s\n", bg_words[clamp(p->background, 0, 3)]);
-    if (p->image[0]) ADD("background.image \"%s\"\n", p->image);
+    if (p->image[0]) ADD("background.image \"%s\"\n", quoted(p->image, q, sizeof q));
     ADD("separators %s\n", p->separators_bold ? "bold" : "lite");
     ADD("colours %s\n", col_words[clamp(p->colours, 0, 2)]);
     for (int i = 0; i < OM_C_COUNT; i++) ADD("colour.%s %s\n", om_colour_keys[i], p->colour[i]);
     ADD("keyboard %s\n", onoff[!!p->keyboard]);
-    ADD("keyboard.key \"%s\"\n", p->key);
+    ADD("keyboard.key \"%s\"\n", quoted(p->key, q, sizeof q));
     ADD("keyboard.ralt %s\n", onoff[!!p->keyboard_ralt]);
     ADD("keyboard.top %s\n", onoff[!!p->keyboard_top]);
     ADD("programs.keep-running %s\n", onoff[!!p->keep_running]);
-    if (p->imported[0]) ADD("imported \"%s\"\n", p->imported);
+    if (p->imported[0]) ADD("imported \"%s\"\n", quoted(p->imported, q, sizeof q));
     return (int)(o - out);
 }
 
@@ -298,8 +318,9 @@ int om_from_magicmenu(om_prefs *p, const char *text, char *err, int errlen)
     p->use[OM_PU] = mm_use(mm_num(&f, "PUMode", 0));
     p->delay[OM_PD] = mm_delay(&f, "PDOpenDelay");
     p->delay[OM_PU] = mm_delay(&f, "PUOpenDelay");
-    p->popup_last = (int)mm_num(&f, "KCPUCenter", p->popup_last);
-    p->sub_centre = mm_split(&f, "PDCenterBox", "KCPUCenter", 0);
+    /* KCPUCenter (3.0: PUCenterBox) centres a pop-up on the item last chosen.
+     * MagicMenu has no setting for centred submenus: ours stays as it is. */
+    p->popup_last = mm_split(&f, "PUCenterBox", "KCPUCenter", p->popup_last);
     p->sub_mark = mm_split(&f, "PDMarkSub", "MarkSub", 1);
     p->border_double = mm_split(&f, "PDDblBorder", "DblBorder", 0);
     p->shadow = mm_split(&f, "PDCastShadows", "CastShadows", 1);

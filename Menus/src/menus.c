@@ -66,7 +66,7 @@ const char version[] __attribute__((used)) = "$VER: Menus 0.1 (6.10.2026) OpenPr
 
 struct Library *AslBase;
 
-static om_prefs cur, orig;
+static om_prefs cur, orig;              /* orig: what is in ENV: now, which Test and Cancel put back */
 
 /* ---- files -------------------------------------------------------------------------------- */
 
@@ -400,10 +400,14 @@ static ULONG now_seconds(void)
     return (ULONG)ds.ds_Days * 86400 + (ULONG)ds.ds_Minute * 60 + (ULONG)ds.ds_Tick / TICKS_PER_SECOND;
 }
 
-static void put_in_place(int save)
+static int put_in_place(int save)
 {
-    if (!write_prefs(&cur, save)) { status("The settings couldn't be written. Is ENV: full?"); return; }
+    if (!write_prefs(&cur, save)) {
+        status(save ? "The settings couldn't be saved. Is the system disk write-protected or full?" : "The settings couldn't be written. Is ENV: full?");
+        return 0;
+    }
     tell_openmenus();
+    return 1;
 }
 
 static void go_back(void)
@@ -440,6 +444,7 @@ static int make_gadgets(struct Screen *scr, APTR vi, struct Gadget **glist, int 
     struct Gadget *g;
     struct NewGadget ng;
     int fh = scr->Font->ta_YSize, lh = fh + 6, top = scr->WBorTop + fh + 1 + 6, row, row2, L = 10, R = 330, i;
+    int gp = scr->Height < 320 ? 2 : 4;         /* closer rows on a 256-line PAL or 200-line NTSC screen */
     memset(gad, 0, sizeof gad);
     g = CreateContext(glist);
     memset(&ng, 0, sizeof ng);
@@ -450,7 +455,7 @@ static int make_gadgets(struct Screen *scr, APTR vi, struct Gadget **glist, int 
      ng.ng_Flags = (flags), ng.ng_GadgetID = (id), g = gad[id] = CreateGadget(kind, g, &ng, __VA_ARGS__, TAG_DONE))
 
     /* the right column: the preview, in both views */
-    px = R; py = top; pw = W - R - 10; ph = 6 * (fh + 3) + 22;
+    px = R; py = top; pw = W - R - 10; ph = 6 * (fh + 3) + (gp < 4 ? 8 : 22);
     row = row2 = top;
 
     if (!advanced) {
@@ -467,49 +472,50 @@ static int make_gadgets(struct Screen *scr, APTR vi, struct Gadget **glist, int 
         if (row2 > row) row = row2;
     } else {
         /* the left column: how menus open, and the keys */
-        G(CYCLE_KIND, G_OPEN, L + 110, row, 200, lh, "Menus open", PLACETEXT_LEFT, GTCY_Labels, (ULONG)open_labels); row += lh + 4;
-        G(CYCLE_KIND, G_PDUSE, L + 110, row, 200, lh, "From the bar", PLACETEXT_LEFT, GTCY_Labels, (ULONG)use_labels); row += lh + 4;
-        G(CYCLE_KIND, G_PUUSE, L + 110, row, 200, lh, "At the pointer", PLACETEXT_LEFT, GTCY_Labels, (ULONG)use_labels); row += lh + 4;
+        G(CYCLE_KIND, G_OPEN, L + 110, row, 200, lh, "Menus open", PLACETEXT_LEFT, GTCY_Labels, (ULONG)open_labels); row += lh + gp;
+        G(CYCLE_KIND, G_PDUSE, L + 110, row, 200, lh, "From the bar", PLACETEXT_LEFT, GTCY_Labels, (ULONG)use_labels); row += lh + gp;
+        G(CYCLE_KIND, G_PUUSE, L + 110, row, 200, lh, "At the pointer", PLACETEXT_LEFT, GTCY_Labels, (ULONG)use_labels); row += lh + gp;
         G(SLIDER_KIND, G_PDDELAY, L + 110, row, 160, lh, "Bar delay", PLACETEXT_LEFT, GTSL_Min, 0, GTSL_Max, OM_DELAY_MAX,
-          GTSL_LevelFormat, (ULONG)"%2ld", GTSL_MaxLevelLen, 2, GTSL_LevelPlace, PLACETEXT_RIGHT, GA_RelVerify, TRUE); row += lh + 4;
+          GTSL_LevelFormat, (ULONG)"%2ld", GTSL_MaxLevelLen, 2, GTSL_LevelPlace, PLACETEXT_RIGHT, GA_RelVerify, TRUE); row += lh + gp;
         G(SLIDER_KIND, G_PUDELAY, L + 110, row, 160, lh, "Pointer delay", PLACETEXT_LEFT, GTSL_Min, 0, GTSL_Max, OM_DELAY_MAX,
-          GTSL_LevelFormat, (ULONG)"%2ld", GTSL_MaxLevelLen, 2, GTSL_LevelPlace, PLACETEXT_RIGHT, GA_RelVerify, TRUE); row += lh + 4;
-        G(CHECKBOX_KIND, G_LAST, L + 110, row, 26, lh, "Open on last", PLACETEXT_LEFT, GTCB_Scaled, TRUE); row += lh + 2;
+          GTSL_LevelFormat, (ULONG)"%2ld", GTSL_MaxLevelLen, 2, GTSL_LevelPlace, PLACETEXT_RIGHT, GA_RelVerify, TRUE); row += lh + gp;
+        G(CHECKBOX_KIND, G_LAST, L + 110, row, 26, lh, "Open on last", PLACETEXT_LEFT, GTCB_Scaled, TRUE); row += lh + gp / 2;
         G(CHECKBOX_KIND, G_CENTRE, L + 110, row, 26, lh, "Centre submenus", PLACETEXT_LEFT, GTCB_Scaled, TRUE);
-        G(CHECKBOX_KIND, G_MARK, L + 284, row, 26, lh, "Mark them", PLACETEXT_LEFT, GTCB_Scaled, TRUE); row += lh + 2;
-        G(CHECKBOX_KIND, G_RUNNING, L + 110, row, 26, lh, "Programs run on", PLACETEXT_LEFT, GTCB_Scaled, TRUE); row += lh + 8;
+        G(CHECKBOX_KIND, G_MARK, L + 284, row, 26, lh, "Mark them", PLACETEXT_LEFT, GTCB_Scaled, TRUE); row += lh + gp / 2;
+        G(CHECKBOX_KIND, G_RUNNING, L + 110, row, 26, lh, "Programs run on", PLACETEXT_LEFT, GTCB_Scaled, TRUE); row += lh + 2 * gp;
         G(CHECKBOX_KIND, G_KEYBOARD, L + 110, row, 26, lh, "Keyboard", PLACETEXT_LEFT, GTCB_Scaled, TRUE);
-        G(STRING_KIND, G_KEY, L + 150, row, 160, lh, NULL, 0, GTST_MaxChars, 60); row += lh + 2;
+        G(STRING_KIND, G_KEY, L + 150, row, 160, lh, NULL, 0, GTST_MaxChars, 60); row += lh + gp / 2;
         G(CHECKBOX_KIND, G_RALT, L + 110, row, 26, lh, "R.Amiga+R.Alt", PLACETEXT_LEFT, GTCB_Scaled, TRUE);
-        G(CHECKBOX_KIND, G_TOP, L + 284, row, 26, lh, "Pointer up", PLACETEXT_LEFT, GTCB_Scaled, TRUE); row += lh + 8;
+        G(CHECKBOX_KIND, G_TOP, L + 284, row, 26, lh, "Pointer up", PLACETEXT_LEFT, GTCB_Scaled, TRUE); row += lh + 2 * gp;
 
         /* the right column: below the preview, the look */
         row2 += ph + 8;
-        G(CYCLE_KIND, G_COLOURS, R + 90, row2, pw - 90, lh, "Colours", PLACETEXT_LEFT, GTCY_Labels, (ULONG)colours_labels); row2 += lh + 4;
+        G(CYCLE_KIND, G_COLOURS, R + 90, row2, pw - 90, lh, "Colours", PLACETEXT_LEFT, GTCY_Labels, (ULONG)colours_labels); row2 += lh + gp;
         G(CYCLE_KIND, G_WHICH, R + 90, row2, pw - 180, lh, NULL, 0, GTCY_Labels, (ULONG)which_labels);
-        G(STRING_KIND, G_HEX, R + pw - 86, row2, 86, lh, NULL, 0, GTST_MaxChars, 7); row2 += lh + 4;
+        G(STRING_KIND, G_HEX, R + pw - 86, row2, 86, lh, NULL, 0, GTST_MaxChars, 7); row2 += lh + gp;
         G(CYCLE_KIND, G_BORDER, R + 90, row2, 90, lh, "Border", PLACETEXT_LEFT, GTCY_Labels, (ULONG)border_labels);
-        G(CYCLE_KIND, G_SEPS, R + pw - 86, row2, 86, lh, "Lines", PLACETEXT_LEFT, GTCY_Labels, (ULONG)seps_labels); row2 += lh + 4;
+        G(CYCLE_KIND, G_SEPS, R + pw - 86, row2, 86, lh, "Lines", PLACETEXT_LEFT, GTCY_Labels, (ULONG)seps_labels); row2 += lh + gp;
         G(CHECKBOX_KIND, G_SHADOW, R + 90, row2, 26, lh, "Shadow", PLACETEXT_LEFT, GTCB_Scaled, TRUE);
         G(SLIDER_KIND, G_SSIZE, R + 124, row2, pw - 154, lh, NULL, 0, GTSL_Min, 1, GTSL_Max, OM_SHADOW_SIZE_MAX,
-          GTSL_LevelFormat, (ULONG)"%2ld", GTSL_MaxLevelLen, 3, GTSL_LevelPlace, PLACETEXT_RIGHT, GA_RelVerify, TRUE); row2 += lh + 4;
+          GTSL_LevelFormat, (ULONG)"%2ld", GTSL_MaxLevelLen, 3, GTSL_LevelPlace, PLACETEXT_RIGHT, GA_RelVerify, TRUE); row2 += lh + gp;
         G(SLIDER_KIND, G_SSTRENGTH, R + 124, row2, pw - 154, lh, "Strength", PLACETEXT_LEFT, GTSL_Min, 1, GTSL_Max, OM_SHADOW_STRENGTH_MAX,
-          GTSL_LevelFormat, (ULONG)"%3ld", GTSL_MaxLevelLen, 3, GTSL_LevelPlace, PLACETEXT_RIGHT, GA_RelVerify, TRUE); row2 += lh + 4;
-        G(CYCLE_KIND, G_BG, R + 90, row2, pw - 90, lh, "Background", PLACETEXT_LEFT, GTCY_Labels, (ULONG)bg_labels); row2 += lh + 4;
+          GTSL_LevelFormat, (ULONG)"%3ld", GTSL_MaxLevelLen, 3, GTSL_LevelPlace, PLACETEXT_RIGHT, GA_RelVerify, TRUE); row2 += lh + gp;
+        G(CYCLE_KIND, G_BG, R + 90, row2, pw - 90, lh, "Background", PLACETEXT_LEFT, GTCY_Labels, (ULONG)bg_labels); row2 += lh + gp;
         G(STRING_KIND, G_IMAGE, R + 90, row2, pw - 176, lh, "Picture", PLACETEXT_LEFT, GTST_MaxChars, 250);
-        G(BUTTON_KIND, G_CHOOSE, R + pw - 82, row2, 82, lh, "Choose...", 0, GA_Disabled, FALSE); row2 += lh + 8;
+        G(BUTTON_KIND, G_CHOOSE, R + pw - 82, row2, 82, lh, "Choose...", 0, GA_Disabled, FALSE); row2 += lh + 2 * gp;
 
+        /* at the foot of the left column, which is the shorter */
+        G(CHECKBOX_KIND, G_ENABLED, L + 110, row, 26, lh, "Use OpenMenus", PLACETEXT_LEFT, GTCB_Scaled, TRUE); row += lh + gp;
+        G(BUTTON_KIND, G_TAKEOVER, L, row, 300, lh, "Take over MagicMenu's...", 0, GA_Disabled, FALSE); row += lh + 2 * gp;
         if (row2 > row) row = row2;
-        G(CHECKBOX_KIND, G_ENABLED, L + 110, row, 26, lh, "Use OpenMenus", PLACETEXT_LEFT, GTCB_Scaled, TRUE);
-        G(BUTTON_KIND, G_TAKEOVER, R, row, pw, lh, "Take over MagicMenu's...", 0, GA_Disabled, FALSE); row += lh + 6;
     }
-    G(TEXT_KIND, G_STATUS, L, row, W - 20, lh, NULL, 0, GTTX_Text, (ULONG)status_text, GTTX_Border, TRUE); row += lh + 6;
+    G(TEXT_KIND, G_STATUS, L, row, W - 20, lh, NULL, 0, GTTX_Text, (ULONG)status_text, GTTX_Border, TRUE); row += lh + gp + 2;
     {
         static const char *const names[4] = { "_Save", "_Use", "_Test", "_Cancel" };
         static const int ids[4] = { G_SAVE, G_USE, G_TEST, G_CANCEL };
         int bw = (W - 20 - 3 * 10) / 4;
         for (i = 0; i < 4; i++) G(BUTTON_KIND, ids[i], L + i * (bw + 10), row, bw, lh, names[i], 0, GT_Underscore, '_');
-        row += lh + 8;
+        row += lh + gp + 2;
     }
 #undef G
     return g ? row - scr->WBorTop - fh - 1 : 0;
@@ -547,6 +553,11 @@ static int gui(void)
     if (!(inner = make_gadgets(scr, vi, &glist, W))) { rc = RETURN_FAIL; goto out; }
     if (!(menus = CreateMenus(newmenus, GTMN_FullMenu, TRUE, TAG_DONE)) || !LayoutMenus(menus, vi, GTMN_NewLookMenus, TRUE, TAG_DONE)) {
         rc = RETURN_FAIL; goto out;
+    }
+    {
+        /* the whole window on the screen: higher up, over the screen bar if need be */
+        int tall = inner + scr->WBorTop + scr->Font->ta_YSize + 1 + scr->WBorBottom;
+        if (wy + tall > scr->Height) wy = scr->Height - tall > 0 ? scr->Height - tall : 0;
     }
     win = OpenWindowTags(NULL, WA_Title, (ULONG)"Menus", WA_ScreenTitle, (ULONG)"OpenPrefs Menus 0.1", WA_PubScreen, (ULONG)scr,
                          WA_Left, wx, WA_Top, wy, WA_InnerWidth, W, WA_InnerHeight, inner,
@@ -662,8 +673,9 @@ static int gui(void)
                 status("Testing: back in 15 s unless you choose Use or Save.");
                 redraw = 0;
                 break;
-            case G_USE: put_in_place(0); test_until = 0; quit = 1; break;
-            case G_SAVE: put_in_place(1); test_until = 0; quit = 1; break;
+            /* a failed write keeps the window open, with the reason on the status line */
+            case G_USE: if (put_in_place(0)) { test_until = 0; quit = 1; } redraw = 0; break;
+            case G_SAVE: if (put_in_place(1)) { test_until = 0; quit = 1; } redraw = 0; break;
             case G_CANCEL: if (test_until) go_back(); quit = 1; break;
             default: redraw = 0;
             }
@@ -696,19 +708,29 @@ int main(void)
     LONG args[5] = { 0, 0, 0, 0, 0 };
     struct RDArgs *rd = ReadArgs((STRPTR)"FROM,MAGICMENU/K,USE/S,SAVE/S,ADVANCED/S", args, NULL);
     char *text, err[100];
-    int rc = RETURN_OK, have;
+    int rc = RETURN_OK;
     if (!rd) { PrintFault(IoErr(), (STRPTR)"Menus"); return RETURN_FAIL; }
-    text = read_file(args[0] ? (const char *)args[0] : PREFS_ENV, NULL);
-    have = text != NULL;
-    om_parse(&cur, text);
+    /* orig is always what ENV: holds now; FROM only fills the window */
+    text = read_file(PREFS_ENV, NULL);
+    om_parse(&orig, text);
     if (text) FreeVec(text);
-    orig = cur;
-    if (!have) orig.imported[0] = 0;
+    if (!args[0]) cur = orig;
+    else {
+        if (!(text = read_file((const char *)args[0], NULL))) {
+            Printf((STRPTR)"Menus: %s can't be read.\n", args[0]);
+            FreeArgs(rd);
+            return RETURN_FAIL;
+        }
+        om_parse(&cur, text);
+        FreeVec(text);
+    }
 
     if (args[1]) {                               /* MAGICMENU <file>: take it over */
         if (!take_over(&cur, (const char *)args[1], err, sizeof err)) {
+            /* nothing else is written: USE or SAVE was for these settings */
             Printf((STRPTR)"Menus: MagicMenu's settings couldn't be taken over: %s.\n", (LONG)err);
-            rc = RETURN_WARN;
+            FreeArgs(rd);
+            return RETURN_WARN;
         }
     } else if (!cur.imported[0] && !exists(PREFS_ENVARC) && magicmenu_file()) {
         /* the first start: MagicMenu's settings are taken over once */

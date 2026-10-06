@@ -80,8 +80,8 @@ static void test_magicmenu(const char *dir)
     CHECK(p.use[OM_PU] == OM_USE_CLICK);
     CHECK(p.delay[OM_PD] == 0);              /* 255: none */
     CHECK(p.delay[OM_PU] == 3);
-    CHECK(p.popup_last == 1);
-    CHECK(p.sub_centre == 1);                /* PDCenterBox 2: on */
+    CHECK(p.popup_last == 1);                /* PUCenterBox unset: KCPUCenter */
+    CHECK(p.sub_centre == 0);                /* MagicMenu has no such setting: the default */
     CHECK(p.sub_mark == 1);                  /* unset: MarkSub */
     CHECK(p.border_double == 1);
     CHECK(p.shadow == 1);
@@ -97,7 +97,19 @@ static void test_magicmenu(const char *dir)
     CHECK(!strcmp(p.key, "ramiga \\space"));
     CHECK(p.keyboard_top == 0);
     CHECK(p.keep_running == 1);
+    {
+        /* the quote in the picture's name and the backslash in the key survive Save */
+        static char buf[3072];
+        om_prefs b;
+        CHECK(om_write(&p, buf, sizeof buf) > 0);
+        om_parse(&b, buf);
+        CHECK(!strcmp(b.image, p.image) && !strcmp(b.key, p.key));
+    }
     free(text);
+    /* PUCenterBox 1 (off) wins over KCPUCenter */
+    om_defaults(&p);
+    CHECK(om_from_magicmenu(&p, "MagicMenu/2:\n\tKCPUCenter=Yes\n\tPUCenterBox=0x01\n#\n", err, sizeof err));
+    CHECK(p.popup_last == 0);
 
     CHECK(!om_from_magicmenu(&p, "Something else\n", err, sizeof err));
     CHECK(!om_from_magicmenu(&p, "\x01\x31\xcd\x52", err, sizeof err));
