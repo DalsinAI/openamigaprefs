@@ -52,7 +52,7 @@
 #include "wbclose.h"
 #include "obmsg.h"
 
-const char version[] __attribute__((used)) = "$VER: OpenDock 0.6.3 (10.10.2026) OpenPrefs, Dalsin Limited";
+const char version[] __attribute__((used)) = "$VER: OpenDock 0.6.4 (12.10.2026) OpenPrefs, Dalsin Limited";   /* 0.6.4: programs start with both NIL: handles */
 
 #define PREFS_ENV "ENV:OpenDock/Dock"
 #define PREFS_ENVARC "ENVARC:OpenDock/Dock"
@@ -443,11 +443,16 @@ static void start(const od_button *b)
     if (b->kind == OD_AREXX) snprintf(cmd, sizeof cmd, "SYS:Rexxc/RX \"%s\"", b->command);
     else snprintf(cmd, sizeof cmd, "%s", b->command);
     {
-        BPTR in = Open((STRPTR)"NIL:", MODE_OLDFILE), old = 0, dir = b->dir[0] ? Lock((STRPTR)b->dir, ACCESS_READ) : 0;
+        /* asynchronous: both handles are the new process's, which closes them when it
+         * ends; closed here only if it could not start. Never a NULL output: a real
+         * NIL: handle, as OpenTitle and the editors' tabs give (12 Oct 2026) */
+        BPTR in = Open((STRPTR)"NIL:", MODE_OLDFILE), out = Open((STRPTR)"NIL:", MODE_NEWFILE), old = 0;
+        BPTR dir = b->dir[0] ? Lock((STRPTR)b->dir, ACCESS_READ) : 0;
         if (dir) old = CurrentDir(dir);
-        if (!in || SystemTags((STRPTR)cmd, SYS_Input, in, SYS_Output, 0, SYS_Asynch, TRUE,
-                              NP_StackSize, b->stack > 4096 ? b->stack : 4096, TAG_DONE) == -1) {
+        if (!in || !out || SystemTags((STRPTR)cmd, SYS_Input, in, SYS_Output, out, SYS_Asynch, TRUE,
+                                      NP_StackSize, b->stack > 4096 ? b->stack : 4096, TAG_DONE) == -1) {
             if (in) Close(in);
+            if (out) Close(out);
             DisplayBeep(scr);
         }
         if (dir) { CurrentDir(old); UnLock(dir); }
