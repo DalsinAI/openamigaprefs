@@ -4,12 +4,13 @@
  * (ENVARC: when saved), in the format of od_dock.h; OpenDock draws.
  *
  *   - where the dock sits (bottom, top, left, right), its size, names under
- *     the icons
+ *     the icons, and its shelf: solid, see-through or glass
  *   - its buttons, in order: moved up and down, removed, separators added
  *   - another dock's buttons, taken over: ToolManager 2, AmiDock (AmigaOS 4's)
  *     or AmiStart's taskbar; on the first start, the first one found
  *   - in the Advanced view, each button's kind (Workbench, Shell, ARexx),
- *     name, command, icon, drawer and stack, and the running marks
+ *     name, command, icon, drawer and stack, the running marks, the names
+ *     that pop up under the pointer and the hop when a program starts
  *
  *   Dock [FROM file] [TOOLMANAGER file] [AMIDOCK file] [AMISTART file] [USE] [SAVE] [ADVANCED]
  *
@@ -256,7 +257,7 @@ static int take_over(od_dock *d, const char *file, const char *base, od_report *
 /* ---- the window ---------------------------------------------------------------------------- */
 
 enum {
-    G_PLACE, G_SIZE, G_LABELS, G_RUNNING, G_LIST, G_UP, G_DOWN, G_REMOVE, G_SEPARATOR,
+    G_PLACE, G_SIZE, G_LABELS, G_RUNNING, G_SHELF, G_HOVER, G_HOP, G_LIST, G_UP, G_DOWN, G_REMOVE, G_SEPARATOR,
     G_SOURCE, G_TAKEOVER, G_KIND, G_NAME, G_COMMAND, G_ICON, G_DIR, G_STACK,
     G_STATUS, G_SAVE, G_USE, G_TEST, G_CANCEL, G_COUNT
 };
@@ -264,6 +265,7 @@ enum {
 static const char *place_labels[] = { "Bottom", "Top", "Left", "Right", NULL };
 static const char *size_labels[] = { "Small", "Medium", "Large", NULL };
 static const char *kind_labels[] = { "Workbench", "Shell", "ARexx", NULL };
+static const char *shelf_labels[] = { "Solid", "See-through", "Glass", NULL };   /* OD_BG_ order */
 
 static struct Gadget *gad[G_COUNT];
 static struct Window *win;
@@ -305,6 +307,9 @@ static void show(void)
     SET(G_SIZE, GTCY_Active, cur.size);
     SET(G_LABELS, GTCB_Checked, cur.labels);
     SET(G_RUNNING, GTCB_Checked, cur.running);
+    SET(G_SHELF, GTCY_Active, cur.background);
+    SET(G_HOVER, GTCB_Checked, cur.hover);
+    SET(G_HOP, GTCB_Checked, cur.hop);
     SET(G_UP, GA_Disabled, !b || sel == 0);
     SET(G_DOWN, GA_Disabled, !b || sel == cur.n - 1);
     SET(G_REMOVE, GA_Disabled, !b);
@@ -400,7 +405,14 @@ static int make_gadgets(struct Screen *scr, APTR vi, struct Gadget **glist, int 
         G(BUTTON_KIND, G_REMOVE, L + 2 * (bw + 4), row, bw, lh, "Remove", 0, GA_Disabled, TRUE);
         G(BUTTON_KIND, G_SEPARATOR, L + 3 * (bw + 4), row, bw, lh, "Line", 0, GA_Disabled, FALSE);
     }
-    row += lh + gp;
+    row += lh + 2 * gp;
+    /* how the dock looks: the shelf, and in Advanced the names that pop up and the hop */
+    G(CYCLE_KIND, G_SHELF, L + 60, row, R - L - 80, lh, "Shelf", PLACETEXT_LEFT, GTCY_Labels, (ULONG)shelf_labels); row += lh + gp;
+    if (advanced) {
+        G(CHECKBOX_KIND, G_HOVER, L + 110, row, 26, lh, "Pop-up names", PLACETEXT_LEFT, GTCB_Scaled, TRUE);
+        G(CHECKBOX_KIND, G_HOP, L + 220, row, 26, lh, "Hop", PLACETEXT_LEFT, GTCB_Scaled, TRUE);
+        row += lh + gp;
+    }
 
     /* the right column: the dock, and taking over */
     row2 = top;
@@ -551,6 +563,9 @@ static int gui(void)
             case G_SIZE: cur.size = code; break;
             case G_LABELS: cur.labels = (gg->Flags & GFLG_SELECTED) != 0; break;
             case G_RUNNING: cur.running = (gg->Flags & GFLG_SELECTED) != 0; break;
+            case G_SHELF: cur.background = code; break;
+            case G_HOVER: cur.hover = (gg->Flags & GFLG_SELECTED) != 0; break;
+            case G_HOP: cur.hop = (gg->Flags & GFLG_SELECTED) != 0; break;
             case G_LIST: sel = code; break;
             case G_UP: if (b && sel > 0) { swap(sel, sel - 1); sel--; } break;
             case G_DOWN: if (b && sel < cur.n - 1) { swap(sel, sel + 1); sel++; } break;

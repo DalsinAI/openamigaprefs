@@ -30,7 +30,9 @@ static void test_own_format(void)
     od_defaults(&d);
     od_starter(&d);
     CHECK(d.n == 4 && d.b[0].kind == OD_CLI && !strcmp(d.b[0].label, "Shell") && d.b[1].kind == OD_WB);
+    CHECK(d.background == OD_BG_GLASS && d.hover == 1 && d.hop == 1);
     d.place = OD_LEFT; d.size = OD_LARGE; d.labels = 1; d.running = 0;
+    d.background = OD_BG_CLEAR; d.hover = 0; d.hop = 0;
     strcpy(d.imported, "ENVARC:ToolManager.prefs");
     d.b[1].kind = OD_SEPARATOR;
     d.b[2].kind = OD_CLI; strcpy(d.b[2].command, "Echo \"hi\" \\ there"); strcpy(d.b[2].dir, "RAM:"); d.b[2].stack = 20000;
@@ -38,6 +40,7 @@ static void test_own_format(void)
     CHECK(od_write(&d, buf, sizeof buf) > 0);
     od_parse(&e, buf);
     CHECK(e.place == OD_LEFT && e.size == OD_LARGE && e.labels == 1 && e.running == 0);
+    CHECK(e.background == OD_BG_CLEAR && e.hover == 0 && e.hop == 0);
     CHECK(!strcmp(e.imported, d.imported));
     CHECK(e.n == 4 && e.b[1].kind == OD_SEPARATOR);
     CHECK(e.b[2].kind == OD_CLI && !strcmp(e.b[2].command, d.b[2].command) && !strcmp(e.b[2].dir, "RAM:") && e.b[2].stack == 20000);
