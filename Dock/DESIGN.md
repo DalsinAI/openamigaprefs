@@ -23,6 +23,14 @@ over the docks people already have. MIT, Copyright (c) 2026 Dalsin Limited.
 - Ctrl-F reads the settings again, which is what Dock sends. Ctrl-C ends
   it. Starting a second OpenDock only tells the first to read its settings
   again.
+- **It sits just above the backdrop** (0.2): every other window, Workbench's
+  drawers too, goes over it, and clicking it never brings it in front. It is
+  on the Workbench screen only.
+- **Item size** (0.2): 100, 75, 50 or 25 per cent. Each icon is drawn once at
+  its own size and averaged down: on a graphics card over black and over
+  white, so its soft edges stay soft; on the native chipset over two pens,
+  taking the pen in the middle of each square.
+- **Edges** (0.2) can be turned off, leaving the shelf without its lines.
 - It looks and behaves like the Mac's dock:
   - **The shelf** has rounded corners and is **glass** (the default: a fine
     dither of the shine pen over what is behind), **see-through** (the
@@ -73,6 +81,8 @@ skipped. Save writes `ENVARC:` too.
     names-on-hover on|off              ; the name above the icon under the pointer (on)
     hop on|off                         ; a started program's icon hops (on)
     magnify off                        ; kept for later; never with Lite
+    item-size 100                      ; 25, 50, 75 or 100: the icons and cells, in per cent (0.2)
+    borders on                         ; the shelf's edge lines; off draws none (0.2)
     imported "ENVARC:ToolManager.prefs"
     button wb "SYS:Utilities/MultiView" label "MultiView"
     button cli "NewShell" label "Shell" dir "SYS:" stack 8192

@@ -13,6 +13,8 @@ static const char *const bg_words[] = { "solid", "see-through", "glass" };
 
 int od_cell(int size) { return size == OD_LARGE ? 72 : size == OD_MEDIUM ? 56 : 40; }
 
+int od_scaled(int px, int scale) { int n = px * scale / 100; return n < 1 ? 1 : n; }
+
 void od_defaults(od_dock *d)
 {
     memset(d, 0, sizeof *d);
@@ -22,6 +24,8 @@ void od_defaults(od_dock *d)
     d->hover = 1;
     d->hop = 1;
     d->background = OD_BG_GLASS;
+    d->scale = 100;
+    d->border = 1;
 }
 
 /* ---- small helpers ------------------------------------------------------------------- */
@@ -199,6 +203,8 @@ int od_parse(od_dock *d, const char *text)
                 else if (same(k, "hop")) d->hop = on;
                 else if (same(k, "background")) d->background = pick(v, bg_words, 3, d->background);
                 else if (same(k, "magnify")) d->magnify = on;
+                else if (same(k, "item-size")) { int n = atoi(v); d->scale = n <= 37 ? 25 : n <= 62 ? 50 : n <= 87 ? 75 : 100; }
+                else if (same(k, "borders")) d->border = on;
                 else if (same(k, "imported")) copy(d->imported, v, sizeof d->imported);
             }
         }
@@ -223,6 +229,8 @@ int od_write(const od_dock *d, char *out, int size)
     ADD("hop %s\n", onoff[!!d->hop]);
     ADD("background %s\n", bg_words[d->background >= 0 && d->background < 3 ? d->background : 2]);
     ADD("magnify %s\n", onoff[!!d->magnify]);
+    ADD("item-size %d\n", d->scale == 25 || d->scale == 50 || d->scale == 75 ? d->scale : 100);
+    ADD("borders %s\n", onoff[!!d->border]);
     if (d->imported[0]) ADD("imported \"%s\"\n", quoted(d->imported, q, sizeof q));
     for (int i = 0; i < d->n; i++) {
         const od_button *b = &d->b[i];

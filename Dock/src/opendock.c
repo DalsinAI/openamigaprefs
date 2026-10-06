@@ -1,4 +1,4 @@
-/* OpenDock 0.1: a dock on the Workbench screen (MIT). One row of icons
+/* OpenDock 0.2: a dock on the Workbench screen (MIT). One row of icons
  * along an edge of the screen: a click starts the program, or brings it to
  * the front when it is running already; a small mark shows which are
  * running. Icons dropped on the dock are added to it; the menu (the right
@@ -39,13 +39,15 @@
 #include <proto/gadtools.h>
 #include <proto/icon.h>
 #include <proto/wb.h>
+#include <proto/cybergraphics.h>
+#include <cybergraphx/cybergraphics.h>
 
 #include <string.h>
 #include <stdio.h>
 
 #include "od_dock.h"
 
-const char version[] __attribute__((used)) = "$VER: OpenDock 0.1 (6.10.2026) OpenPrefs, Dalsin Limited";
+const char version[] __attribute__((used)) = "$VER: OpenDock 0.2 (6.10.2026) OpenPrefs, Dalsin Limited";
 
 #define PREFS_ENV "ENV:OpenDock/Dock"
 #define PREFS_ENVARC "ENVARC:OpenDock/Dock"
@@ -53,7 +55,7 @@ const char version[] __attribute__((used)) = "$VER: OpenDock 0.1 (6.10.2026) Ope
 #define PORT_NAME "OpenDock"
 #define SEP_W 8                                    /* a separator's width (or height, standing) */
 
-struct Library *IconBase, *WorkbenchBase;
+struct Library *IconBase, *WorkbenchBase, *CyberGfxBase;
 
 static od_dock dock;
 static struct DiskObject *icons[OD_MAX];
@@ -61,6 +63,11 @@ static struct Task *running[OD_MAX];               /* compared, never followed *
 static struct Window *win;
 static struct Screen *scr;
 static int cellw, cellh, along, standing, pressed = -1, removing;
+
+/* An icon at an item size under 100%, both looks ([0] as it is, [1] pressed). */
+typedef struct { int w, h; ULONG *argb[2]; UWORD *pen[2]; } small_icon;
+static small_icon small[OD_MAX];
+static void free_small(int i);
 
 /* ---- files -------------------------------------------------------------------------------- */
 
@@ -126,7 +133,10 @@ static void program_of(const od_button *b, char *out, int size)
 
 static void free_icons(void)
 {
-    for (int i = 0; i < OD_MAX; i++) if (icons[i]) { FreeDiskObject(icons[i]); icons[i] = NULL; }
+    for (int i = 0; i < OD_MAX; i++) {
+        free_small(i);
+        if (icons[i]) { FreeDiskObject(icons[i]); icons[i] = NULL; }
+    }
 }
 
 /* An icon laid out for the dock's screen: OS 3.5 colour icons (as 3.2's own
@@ -152,6 +162,182 @@ static void load_icons(void)
         if (b->icon[0]) icons[i] = screen_icon(b->icon, 0);
         /* the program's own icon (a drawer's too), or the default one for its kind */
         if (!icons[i]) { program_of(b, prog, sizeof prog); icons[i] = screen_icon(prog, 1); }
+    }
+}
+
+/* ---- icons at 25, 50 and 75 per cent --------------------------------------------------------- */
+
+/* Each icon is drawn once at its own size into a bitmap, over two backgrounds,
+ * and averaged down to the item size. On a graphics card (more than 256
+ * colours) it is drawn over black and over white: where the two differ, the
+ * icon is see-through, by how much they differ, so soft edges stay soft. On
+ * the native chipset it is drawn over two pens: where they differ, the icon
+ * is see-through, and each small pixel takes the pen in the middle of its
+ * square. Done once when the icons load, so drawing the dock stays one blit
+ * per icon on a card and a few lines per icon on the chipset. */
+
+#define NO_PEN 0xffff
+
+static const struct TagItem plain_draw[] = {
+    { ICONDRAWA_Frameless, TRUE }, { ICONDRAWA_Borderless, TRUE }, { ICONDRAWA_EraseBackground, FALSE }, { TAG_DONE, 0 }
+};
+
+static int truecolour(void)
+{
+    struct BitMap *bm = scr->RastPort.BitMap;
+    if (!CyberGfxBase || !GetCyberMapAttr(bm, CYBRMATTR_ISCYBERGFX)) return 0;
+    return GetCyberMapAttr(bm, CYBRMATTR_DEPTH) > 8;
+}
+
+static void free_small(int i)
+{
+    for (int k = 0; k < 2; k++) {
+        if (small[i].argb[k]) FreeVec(small[i].argb[k]);
+        if (small[i].pen[k]) FreeVec(small[i].pen[k]);
+    }
+    memset(&small[i], 0, sizeof small[i]);
+}
+
+/* The icon at full size in rp over a background: ARGB colour c, or pen p when c is ~0. */
+static void full_size(struct RastPort *rp, struct DiskObject *d, struct Rectangle *r, int iw, int ih, ULONG state, ULONG c, int p)
+{
+    if (c != ~0UL) FillPixelArray(rp, 0, 0, iw, ih, c);
+    else { SetAPen(rp, p); RectFill(rp, 0, 0, iw - 1, ih - 1); }
+    DrawIconStateA(rp, d, NULL, -r->MinX, -r->MinY, state, (struct TagItem *)plain_draw);
+}
+
+static void make_small(int i)
+{
+    struct Rectangle r;
+    struct BitMap *bm;
+    struct RastPort trp;
+    ULONG *black = NULL, *white = NULL;
+    int iw, ih, w, h, depth, card = truecolour();
+    free_small(i);
+    if (!icons[i] || dock.scale >= 100 || !GetIconRectangleA(&scr->RastPort, icons[i], NULL, &r, NULL)) return;
+    iw = r.MaxX - r.MinX + 1; ih = r.MaxY - r.MinY + 1;
+    w = od_scaled(iw, dock.scale); h = od_scaled(ih, dock.scale);
+    depth = GetBitMapAttr(scr->RastPort.BitMap, BMA_DEPTH);
+    if (!(bm = AllocBitMap(iw, ih, depth, BMF_CLEAR, scr->RastPort.BitMap))) return;
+    InitRastPort(&trp);
+    trp.BitMap = bm;
+    if (card) {
+        black = AllocVec(iw * ih * 4, MEMF_ANY);
+        white = AllocVec(iw * ih * 4, MEMF_ANY);
+    }
+    for (int k = 0; k < 2; k++) {
+        ULONG state = k ? IDS_SELECTED : IDS_NORMAL;
+        if (card && black && white) {
+            ULONG *out = AllocVec(w * h * 4, MEMF_ANY);
+            if (!out) break;
+            full_size(&trp, icons[i], &r, iw, ih, state, 0x000000, 0);
+            WaitBlit();
+            ReadPixelArray(black, 0, 0, iw * 4, &trp, 0, 0, iw, ih, RECTFMT_ARGB);
+            full_size(&trp, icons[i], &r, iw, ih, state, 0xffffff, 0);
+            WaitBlit();
+            ReadPixelArray(white, 0, 0, iw * 4, &trp, 0, 0, iw, ih, RECTFMT_ARGB);
+            for (int y = 0; y < h; y++)
+                for (int x = 0; x < w; x++) {
+                    /* the square of full-size pixels behind this one: summed with their cover */
+                    int x0 = x * iw / w, x1 = (x + 1) * iw / w, y0 = y * ih / h, y1 = (y + 1) * ih / h;
+                    ULONG sa = 0, sr = 0, sg = 0, sb = 0, n = 0;
+                    if (x1 <= x0) x1 = x0 + 1;
+                    if (y1 <= y0) y1 = y0 + 1;
+                    for (int v = y0; v < y1; v++)
+                        for (int u = x0; u < x1; u++) {
+                            ULONG b = black[v * iw + u], wt = white[v * iw + u];
+                            int diff = (int)(((wt >> 16) & 255) - ((b >> 16) & 255)) + (int)(((wt >> 8) & 255) - ((b >> 8) & 255)) +
+                                       (int)((wt & 255) - (b & 255));
+                            int a = 255 - diff / 3;
+                            if (a < 0) a = 0;
+                            if (a > 255) a = 255;
+                            /* over black, a pixel is its colour times its cover already */
+                            sa += a; sr += (b >> 16) & 255; sg += (b >> 8) & 255; sb += b & 255; n++;
+                        }
+                    {
+                        ULONG a = sa / n, cr = 0, cg = 0, cb = 0;
+                        if (sa) {
+                            cr = sr * 255 / sa; cg = sg * 255 / sa; cb = sb * 255 / sa;
+                            if (cr > 255) cr = 255;
+                            if (cg > 255) cg = 255;
+                            if (cb > 255) cb = 255;
+                        }
+                        out[y * w + x] = a << 24 | cr << 16 | cg << 8 | cb;
+                    }
+                }
+            small[i].argb[k] = out;
+        } else if (!card) {
+            UWORD *out = AllocVec(w * h * 2, MEMF_ANY);
+            if (!out) break;
+            /* two pens it can't be drawn in alike: the screen's background and shadow */
+            for (int y = 0; y < h; y++) {
+                int v = (y * ih + ih / 2) / h;
+                for (int x = 0; x < w; x++) out[y * w + x] = (x * iw + iw / 2) / w | (ULONG)v << 8;
+            }
+            {
+                static UBYTE a[256 * 256];          /* one full-size icon's pens, over pen 0 */
+                int big = iw <= 256 && ih <= 256;
+                if (big) {
+                    full_size(&trp, icons[i], &r, iw, ih, state, ~0UL, 0);
+                    WaitBlit();
+                    for (int y = 0; y < h; y++)
+                        for (int x = 0; x < w; x++) {
+                            int u = out[y * w + x] & 255, v = out[y * w + x] >> 8;
+                            a[v * 256 + u] = ReadPixel(&trp, u, v);
+                        }
+                    full_size(&trp, icons[i], &r, iw, ih, state, ~0UL, 1);
+                    WaitBlit();
+                    for (int y = 0; y < h; y++)
+                        for (int x = 0; x < w; x++) {
+                            int u = out[y * w + x] & 255, v = out[y * w + x] >> 8;
+                            LONG p = ReadPixel(&trp, u, v);
+                            out[y * w + x] = p == a[v * 256 + u] ? (UWORD)p : NO_PEN;
+                        }
+                } else for (int k2 = 0; k2 < w * h; k2++) out[k2] = NO_PEN;
+            }
+            small[i].pen[k] = out;
+        }
+    }
+    small[i].w = w; small[i].h = h;
+    if (black) FreeVec(black);
+    if (white) FreeVec(white);
+    WaitBlit();
+    FreeBitMap(bm);
+}
+
+/* The small icon into rp at x, y. On a card it is mixed with what is there already. */
+static void draw_small(struct RastPort *rp, int i, int x, int y, int k)
+{
+    small_icon *s = &small[i];
+    if (s->argb[k]) {
+        ULONG *under = AllocVec(s->w * s->h * 4, MEMF_ANY);
+        if (!under) return;
+        ReadPixelArray(under, 0, 0, s->w * 4, rp, x, y, s->w, s->h, RECTFMT_ARGB);
+        for (int n = 0; n < s->w * s->h; n++) {
+            ULONG c = s->argb[k][n], u = under[n], a = c >> 24;
+            if (a == 255) under[n] = c;
+            else if (a) {
+                ULONG r = (((c >> 16) & 255) * a + ((u >> 16) & 255) * (255 - a)) / 255;
+                ULONG g = (((c >> 8) & 255) * a + ((u >> 8) & 255) * (255 - a)) / 255;
+                ULONG b = ((c & 255) * a + (u & 255) * (255 - a)) / 255;
+                under[n] = 0xff000000 | r << 16 | g << 8 | b;
+            }
+        }
+        WritePixelArray(under, 0, 0, s->w * 4, rp, x, y, s->w, s->h, RECTFMT_ARGB);
+        FreeVec(under);
+    } else if (s->pen[k]) {
+        /* runs of one pen, as lines */
+        for (int v = 0; v < s->h; v++) {
+            const UWORD *row = s->pen[k] + v * s->w;
+            for (int u = 0; u < s->w; ) {
+                int e = u;
+                if (row[u] == NO_PEN) { u++; continue; }
+                while (e + 1 < s->w && row[e + 1] == row[u]) e++;
+                SetAPen(rp, row[u]);
+                RectFill(rp, x + u, y + v, x + e, y + v);
+                u = e + 1;
+            }
+        }
     }
 }
 
@@ -250,6 +436,7 @@ static void start(const od_button *b)
 static struct BitMap *behind, *back;               /* the screen behind the dock; the drawing */
 static struct RastPort brp;
 static int room, bx, by;                           /* hop room; where the first cell starts */
+static int behind_w, behind_h;                     /* the size behind was copied at */
 static struct Window *bubble;
 static int bubble_for = -1;
 static void bubble_off(void);
@@ -282,6 +469,9 @@ static void layout(int *w, int *h)
             if (iw > big) big = iw;
             if (ih > big) big = ih;
         }
+    /* 25, 50 or 75 per cent: the cells shrink with the icons; the names stay readable */
+    big = od_scaled(big, dock.scale);
+    if (big < 12) big = 12;
     cellw = big;
     cellh = big + label + 4;                       /* and the running mark */
     room = dock.hop ? HOP_ROOM : 0;
@@ -341,9 +531,11 @@ static void render(int lifted, int lift)
         RectFill(rp, x1 - 1, y0 + 1, x1 - 1, y1 - 1);
         SetAfPt(rp, NULL, 0);
     }
-    SetAPen(rp, shine); Move(rp, x0, y1 - 2); Draw(rp, x0, y0 + 2); Draw(rp, x0 + 2, y0); Draw(rp, x1 - 2, y0);
-    SetAPen(rp, shadow); Move(rp, x1 - 1, y0 + 1); Draw(rp, x1, y0 + 2); Draw(rp, x1, y1 - 2); Draw(rp, x1 - 2, y1); Draw(rp, x0 + 2, y1);
-    Draw(rp, x0 + 1, y1 - 1);
+    if (dock.border) {
+        SetAPen(rp, shine); Move(rp, x0, y1 - 2); Draw(rp, x0, y0 + 2); Draw(rp, x0 + 2, y0); Draw(rp, x1 - 2, y0);
+        SetAPen(rp, shadow); Move(rp, x1 - 1, y0 + 1); Draw(rp, x1, y0 + 2); Draw(rp, x1, y1 - 2); Draw(rp, x1 - 2, y1); Draw(rp, x0 + 2, y1);
+        Draw(rp, x0 + 1, y1 - 1);
+    }
     for (int i = 0; i < dock.n; i++) {
         int s = item_size(i), x = standing ? bx : pos, y = standing ? pos : by;
         od_button *b = &dock.b[i];
@@ -364,13 +556,16 @@ static void render(int lifted, int lift)
                 if (dock.place == OD_BOTTOM) dy = -lift; else if (dock.place == OD_TOP) dy = lift;
                 else if (dock.place == OD_LEFT) dx = lift; else dx = -lift;
             }
-            if (icons[i] && GetIconRectangleA(rp, icons[i], NULL, &r, NULL)) { iw = r.MaxX - r.MinX + 1; ih = r.MaxY - r.MinY + 1; }
+            if (small[i].w) { iw = small[i].w; ih = small[i].h; }
+            else if (icons[i] && GetIconRectangleA(rp, icons[i], NULL, &r, NULL)) { iw = r.MaxX - r.MinX + 1; ih = r.MaxY - r.MinY + 1; }
             {
                 int ix = x + (cellw - iw) / 2 + dx, iy = y + (big - ih) / 2 + dy;
                 static struct TagItem plain[] = {
                     { ICONDRAWA_Frameless, TRUE }, { ICONDRAWA_Borderless, TRUE }, { ICONDRAWA_EraseBackground, FALSE }, { TAG_DONE, 0 }
                 };
-                if (icons[i])
+                if (small[i].w)
+                    draw_small(rp, i, ix, iy, i == pressed);
+                else if (icons[i])
                     DrawIconStateA(rp, icons[i], NULL, ix - r.MinX, iy - r.MinY, i == pressed ? IDS_SELECTED : IDS_NORMAL, plain);
                 else {
                     /* no icon at all: the first letter in a box */
@@ -500,7 +695,8 @@ static ULONG behind_sig(void)
 {
     ULONG sig = 0, lock = LockIBase(0);
     for (struct Window *w = scr->FirstWindow; w; w = w->NextWindow) {
-        if (w == win || w == bubble) continue;
+        /* the dock sits just above the backdrop: only backdrop windows are behind it */
+        if (w == win || w == bubble || !(w->Flags & WFLG_BACKDROP)) continue;
         if (w->LeftEdge >= win->LeftEdge + win->Width || w->LeftEdge + w->Width <= win->LeftEdge ||
             w->TopEdge >= win->TopEdge + win->Height || w->TopEdge + w->Height <= win->TopEdge) continue;
         sig = sig * 31 + (ULONG)w;
@@ -539,17 +735,41 @@ static void free_bitmaps(void)
     if (back) { FreeBitMap(back); back = NULL; }
 }
 
+/* True when a window other than a backdrop one is over the box: the screen
+ * there shows that window, not what is behind the dock. */
+static int covered(int x, int y, int w, int h)
+{
+    int over = 0;
+    ULONG lock = LockIBase(0);
+    for (struct Window *v = scr->FirstWindow; v && !over; v = v->NextWindow) {
+        if (v == win || v == bubble || (v->Flags & WFLG_BACKDROP)) continue;
+        over = !(v->LeftEdge >= x + w || v->LeftEdge + v->Width <= x || v->TopEdge >= y + h || v->TopEdge + v->Height <= y);
+    }
+    UnlockIBase(lock);
+    return over;
+}
+
 static int open_dock(struct Menu *menus)
 {
     int w, h, x, y, depth = GetBitMapAttr(scr->RastPort.BitMap, BMA_DEPTH);
     load_icons();
+    for (int i = 0; i < dock.n; i++) make_small(i);
     layout(&w, &h);
     place_of(w, h, &x, &y);
-    /* what is behind the dock, before it opens; and the bitmap it is drawn in */
-    free_bitmaps();
-    if (dock.background != OD_BG_SOLID || dock.hop) {
-        if ((behind = AllocBitMap(w, h, depth, 0, scr->RastPort.BitMap)))
-            BltBitMap(scr->RastPort.BitMap, x, y, behind, 0, 0, w, h, 0xc0, 0xff, NULL);
+    /* what is behind the dock, before it opens; and the bitmap it is drawn in.
+     * A window over the dock's place would be copied too, so then the last
+     * copy is kept when it is the same size, or the shelf is drawn solid. */
+    {
+        struct BitMap *kept = NULL;
+        int over = covered(x, y, w, h);
+        if (over && behind && behind_w == w && behind_h == h) { kept = behind; behind = NULL; }
+        free_bitmaps();
+        behind = kept;
+        if (!behind && !over && (dock.background != OD_BG_SOLID || dock.hop)) {
+            if ((behind = AllocBitMap(w, h, depth, 0, scr->RastPort.BitMap)))
+                BltBitMap(scr->RastPort.BitMap, x, y, behind, 0, 0, w, h, 0xc0, 0xff, NULL);
+        }
+        behind_w = w; behind_h = h;
     }
     back = AllocBitMap(w, h, depth, 0, scr->RastPort.BitMap);
     InitRastPort(&brp);
@@ -557,9 +777,12 @@ static int open_dock(struct Menu *menus)
     SetFont(&brp, scr->RastPort.Font);
     win = OpenWindowTags(NULL, WA_PubScreen, (ULONG)scr, WA_Left, x, WA_Top, y, WA_Width, w, WA_Height, h,
                          WA_Borderless, TRUE, WA_SmartRefresh, TRUE, WA_NewLookMenus, TRUE,
-                         WA_ScreenTitle, (ULONG)"OpenDock 0.1",
-                         WA_IDCMP, IDCMP_MOUSEBUTTONS | IDCMP_MENUPICK | IDCMP_REFRESHWINDOW | IDCMP_INACTIVEWINDOW, TAG_DONE);
+                         WA_ScreenTitle, (ULONG)"OpenDock 0.2",
+                         WA_IDCMP, IDCMP_MOUSEBUTTONS | IDCMP_MENUPICK | IDCMP_REFRESHWINDOW | IDCMP_INACTIVEWINDOW |
+                                   IDCMP_ACTIVEWINDOW, TAG_DONE);
     if (!win) { free_bitmaps(); return 0; }
+    /* one above the backdrop: every other window, Workbench's drawers too, goes over it */
+    WindowToBack(win);
     if (menus) SetMenuStrip(win, menus);
     if (!back && behind) {
         /* without a drawing the copy can't be used: the dock is solid */
@@ -662,6 +885,7 @@ int main(void)
     Permit();
     if (!(IconBase = OpenLibrary((STRPTR)"icon.library", 44))) { PutStr((STRPTR)"OpenDock needs icon.library 44 (AmigaOS 3.5 or later).\n"); return RETURN_FAIL; }
     WorkbenchBase = OpenLibrary((STRPTR)"workbench.library", 44);
+    CyberGfxBase = OpenLibrary((STRPTR)"cybergraphics.library", 41);   /* small icons on a graphics card */
     if (!(port = CreateMsgPort())) { rc = RETURN_FAIL; goto out; }
     port->mp_Node.ln_Name = (char *)PORT_NAME;
     port->mp_Node.ln_Pri = 0;
@@ -705,6 +929,7 @@ int main(void)
             WORD mx = m->MouseX, my = m->MouseY;
             ReplyMsg((struct Message *)m);
             if (cls == IDCMP_REFRESHWINDOW) { BeginRefresh(win); draw(); EndRefresh(win, TRUE); }
+            else if (cls == IDCMP_ACTIVEWINDOW) WindowToBack(win);   /* a click never brings it over a window */
             else if (cls == IDCMP_INACTIVEWINDOW && pressed >= 0) { pressed = -1; draw(); }
             else if (cls == IDCMP_MOUSEBUTTONS && code == SELECTDOWN) { pressed = hit(mx, my); if (pressed >= 0) draw(); }
             else if (cls == IDCMP_MOUSEBUTTONS && code == SELECTUP) {
@@ -741,6 +966,7 @@ out:
     free_icons();
     if (port) { RemPort(port); DeleteMsgPort(port); }
     if (WorkbenchBase) CloseLibrary(WorkbenchBase);
+    if (CyberGfxBase) CloseLibrary(CyberGfxBase);
     CloseLibrary(IconBase);
     return rc;
 }

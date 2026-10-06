@@ -36,6 +36,8 @@ typedef struct od_dock {
     int background;                                       /* OD_BG_* */
     int running;                                          /* a mark under programs that are running */
     int magnify;                                          /* reserved: never with Lite */
+    int scale;                                            /* the items' size: 25, 50, 75 or 100 per cent */
+    int border;                                           /* the shelf's edge lines */
     char imported[96];                                    /* the file taken over, so the first start does it once */
     int n;
     od_button b[OD_MAX];
@@ -48,6 +50,7 @@ typedef struct od_report {
 } od_report;
 
 int od_cell(int size);                                    /* the cell's width and height in pixels */
+int od_scaled(int px, int scale);                         /* px at scale per cent, at least 1 */
 
 void od_defaults(od_dock *d);                             /* the place and size; no buttons */
 void od_starter(od_dock *d);                              /* the buttons a new dock starts with */
