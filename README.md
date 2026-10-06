@@ -12,7 +12,7 @@ files wherever the OS already has one.
 | [Dock](Dock/DESIGN.md) | OpenDock, a dock on the Workbench screen: its place, size and buttons; takes over ToolManager's, AmiDock's (AmigaOS 4) or AmiStart's | 0.1 written 6 Oct 2026 |
 | [OpenUp Setup](Setup/DESIGN.md) | The first-start wizard: a desktop profile, the editors, screen, printer and network, and switches for what starts with the machine | 0.1 written 6 Oct 2026 |
 
-More of the Open family's editors may join it.
+More of the Open family's editors may join it. The next step folds these and the OS's own editors into nine combined editors: see [docs/combined-prefs](docs/combined-prefs/DESIGN.md).
 
 Every editor opens in a **Simple** view, which puts the theme first and
 shows the few settings people change. **View > Advanced** shows every
