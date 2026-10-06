@@ -1,0 +1,236 @@
+<title>Combined Prefs Mockup</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Sora:wght@600;700&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600&family=JetBrains+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;600&display=swap">
+<style>
+/* Layout: brand page chrome (AmigaChrome document tokens) around an Amiga screen stage that keeps its own fixed Workbench colours */
+:root{
+  --paper:#FFFFFF;--ink:#16191D;--steel:#3D4752;--steelmid:#6B7682;--silver:#D9DEE3;--wash:#F3F5F7;--red:#C8202B;--redtint:#FBE9EA;--ok:#1E7A46;--warn:#9A5F05;
+  --display:'Sora','Helvetica Neue',Arial,sans-serif;--read:'Source Serif 4',Georgia,serif;--mono:'JetBrains Mono',Menlo,monospace;
+  /* Amiga screen, fixed in both themes */
+  --wb-desk:#8fa3c4;--wb-win:#e8e8e8;--wb-panel:#f0f0f0;--wb-title:#3a63a8;--wb-edge:#333;--wb-shadow:#4a5a78;--wb-ink:#111;--wb-sel:#3a63a8;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--paper:#121519;--ink:#E6E9EC;--steel:#9AA6B2;--steelmid:#8F9AA6;--silver:#2C333B;--wash:#1B2026;--red:#F0646B;--redtint:#3A1C1F;--ok:#5BC08A;--warn:#E0A84A;color-scheme:dark}}
+:root[data-theme="dark"]{--paper:#121519;--ink:#E6E9EC;--steel:#9AA6B2;--steelmid:#8F9AA6;--silver:#2C333B;--wash:#1B2026;--red:#F0646B;--redtint:#3A1C1F;--ok:#5BC08A;--warn:#E0A84A;color-scheme:dark}
+body{background:var(--paper);color:var(--ink);font-family:var(--read);font-size:16px;line-height:1.55}
+.wrap{max-width:1180px;margin:0 auto;padding-inline:16px;padding-block:28px 48px}
+header{display:flex;flex-wrap:wrap;justify-content:space-between;gap:12px;align-items:flex-end;border-bottom:2px solid var(--red);padding-bottom:12px;margin-bottom:20px}
+.brand{font-family:var(--display);font-weight:700;font-size:15px;color:var(--steel)}.brand b{color:var(--red)}
+h1{font-family:var(--display);font-weight:700;font-size:30px;line-height:1.1;margin:4px 0 0;text-wrap:balance}
+.kind{font-family:var(--mono);font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--red)}
+.lede{color:var(--steel);max-width:68ch;margin:0 0 20px}
+.grid{display:grid;grid-template-columns:230px minmax(0,1fr);gap:24px}
+@media (max-width:860px){.grid{grid-template-columns:1fr}}
+nav.eds{display:flex;flex-direction:column;gap:4px}
+@media (max-width:860px){nav.eds{flex-direction:row;flex-wrap:wrap}}
+nav.eds button{all:unset;cursor:pointer;display:flex;gap:10px;align-items:baseline;padding:7px 10px;border:1px solid var(--silver);background:var(--paper);font-family:var(--display);font-weight:600;font-size:14px;color:var(--ink)}
+nav.eds button small{font-family:var(--mono);font-weight:400;font-size:10.5px;color:var(--steelmid)}
+nav.eds button[aria-pressed="true"]{background:var(--wash);border-color:var(--steel);box-shadow:inset 3px 0 0 var(--red)}
+nav.eds button:focus-visible{outline:2px solid var(--red);outline-offset:2px}
+.eyebrow{font-family:var(--mono);font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--steelmid);margin:14px 0 6px}
+.toolbar{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:10px;font-family:var(--display);font-size:13px}
+.seg{display:inline-flex;border:1px solid var(--steel)}
+.seg button{all:unset;cursor:pointer;padding:5px 12px;font-weight:600;color:var(--steel)}
+.seg button[aria-pressed="true"]{background:var(--steel);color:var(--paper)}
+.seg button:focus-visible{outline:2px solid var(--red)}
+.stagebox{overflow-x:auto;border:1px solid var(--silver);background:var(--wb-desk)}
+.stage{width:720px;margin:0 auto;min-height:340px;background:var(--wb-desk);padding:18px 40px 22px;box-sizing:border-box;font-family:'IBM Plex Sans',sans-serif;font-size:12px;color:var(--wb-ink)}
+.wbbar{height:18px;background:#fff;border-bottom:1px solid #333;margin:-18px -40px 14px;display:flex;align-items:center;gap:16px;padding:0 8px;font-size:11.5px}
+.wbbar b{font-weight:600}
+.win{width:640px;background:var(--wb-win);border:1px solid var(--wb-edge);box-shadow:2px 2px 0 var(--wb-shadow)}
+.tbar{height:20px;background:var(--wb-title);color:#fff;display:flex;align-items:center;justify-content:space-between;padding:0 8px;font-weight:600}
+.tbar span:last-child{font-weight:400;opacity:.85;font-size:11px}
+.mbar{height:20px;background:#f4f4f4;border-bottom:1px solid #999;display:flex;align-items:center;gap:16px;padding:0 8px}
+.mbar .on{background:var(--wb-sel);color:#fff;padding:0 4px}
+.body{display:flex;gap:10px;padding:10px 12px 12px}
+.secs{width:132px;flex-shrink:0;background:#fff;border:1px solid #777;align-self:flex-start;display:flex;flex-direction:column}
+.secs button{all:unset;cursor:pointer;padding:3px 7px;font-size:12px}
+.secs button[aria-pressed="true"]{background:var(--wb-sel);color:#fff}
+.secs button:focus-visible{outline:1px dotted #000;outline-offset:-2px}
+.secs .eng{font-size:10px;opacity:.75}
+.page{flex:1;min-width:0;display:flex;flex-direction:column;gap:7px}
+.box{border:1px solid #999;background:var(--wb-panel);padding:7px 10px;display:flex;flex-direction:column;gap:6px}
+.box h4{margin:0;font-size:12px;font-weight:600}
+.row{display:grid;grid-template-columns:150px minmax(0,1fr);gap:8px;align-items:center}
+.row>.l{text-align:right}
+.row .ctl{display:flex;flex-wrap:wrap;gap:6px 12px;align-items:center;min-width:0}
+.stage select,.stage button.b,.stage input[type=text]{font-family:inherit;font-size:12px}
+.stage input[type=text]{padding:1px 4px;min-width:0;width:180px}
+.stage select{max-width:100%}
+.stage input[type=range]{accent-color:var(--wb-sel);width:180px}
+.stage label.c{display:inline-flex;gap:4px;align-items:center}
+.sw{display:inline-flex;gap:4px}.sw span{width:16px;height:16px;border:1px solid #333;display:inline-block}
+.sw span.on{outline:2px solid #000;outline-offset:1px}
+.note{color:#333;font-size:11.5px;padding-left:158px}
+.lst{background:#fff;border:1px solid #777;padding:2px 0;max-height:96px;overflow:auto;width:100%}
+.lst div{padding:1px 6px}.lst div.on{background:var(--wb-sel);color:#fff}
+.buttons{display:flex;justify-content:space-between;padding:0 12px 12px}
+.buttons button{font-family:inherit;font-size:12px;padding:4px 18px}
+.status{border-top:1px solid #bbb;margin:0 12px 8px;padding-top:5px;font-size:11.5px;color:#333}
+.side{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:14px;margin-top:16px}
+.card{border:1px solid var(--silver);background:var(--wash);padding:10px 14px}
+.card h3{font-family:var(--display);font-size:13px;margin:0 0 6px;color:var(--steel);letter-spacing:.06em;text-transform:uppercase}
+.card ul{margin:0;padding-left:18px;font-size:14.5px}
+.card code,.mono{font-family:var(--mono);font-size:12.5px}
+.drawer{margin-top:28px}
+.drawer h2{font-family:var(--display);font-size:21px;margin:0 0 8px;padding-top:10px;border-top:2px solid var(--red)}
+.icons{display:flex;flex-wrap:wrap;gap:10px;background:var(--wb-desk);padding:14px;border:1px solid var(--silver);font-family:'IBM Plex Sans',sans-serif;font-size:12px;color:#111}
+.ic{width:86px;text-align:center;display:flex;flex-direction:column;align-items:center;gap:4px}
+.ic i{width:34px;height:28px;background:#e8e8e8;border:1px solid #333;box-shadow:2px 2px 0 #4a5a78;display:block}
+.ic.new i{background:#fff;border-color:#1f3f7a}
+.ic.dr i{background:#d8c27a}
+.ic span{background:#fff;padding:0 3px}
+.decs{display:flex;flex-direction:column;gap:8px;margin-top:8px}
+.dec{border:1px solid var(--silver);padding:10px 14px;display:grid;grid-template-columns:26px minmax(0,1fr);gap:4px 10px}
+.dec b.n{font-family:var(--display);color:var(--red)}
+.dec p{margin:0}.dec .rec{color:var(--steel);font-size:14.5px}
+footer{margin-top:30px;font-family:var(--mono);font-size:11px;color:var(--steelmid)}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+
+<div class="wrap">
+<header>
+  <div><div class="brand"><b>Amiga</b>Chrome · OpenPrefs</div><div class="kind">Design for review · not built</div><h1>Combined preferences</h1></div>
+  <div class="mono" style="color:var(--steelmid)">6 October 2026</div>
+</header>
+<p class="lede">We propose nine preferences editors in place of twenty-three. Each one gathers settings people think of together, writes the same files the OS's own editors write, and keeps the old editors in a Classic drawer. Pick an editor, switch between Simple and Advanced, and click the sections to see every page.</p>
+
+<div class="grid">
+  <div>
+    <div class="eyebrow">The nine editors</div>
+    <nav class="eds" id="eds" aria-label="Editors"></nav>
+  </div>
+  <div style="min-width:0">
+    <div class="toolbar">
+      <span>View</span>
+      <div class="seg" role="group" aria-label="View">
+        <button id="vS" aria-pressed="true">Simple</button><button id="vA" aria-pressed="false">Advanced</button>
+      </div>
+      <span style="color:var(--steelmid);font-family:var(--read);font-size:14px">View &gt; Advanced (Amiga-A) in the editor itself</span>
+    </div>
+    <div class="stagebox"><div class="stage" id="stage"></div></div>
+    <div class="side" id="side"></div>
+  </div>
+</div>
+
+<section class="drawer">
+  <h2>The Prefs drawer, after</h2>
+  <div class="icons" id="drawer"></div>
+  <p style="font-size:14.5px;color:var(--steel);max-width:75ch">White icons are the new editors. The Classic drawer keeps every old editor, working as before, so a guide or a habit that names Prefs/ScreenMode still finds it one drawer down. Third-party editors such as Picasso96Mode and DefIcons stay where they are.</p>
+</section>
+
+<section class="drawer">
+  <h2>Decisions we need</h2>
+  <div class="decs">
+    <div class="dec"><b class="n">1</b><div><p><strong>How many windows?</strong> Nine editors, one per subject, or one Settings app holding every section.</p><p class="rec">We recommend nine: each stays small enough for a 68040 and a 256-line screen, and each icon says what it does.</p></div></div>
+    <div class="dec"><b class="n">2</b><div><p><strong>Where do the old editors go?</strong> Into Prefs/Classic, as Dale chose for Sound, or left beside the new ones.</p><p class="rec">We recommend Prefs/Classic, the same pattern as Sound.</p></div></div>
+    <div class="dec"><b class="n">3</b><div><p><strong>What does Simple show?</strong> One page of the most-changed settings, or the section list with fewer rows on each page.</p><p class="rec">We recommend one page, as the Sound mockup does.</p></div></div>
+    <div class="dec"><b class="n">4</b><div><p><strong>Amiga-A for Advanced?</strong> Keep it, or move it to Amiga-Shift-A.</p><p class="rec">We recommend keeping it: no prefs editor has a Select all to clash with.</p></div></div>
+    <div class="dec"><b class="n">5</b><div><p><strong>Which editor first?</strong> Appearance or Desktop.</p><p class="rec">We recommend Appearance: Look already exists, so it proves the shared frame with the least new code.</p></div></div>
+  </div>
+</section>
+<footer>© 2026 Dalsin Limited · OpenPrefs, MIT · design only: nothing is built or hooked into Workbench until Dale approves</footer>
+</div>
+
+<script>
+const E=[
+{id:'appearance',name:'Appearance',rep:['Look','Palette','Font','Pointer','WBPattern'],
+ files:['ENV:OpenGadTools/Look','ENV:Sys/palette.prefs','ENV:Sys/font.prefs','ENV:Sys/pointer.prefs','ENV:Sys/wbpattern.prefs'],
+ eng:'OpenLook (Ctrl-F), and Intuition and Workbench read the Sys files as they do now',
+ simple:[
+  ['box','Theme',[['sel','Theme',['Open','Clear','Graphite','Ember','Classic (the OS look)']],['radio','Mode',['Light','Dark','By the clock'],1],['sw','Accent'],['sel','Desktop profile',['Modern','Lite 68040','Classic 3.2','Choose by machine']]]],
+  ['sel','Text size',['Normal (XEN 9)','Large (XEN 11)','Classic (Topaz 8)']],
+  ['sel','Backdrop',['The theme\'s','A pattern','A picture...','Plain']],
+  ['sel','Pointer',['The theme\'s','Classic','Large']],
+  ['note','Lite is automatic: on for a real 68040 or 68060 without OpenGPU.']],
+ secs:{
+  'Theme':[['sel','Theme',['Open','Clear','Graphite','Ember','Classic']],['radio','Mode',['Light','Dark','By the clock'],2],['two','Dark from','19:00','to','07:00'],['sw','Accent'],['radio','Lite',['Automatic','On','Off'],0],['checks','Under Lite, drop',['Shadows','Rounding','Gradients'],[1,1,1]],['radio','Theme these',['Workbench','Public screens','Game screens'],-1,[1,1,0]],['text','Never touch','PPaint, DPaint'],['checks','Focus',['Click to front','Focus follows pointer'],[1,0]]],
+  'Colours':[['list','Pen',['Background','Text','Important text','Bright edges','Dark edges','Title bars (active)','Title text','Selected fill','Menu background','Menu text'],5],['rng','Red',24],['rng','Green',40],['rng','Blue',66],['sel','Workbench colours',['8','16','256 (RTG)']],['note','Under a theme, OpenLook draws from the theme; these pens are what the OS and older programs use.']],
+  'Fonts':[['fsel','Icons','XEN 9'],['fsel','Programs (system)','Topaz 8'],['fsel','Screen titles','XEN 9'],['radio','Icon labels',['Plain','Fields','Shadow','Outline'],2],['sw','Label colour']],
+  'Backdrops':[['radio','For',['Workbench','Drawers','Screen'],0],['radio','Use',['The theme\'s','Pattern','Picture'],2],['text','Picture','SYS:Prefs/Presets/Backdrops/Ember.png'],['radio','Place',['Centred','Tiled','Scaled'],2],['checks','',['Remap colours'],[1]]],
+  'Pointer':[['radio','Which',['Normal','Busy'],0],['sel','Style',['The theme\'s','Classic','Large','Draw my own...']],['rng','Size',30],['note','Draw my own opens the classic Pointer editor\'s drawing tools on this page.']]}},
+{id:'display',name:'Display',rep:['ScreenMode','Overscan'],files:['ENV:Sys/screenmode.prefs','ENV:Sys/overscan.prefs'],
+ eng:'Workbench reopens its screen on Use or Save, as ScreenMode does now',
+ simple:[['list','Screen',['OpenRTG: 1920 x 1080, 32-bit','OpenRTG: 1280 x 720, 32-bit','OpenRTG: 800 x 600, 32-bit','PAL: High Res Laced','PAL: High Res','DblPAL: High Res Flicker Free'],0],['sel','Colours',['16 million','65,536','256','16']],['checks','',['Autoscroll'],[0]],['note','Shows the modes this machine has: native chip modes, and OpenRTG or Picasso96 modes when they exist.']],
+ secs:{'Screen mode':[['list','Mode',['OpenRTG: 1920 x 1080, 32-bit','OpenRTG: 1280 x 720, 32-bit','PAL: High Res Laced','PAL: High Res'],0],['two','Width','1920','Height','1080'],['checks','',['Default size','Autoscroll'],[1,0]],['sel','Colours',['16 million','65,536','256','16']],['note','Properties: visible size, max colours, scan rates, as ScreenMode shows them.']],
+  'Overscan':[['sel','Monitor',['PAL','NTSC','OpenRTG']],['two','Text size','704','x','283'],['two','Graphics size','724','x','283'],['b','Edit text size...'],['b','Edit graphics size...'],['note','Left out on RTG-only screens, which have no overscan.']],
+  'Monitors':[['list','Starts with the machine',['PAL','NTSC','DblPAL','OpenRTG'],-1],['note','Read only in the first release: which drivers DEVS:Monitors holds.']]}},
+{id:'desktop',name:'Desktop',rep:['Workbench','IControl','Windows','Menus','Dock'],
+ files:['ENV:Sys/workbench.prefs','ENV:Sys/icontrol.prefs','ENV:OpenPrefs/Windows','ENV:OpenMenus/Menus','ENV:OpenDock/Dock'],
+ eng:'OpenWindows, OpenMenus and OpenDock (Ctrl-F to each), Workbench and Intuition as now',
+ simple:[
+  ['box','Windows',[['checks','',['Snap to edges and windows','Amiga+Tab switches windows','Remember where windows go'],[1,1,1]]]],
+  ['box','Menus',[['sel','Menus open',['From the bar','At the pointer','Bar or pointer']],['checks','',['Right-click menus on icons and the desktop'],[1]]]],
+  ['box','Dock',[['checks','',['Show the dock'],[1]],['sel','On the',['Bottom edge','Left edge','Right edge','Top edge']]]],
+  ['checks','Workbench',['Show all files','Workbench as a backdrop'],[0,1]]],
+ secs:{'Workbench':[['checks','',['Workbench as a backdrop','Disk gauge in drawers','Show all files in new drawers'],[1,1,0]],['radio','New drawers show',['Icons','Names'],0],['text','Title bar','Workbench  %fc graphics  %fo other'],['rng','Icon label length',60],['checks','',['Borders around icons'],[0]]],
+  'Windows':[['checks','',['Snap to edges and windows'],[1]],['rng','Snap distance',25],['checks','',['Halves at the left and right edges','Amiga+Tab switches windows','Wheel goes to the window under the pointer','Remember where windows go','Workbench drawers too'],[1,1,1,1,0]],['two','Drawers at least','400','x','250'],['b','Forget all places']],
+  'Screens':[['sel','Drag screens with',['Left Amiga','Right Amiga','Ctrl']],['checks','',['Avoid flicker','Mode promotion','Preserve colours','Text gadget filter','Menu snap'],[0,1,1,1,1]],['two','Screen to front','Amiga N','to back','Amiga M']],
+  'Menus':[['checks','',['OpenMenus (off: the OS\'s own menus)'],[1]],['sel','Open',['From the bar','At the pointer','Bar or pointer']],['radio','Act',['Hold','Sticky','Click'],1],['rng','Delay',10],['radio','Border',['Single','Double'],0],['checks','',['Shadow','See-through','Right-click menus on icons','Keyboard control (R.Amiga Space)'],[1,0,1,1]],['radio','Colours',['Theme','Screen','My own'],0]],
+  'Dock':[['checks','',['Show the dock'],[1]],['sel','Edge',['Bottom','Left','Right','Top']],['radio','Shelf',['Glass','See-through','Solid'],0],['checks','',['Names pop up','Icons hop on start'],[1,1]],['list','Buttons',['Shell','MultiView','OpenFiles','OpenBrowser','— separator —','Prefs'],2],['b','Take over ToolManager\'s...']]}},
+{id:'sound',name:'Sound',rep:['Sound','AHI'],files:['ENV:Sys/sound.prefs','ENV:Sys/ahi.prefs'],eng:'Designed and owned by the AHI story so far thread',
+ link:'https://claude.ai/artifact/W1mg2U2wxfxtmgRySFsdHG',
+ simple:[['rng','Volume',70],['rng','Amiga sound (Paula)',100],['rng','AHI sound',85],['radio','Mix AHI sound on',['The PC','The Amiga'],0],['sel','When a program beeps',['Play a sound','Flash the screen','Both','Nothing']],['checks','',['Show the speaker on the menu bar'],[1]],['note','Already designed and approved today. Shown here so the family reads as one.']],
+ secs:{'Levels':[['rng','Volume',70],['rng','Paula',100],['rng','AHI',85]],'AHI units':[['note','See the Sound mockup for the full page.']],'Paula':[['rng','Stereo separation',70]],'Beep':[['sel','Sound',['Beep','A sound file...']]],'Output':[['sel','Plays on (PC)',['The PC\'s default output']]]}},
+{id:'input',name:'Input',rep:['Input'],files:['ENV:Sys/input.prefs'],eng:'input.device reads it as now; the gamepad page talks to the Cradle',
+ simple:[['rng','Pointer speed',50],['rng','Double-click speed',45],['rng','Key repeat delay',40],['rng','Key repeat rate',60],['sel','Keyboard',['British (gb)','USA (usa)','German (d)','French (f)']],['note','Gamepads appear here on AmigaChrome; a real Amiga leaves the row out.']],
+ secs:{'Mouse':[['rng','Speed',50],['checks','',['Acceleration'],[1]],['rng','Double-click',45],['sel','Wheel scrolls',['3 lines','1 line','A page']],['b','Test area']],
+  'Keyboard':[['sel','Layout',['British (gb)','USA (usa)','German (d)']],['rng','Repeat delay',40],['rng','Repeat rate',60],['text','Try it here','']],
+  'Gamepads':[['list','Pads seen',['Xbox Wireless Controller','8BitDo SN30 Pro'],0],['sel','Acts as',['Joystick in port 2','CD32 pad in port 2','Joystick in port 1']],['b','Map buttons...'],['note','AmigaChrome only: the Gamepad mapper\'s settings, kept by the Cradle.']]}},
+{id:'region',name:'Region',rep:['Locale','Time'],files:['ENV:Sys/locale.prefs','the battery clock'],eng:'locale.library reads it at the next start, as now',
+ simple:[['sel','Country',['United Kingdom','United States','Deutschland','France']],['list','Languages',['English','Deutsch','Français'],0],['sel','Time zone',['London (GMT, summer BST)','New York','Berlin']],['two','Date','06-Oct-26','Time','18:20'],['checks','',['Set the clock from the PC'],[1]]],
+ secs:{'Country':[['sel','Country',['United Kingdom','United States']],['note','Dates 06/10/26 · Numbers 1,234.56 · Money £1,234.56 (shown, set by the country)']],
+  'Languages':[['list','Preferred, in order',['English','Deutsch','Français'],0],['b','Up'],['b','Down']],
+  'Time zone':[['sel','Zone',['London (GMT, summer BST)','New York']],['checks','',['Summer time automatically'],[1]]],
+  'Clock':[['two','Date','06-Oct-26','Time','18:20'],['checks','',['Set the clock from the PC','Save to the battery clock'],[1,1]],['note','On a real Amiga: from the network when OpenSocket is set up, else by hand.']]}},
+{id:'files',name:'Files',rep:['OpenTypes','Asl'],files:['ENVARC:OpenTypes/','ENVARC:Sys/def_*.info (default tools)','ENV:Sys/asl.prefs'],eng:'asl.library and Workbench read them as now',
+ simple:[['list','Opens with',['Pictures → OpenView','Text → MultiView','Archives → OpenCompressor','Web pages → OpenBrowser','Music → OpenPlay'],0],['b','Change...'],['checks','',['Open with... in the Tools menu'],[1]],['checks','File requesters',['Show drawers first','Remember their size'],[1,1]]],
+ secs:{'Open with':[['list','Kind of file',['Pictures (ILBM, PNG, JPEG)','Text','Archives (#?.lha, #?.lzx)','Disk images (#?.adf)','Web pages (#?.html)'],0],['sel','Opens with',['OpenView','MultiView','PPaint']],['checks','',['Also change icons that name the old program'],[1]],['b','Undo last change']],
+  'File requesters':[['sel','Sort by',['Name','Date','Size']],['checks','',['Drawers first','Remember size and place','Show hidden files'],[1,1,0]]]}},
+{id:'printing',name:'Printing',rep:['Printer','PrinterGfx','PrinterPS'],files:['ENV:Sys/printer.prefs','ENV:Sys/printergfx.prefs','ENV:Sys/printerps.prefs'],eng:'printer.device reads them as now',
+ simple:[['sel','Printer',['OpenPrint: the PC\'s printer','PostScript','EpsonQ','Generic']],['sel','Paper',['A4','US Letter']],['radio','Print in',['Colour','Greys'],0],['radio','Quality',['Draft','Best'],1],['b','Print a test page']],
+ secs:{'Printer':[['sel','Driver',['OpenPrint','PostScript','EpsonQ']],['sel','Port',['OpenPrint (PC)','Parallel','Serial','USB']],['sel','Unit',['0','1']],['sel','Paper',['A4','US Letter']],['two','Left margin','5','Right','75']],
+  'Graphics':[['radio','Shade',['Black and white','Greys','Colour'],2],['sel','Dithering',['Ordered','Halftone','Floyd-Steinberg']],['radio','Scaling',['Fraction','Integer'],0],['rng','Threshold',50],['checks','',['Centre the picture','Smoothing'],[1,0]]],
+  'PostScript':[['sel','Mode',['PostScript','Pass-through']],['two','Copies','1','Paper','A4'],['sel','Font',['Courier','Times']]]}},
+{id:'connections',name:'Connections',rep:['Serial'],files:['ENV:Sys/serial.prefs','OpenSocket\'s own files'],eng:'serial.device as now; OpenSocket reads its own files, and its line in OpenUp\'s startup block is switched on or off',
+ simple:[['box','Network (OpenSocket)',[['note','Connected through the PC (AmigaChrome): 192.168.0.42'],['checks','',['Start the network when the machine starts'],[1]]]],['sel','Serial speed',['9600','19200','38400','115200']],['sel','Handshake',['RTS/CTS','XON/XOFF','None']]],
+ secs:{'Network':[['checks','',['Start the network when the machine starts'],[1]],['radio','Connect',['Through the PC (AmigaChrome)','Ethernet card','Wi-Fi card'],0],['radio','Address',['From the network (DHCP)','Fixed'],0],['text','Name','amiga'],['two','DNS','192.168.0.1','then','1.1.1.1'],['b','Connect now'],['note','Shown only when OpenSocket is installed. Once it is set up, it starts at boot unless switched off here.']],
+  'Serial':[['sel','Speed',['9600','19200','38400','115200']],['sel','Buffer',['512','4096']],['sel','Handshake',['RTS/CTS','XON/XOFF','None']],['two','Bits','8','Stop','1'],['sel','Parity',['None','Even','Odd']]]}}
+];
+let cur=0,adv=false,sec=0;
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+let uid=0;
+function ctl(r){const [t,l]=r;uid++;const id='c'+uid;let c='';
+ if(t==='sel')c=`<select id="${id}">${r[2].map(o=>`<option>${esc(o)}</option>`).join('')}</select>`;
+ else if(t==='fsel')c=`<span>${esc(r[2])}</span><button class="b">Choose...</button>`;
+ else if(t==='rng')c=`<input id="${id}" type="range" value="${r[2]}"><span style="font-family:'IBM Plex Mono',monospace">${r[2]}%</span>`;
+ else if(t==='radio')c=r[2].map((o,i)=>`<label class="c"><input type="${r[4]?'checkbox':'radio'}" name="${id}" ${(r[4]?r[4][i]:i===r[3])?'checked':''}> ${esc(o)}</label>`).join('');
+ else if(t==='checks')c=r[2].map((o,i)=>`<label class="c"><input type="checkbox" ${r[3][i]?'checked':''}> ${esc(o)}</label>`).join('');
+ else if(t==='sw')c=`<span class="sw">${['#3a63a8','#c8202b','#1e7a46','#9a5f05','#6b4fa0','#333'].map((x,i)=>`<span class="${i?'':'on'}" style="background:${x}"></span>`).join('')}</span>`;
+ else if(t==='text')c=`<input id="${id}" type="text" value="${esc(r[2])}" aria-label="${esc(l)}">`;
+ else if(t==='two')c=`<input type="text" style="width:70px" value="${esc(r[2])}" aria-label="${esc(l)}"> ${esc(r[3])} <input type="text" style="width:70px" value="${esc(r[4])}" aria-label="${esc(r[3])}">`;
+ else if(t==='list')c=`<div class="lst">${r[2].map((o,i)=>`<div class="${i===r[3]?'on':''}">${esc(o)}</div>`).join('')}</div>`;
+ else if(t==='b')return `<div class="row"><span></span><div class="ctl"><button class="b">${esc(l)}</button></div></div>`;
+ else if(t==='note')return `<div class="note">${esc(l)}</div>`;
+ else if(t==='box')return `<div class="box"><h4>${esc(l)}</h4>${r[2].map(ctl).join('')}</div>`;
+ return `<div class="row"><span class="l">${l?`<label for="${id}">${esc(l)}</label>`:''}</span><div class="ctl">${c}</div></div>`;}
+function render(){const e=E[cur];const names=Object.keys(e.secs);if(sec>=names.length)sec=0;
+ document.querySelectorAll('#eds button').forEach((b,i)=>b.setAttribute('aria-pressed',i===cur));
+ vS.setAttribute('aria-pressed',!adv);vA.setAttribute('aria-pressed',adv);
+ const rows=adv?e.secs[names[sec]]:e.simple;
+ stage.innerHTML=`<div class="wbbar"><b>Workbench</b><span>Window</span><span>Icons</span><span>Tools</span></div>
+ <div class="win" role="img" aria-label="Mockup of the ${esc(e.name)} editor">
+  <div class="tbar"><span>${esc(e.name)}${adv?' (Advanced)':''}</span><span>Prefs</span></div>
+  <div class="mbar"><span>Project</span><span>Edit</span><span class="${adv?'on':''}">View</span><span>Settings</span></div>
+  <div class="body">${adv?`<div class="secs" role="group" aria-label="Sections">${names.map((n,i)=>`<button data-s="${i}" aria-pressed="${i===sec}">${esc(n)}</button>`).join('')}</div>`:''}
+   <div class="page">${rows.map(ctl).join('')}</div></div>
+  <div class="status">${adv?'Section '+(sec+1)+' of '+names.length+'. ':''}Save keeps it after a reboot; Use lasts until the reboot; Test puts it back after 15 seconds.</div>
+  <div class="buttons"><button>Save</button><button>Use</button><button>Test</button><button>Cancel</button></div></div>`;
+ stage.querySelectorAll('.secs button').forEach(b=>b.onclick=()=>{sec=+b.dataset.s;render();stage.querySelector(`.secs button[data-s="${sec}"]`).focus()});
+ side.innerHTML=`<div class="card"><h3>Replaces</h3><ul>${e.rep.map(x=>`<li>Prefs/${esc(x)}${['Look','Menus','Windows','Dock','OpenTypes'].includes(x)?' (OpenPrefs: becomes a page, keeps its Shell name)':' (moves to Prefs/Classic)'}</li>`).join('')}</ul></div>
+ <div class="card"><h3>Writes the same files</h3><ul>${e.files.map(x=>`<li><code>${esc(x)}</code></li>`).join('')}</ul></div>
+ <div class="card"><h3>Who reads them</h3><p style="margin:0;font-size:14.5px">${esc(e.eng)}.${e.link?` <a href="${e.link}" style="color:var(--red)">Open the Sound mockup</a>.`:''}</p></div>`;}
+eds.innerHTML=E.map((e,i)=>`<button data-i="${i}" aria-pressed="false">${esc(e.name)} <small>${e.rep.length} → 1</small></button>`).join('');
+eds.querySelectorAll('button').forEach(b=>b.onclick=()=>{cur=+b.dataset.i;sec=0;render()});
+vS.onclick=()=>{adv=false;render()};vA.onclick=()=>{adv=true;render()};
+drawer.innerHTML=[...E.map(e=>`<div class="ic new"><i></i><span>${e.name}</span></div>`),`<div class="ic"><i></i><span>OpenUp-Setup</span></div>`,`<div class="ic dr"><i></i><span>Classic</span></div>`,`<div class="ic"><i></i><span>Picasso96Mode</span></div>`,`<div class="ic"><i></i><span>DefIcons</span></div>`].join('');
+render();
+</script>
