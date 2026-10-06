@@ -110,12 +110,50 @@ for it on its first page.
 comes from an opengadtools checkout beside this one (or `OGT=`). It needs a
 68020 or better, an FPU is not needed, and it never uses OpenGPU.
 
+### The engine, OpenMenus 0.1
+
+`Menus/engine/openmenus.c` builds `C:OpenMenus` (`Menus/engine/build.sh`).
+It is a commodity and does not patch Intuition:
+
+- **Taking the button.** A custom commodity object takes the right mouse
+  button from the input stream when the active window has a menu strip and
+  no RMBTRAP. Intuition never opens its own menus for that press.
+- **Drawing.** The strip is copied under Forbid(), and the menus are drawn
+  from the copy in borderless windows that never take the activation. These
+  are the screen bar's titles (pull-down), or a list of titles at the
+  pointer (pop-up), then the items, then the subitems.
+- **Following the mouse.** The mouse is followed every 20 ms, and the buttons
+  go to OpenMenus while a menu is open. Esc closes the menu.
+- **Giving the choice.** The choice goes to the program as Intuition gives
+  it: IDCMP_MENUPICK with FULLMENUNUM on the window's port, with check marks
+  and mutual exclusion set first in the window's own strip. MENUNULL is sent
+  when nothing is chosen. Before anything is changed, the item is looked up
+  again in the strip as it is then. A program that changed or cleared its
+  menus meanwhile gets MENUNULL, and a window closed meanwhile gets nothing.
+- **MENUVERIFY.** It is asked first, as Intuition asks it. A program's
+  MENUCANCEL keeps the menu shut.
+- **Settings.** It reads this file at start and on Ctrl-F to the task of its
+  port `OpenMenus`. Colours come from the theme, the screen's pens, or the
+  user's. Lite leaves out the shadow.
+
+Tested on a scratch OS 3.2.3 (OpenRTG 800x600, 6 October 2026), all with
+"Bar or pointer" and hold and release:
+- Workbench's menus from the bar: Backdrop? toggled Workbench's backdrop.
+- Workbench's menus from the bar: Open volume > RAM Disk opened the RAM Disk.
+- A pop-up at the pointer: the check mark on Backdrop? showed.
+- OpenPrefs Windows' GadTools menus as a pop-up: View > Advanced switched
+  the editor's view.
+
+Not in 0.1: keyboard control, the opening delays, see-through and pictures,
+and a pop-up that opens on the item last chosen. The sticky modes are written
+but not yet tested.
+
 ### For the OpenUp part (to add in openamigaup)
 
     menus = Part(top, "OpenMenus", "0.1", "OpenMenus: our own menus, and their editor")
     menus.add("Prefs/Menus", (a.openamigaprefs / "Menus/build/os3/Menus").read_bytes(), "SYS:Prefs/Menus")
     menus.add("Prefs/Menus.info", icons.icon(icons.WBTOOL, "page", stack=16384), "SYS:Prefs/Menus.info")
-    # the engine, C/OpenMenus, from Main Discourse; then:
+    menus.add("C/OpenMenus", (a.openamigaprefs / "Menus/build/os3/OpenMenus").read_bytes(), "SYS:C/OpenMenus")
     menus.line("startup Run >NIL: C:OpenMenus")
     # once, at install: MagicMenu's settings taken over (does nothing without them)
     #   SYS:Prefs/Menus MAGICMENU ENVARC:MagicMenu.prefs SAVE
