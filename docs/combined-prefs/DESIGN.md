@@ -70,13 +70,15 @@ Every editor uses one frame, the one the Sound mockup drew: a GadTools window wi
 
 <figure class="half">
 <img src="img/display-simple.png" />
-<figcaption>Display, Simple: the modes this machine has, native and OpenRTG or Picasso96.</figcaption>
+<figcaption>Display, Simple: the modes this machine has, largest first, written as 1920x1080 (OpenRTG) down to 640x256 (AGA).</figcaption>
 </figure>
 
 <figure class="half">
 <img src="img/printing-simple.png" />
 <figcaption>Printing, Simple: one printer, paper, colour and quality, with a test page.</figcaption>
 </figure>
+
+**Screen modes (Dale, 6 October).** Display lists every mode by size, largest first, written as width x height with where it comes from: `1920x1080 (OpenRTG)`, `800x600 (OpenRTG)`, `640x512 (AGA)`, `640x256 (AGA)`. The source is the chipset or card that gives the mode (OpenRTG, Picasso96, AGA, ECS or OCS). Modes of the same size are ordered by colours, most first. The mode's full name, such as PAL: High Res Laced, shows below the list with its colours and scan rates.
 
 The pictures are taken from the interactive mockup, drawn 640 pixels wide. We plan every page to fit a 640 by 256 screen, as the Menus editor does; that is an estimate until a built page is measured on an instance.
 
