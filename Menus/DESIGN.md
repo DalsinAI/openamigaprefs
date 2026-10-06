@@ -149,6 +149,40 @@ and a pop-up that opens on the item last chosen. The sticky modes are written
 but not yet tested. The Menus editor keeps these settings, and changing one
 says on its status line that OpenMenus 0.1 keeps it for later.
 
+### Right-click on icons and the desktop (OpenMenus 0.2)
+
+The design Dale approved on 6 October 2026 ("build it"). The right button on
+an icon, or on the background of a Workbench window, opens a menu at the
+pointer:
+
+- **Icon:** Open, Open with (OpenView, MultiView, Choose a program), Information,
+  Rename, Copy, Snapshot, Leave out (Put away on the desktop), then Extract here and
+  Open in OpenCompress for archives, Send to PC, then Delete. A disk gets Format
+  and Eject, and the Trashcan gets Empty trash. Several selected icons get the
+  entries that make sense for several, under "N icons".
+- **Background:** for the desktop, Execute command, Shell, Arrange icons, Show,
+  Select contents, Redraw all, Update all, Backdrop picture, Look, Screen mode,
+  Backdrop and About. A drawer window gets New drawer, Open parent, Arrange icons,
+  Show, View by, Select contents, Update, Snapshot window and Close.
+
+**How it works.** It goes through Workbench's own ARexx port, `WORKBENCH`, and
+patches nothing:
+- Workbench is asked which window was clicked (matched by its box), where that
+  window's icons are, and which icons are selected.
+- Right-clicking an icon that isn't selected selects it, as a click would.
+- The item chosen is carried out with `WINDOW <name> ACTIVATE` and then
+  `MENU INVOKE <ICONS.…|WINDOW.…|WORKBENCH.…>`. `MENU WINDOW <name> INVOKE` did
+  nothing on 3.2.3.
+- If Workbench is busy with a requester, the menu gives up after a second, so
+  the mouse is never held.
+- The right button on the screen bar or in a program's window is unchanged.
+
+`Menus/engine/wbprobe.c` sends commands to the port and prints the answers.
+
+**Settings** (format 1): `rightclick` (off by default), `rightclick.extras`
+(the Open family's entries), `rightclick.selection all|one` and
+`rightclick.name`.
+
 ### For the OpenUp part (to add in openamigaup)
 
     menus = Part(top, "OpenMenus", "0.1", "OpenMenus: our own menus, and their editor")
