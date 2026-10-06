@@ -84,11 +84,11 @@ reads the bar's place from `ENV:OpenMenus/Menus` every two seconds, and
 moves when the bar does.
 
 **The tray:** the end of the menu bar is shared with the other programs
-that sit there, first the clock (Workbench's title with free memory, and the
+that sit there, the first being the clock (Workbench's title with free memory, and the
 date and time at the right). Each keeps a file in `ENV:OpenMenus/Tray/`,
 named for it, holding `width order`: its width in pixels, and its place,
-where a lower order is nearer the bar's end. The clock is order 0, so it
-stays rightmost; the speaker is order 10, just left of it. Each program
+where a lower order is nearer the bar's end. The speaker is order 0, at
+the very end (Dale's title mockup 2); the clock is order 10, just left of it. Each program
 places itself after the widths of those with a lower order (on a side bar,
 one row above each), looks again every two seconds, and deletes its file
 when it quits. OpenSpeaker writes `Speaker` and sends OpenMenus Ctrl-F.

@@ -64,7 +64,7 @@ struct Library *GadToolsBase, *LayersBase, *CxBase;
 #define MENUS_ENV "ENV:OpenMenus/Menus"
 #define TRAY_DIR  "ENV:OpenMenus/Tray"        /* the tray: a file per program on the menu bar's end, "width order" */
 #define TRAY_MINE "ENV:OpenMenus/Tray/Speaker"
-#define MY_ORDER  10                          /* lower is nearer the bar's end: the clock is 0, so it stays rightmost */
+#define MY_ORDER  0                           /* lower is nearer the bar's end: the speaker is rightmost, the clock (10) left of it */
 #define SOUND_PREFS "SYS:Prefs/Sound"
 #define NM_WHEEL_UP   0x7A                   /* the mouse wheel, as NewMouse and OS 3.2 send it */
 #define NM_WHEEL_DOWN 0x7B
@@ -202,7 +202,7 @@ static void tray(int width)
     tell_openmenus();
 }
 
-/* The room the tray's other programs nearer the bar's end take (the clock):
+/* The room the tray's other programs nearer the bar's end take (none by default: the speaker is order 0):
  * their widths in pixels, and how many they are. */
 static int tray_before(int *count)
 {
@@ -236,7 +236,7 @@ static void place(void)
 {
     struct RastPort rp;
     WORD bh = scr->BarHeight + 1;
-    int n, off = tray_before(&n);            /* left of the clock, or above it on a side bar */
+    int n, off = tray_before(&n);            /* after any program with a lower order than ours */
     InitRastPort(&rp);
     SetFont(&rp, dri->dri_Font);
     sw = 5 + 17 + TextLength(&rp, (STRPTR)"100%", 4) + 6;
