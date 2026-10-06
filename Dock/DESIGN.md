@@ -12,8 +12,8 @@ over the docks people already have. MIT, Copyright (c) 2026 Dalsin Limited.
   default), top, left or right, centred.
 - A click starts the program. If the program is already running, the click
   brings its frontmost window and screen to the front instead.
-- A small mark under an icon shows that its program is running. This is
-  checked every 2 seconds. A program counts as running when a process of
+- A small dot under an icon shows that its program is running, as on the
+  Mac. This is checked every 2 seconds. A program counts as running when a process of
   its name exists (Workbench names it so) or a Shell has it as its command.
 - Icons dropped on the dock (it is an AppWindow) are added at the end and
   kept, as AmiDock does.
@@ -23,7 +23,24 @@ over the docks people already have. MIT, Copyright (c) 2026 Dalsin Limited.
 - Ctrl-F reads the settings again, which is what Dock sends. Ctrl-C ends
   it. Starting a second OpenDock only tells the first to read its settings
   again.
-- There is no magnification and no see-through. It draws with the screen's
+- It looks and behaves like the Mac's dock:
+  - **The shelf** has rounded corners and is **glass** (the default: a fine
+    dither of the shine pen over what is behind), **see-through** (the
+    icons stand on the backdrop, with only the shelf's outline) or
+    **solid** (the background pen, as before).
+  - **Names pop up** above the icon under the pointer, in a small box, as
+    the Mac's do. The pointer is looked at ten times a second, only while
+    the Workbench screen is in front.
+  - **A started program's icon hops**: 12 frames, one a video frame apart,
+    in room kept above the shelf (on the side away from the edge).
+  - What is behind the dock is copied from the screen as the dock opens
+    (and again whenever it opens anew: new settings, a button added or
+    removed), so seeing through costs one blit and the screen is never
+    read again. A window later moved behind the dock isn't seen through
+    it until the dock next opens. Everything is drawn into a bitmap of the
+    dock's size and copied in at once, so nothing flickers. Without the
+    memory for that bitmap, the dock is solid and drawn straight in.
+- There is no magnification yet. It draws with the screen's
   pens and the icons as they are, laid out for the screen
   (`GetIconTags` with `ICONGETA_Screen`, which OS 3.5 colour and PNG icons
   need) and drawn with `DrawIconStateA`, so it costs a real
@@ -48,6 +65,9 @@ skipped. Save writes `ENVARC:` too.
     size small|medium|large            ; 40, 56 or 72 pixel cells; a cell grows to its largest icon
     labels on|off                      ; names under the icons
     running on|off                     ; the running marks
+    background glass|see-through|solid ; the shelf (glass if not given)
+    names-on-hover on|off              ; the name above the icon under the pointer (on)
+    hop on|off                         ; a started program's icon hops (on)
     magnify off                        ; kept for later; never with Lite
     imported "ENVARC:ToolManager.prefs"
     button wb "SYS:Utilities/MultiView" label "MultiView"
@@ -96,10 +116,12 @@ A GadTools prefs editor like the others: Save, Use, Test (15 seconds),
 Cancel, and Ctrl-F to the `OpenDock` port.
 
 - **Simple** view: the buttons in order (Up, Down, Remove, add a Line),
-  place, size, names under the icons, and taking over from ToolManager,
+  place, size, names under the icons, the shelf (Solid, See-through,
+  Glass), and taking over from ToolManager,
   AmiDock or AmiStart.
 - **Advanced** view (View > Advanced, Amiga-A, shared in
-  `ENV:OpenAmiga/PrefsView`): the running marks, and the chosen button in
+  `ENV:OpenAmiga/PrefsView`): the running marks, Pop-up names, Hop, and
+  the chosen button in
   full: what it starts with (Workbench, Shell, ARexx), name, command, icon,
   drawer and stack.
 
@@ -131,3 +153,6 @@ saves the result.
 - Drag to reorder on the dock itself.
 - The theme's colours from OpenLook.
 - Magnification, off with Lite.
+- Hiding the dock until the pointer reaches the edge.
+- A live see-through (the dock copying what is behind it again when a
+  window moves under it).
