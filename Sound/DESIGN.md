@@ -21,7 +21,8 @@ Dalsin Limited.
 
 The sliders move the sound as they are dragged. The PC's mixer page has the
 same numbers under each instance ("Amiga's own volume") and moves them too:
-the board's `LEVEL_SEQ` changes on every change from either side. The
+the board's `LEVEL_SEQ` changes on every change from either side, and the
+open editor's sliders follow it (Save keeps what the PC set). The
 register is in amigachrome #206 (`ACAHI_CAP_LEVELS`); an older runtime
 without it reads as no board.
 
@@ -65,8 +66,9 @@ speaker and the volume ("70%", or "Mute").
 
 - **Click** it: the levels open under it (above it on a bottom or side bar):
   Mute, Volume, Paula and AHI, the line "Plays on: PC speakers, through
-  AmigaChrome", and **Sound prefs...**. A click elsewhere or Esc closes them;
-  Esc gives the activation back to the window that had it.
+  AmigaChrome", and **Sound prefs...**. A click elsewhere closes them. The
+  window you were working in stays active the whole time: the levels never
+  take the activation, and give it straight back after a slider is dragged.
 - **Mouse wheel** over the speaker or its levels: the volume up or down by
   the wheel step (5% by default). Turning it up unmutes.
 - **Middle button** on it: mute, and again to unmute.

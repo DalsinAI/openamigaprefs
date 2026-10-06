@@ -49,6 +49,8 @@ const char version[] __attribute__((used)) = "$VER: Sound 0.1 (6.10.2026) OpenPr
 
 static sp_settings cur, orig;
 static volatile ULONG *board;
+static ULONG seen_seq;                                /* the board's LEVEL_SEQ as we last left or read it */
+static int touched;                                   /* the levels were moved here (Cancel puts back only then) */
 static int advanced;
 static ULONG mode_ids[MAX_MODES + 1];
 static char mode_names[MAX_MODES + 1][48];
@@ -166,11 +168,22 @@ static void status(const char *s)
 /* the levels, heard now */
 static void levels_now(void)
 {
-    if (board) sp_board_set(board, sp_levels_word(&cur));
+    if (board) { sp_board_set(board, sp_levels_word(&cur)); seen_seq = sp_board_seq(board); }
+}
+
+/* the levels as the PC's mixer page or the menu bar speaker left them: 1 when they moved */
+static int levels_follow(void)
+{
+    ULONG seq;
+    if (!board || (seq = sp_board_seq(board)) == seen_seq) return 0;
+    seen_seq = seq;
+    sp_from_levels_word(&cur, sp_board_levels(board));
+    return 1;
 }
 
 static void put_in_place(int save)
 {
+    levels_follow();                         /* not the levels from before the PC moved them */
     if (!board) sp_volume_to_units(&cur);
     sp_store(&cur, save);
     levels_now();
@@ -180,7 +193,7 @@ static void put_in_place(int save)
 
 static void put_back(void)
 {
-    if (board) sp_board_set(board, sp_levels_word(&orig));
+    if (board && touched) sp_board_set(board, sp_levels_word(&orig));
     sp_tell_speaker();
 }
 
@@ -289,7 +302,7 @@ static int gui_once(void)
                          WA_Left, 40, WA_Top, scr->BarHeight + 4, WA_InnerWidth, W, WA_InnerHeight, row - scr->WBorTop - fh - 1,
                          WA_Gadgets, (ULONG)glist, WA_DragBar, TRUE, WA_DepthGadget, TRUE, WA_CloseGadget, TRUE, WA_Activate, TRUE,
                          WA_SmartRefresh, TRUE, WA_NewLookMenus, TRUE,
-                         WA_IDCMP, IDCMP_CLOSEWINDOW | IDCMP_REFRESHWINDOW | IDCMP_MENUPICK | SLIDERIDCMP | BUTTONIDCMP | CYCLEIDCMP |
+                         WA_IDCMP, IDCMP_CLOSEWINDOW | IDCMP_REFRESHWINDOW | IDCMP_MENUPICK | IDCMP_INTUITICKS | SLIDERIDCMP | BUTTONIDCMP | CYCLEIDCMP |
                                    MXIDCMP | STRINGIDCMP | CHECKBOXIDCMP | INTEGERIDCMP,
                          TAG_DONE);
     if (!win) { rc = RETURN_FAIL; goto out; }
@@ -321,13 +334,14 @@ static int gui_once(void)
                 }
             }
             else if (cls == IDCMP_REFRESHWINDOW) { GT_BeginRefresh(win); GT_EndRefresh(win, TRUE); }
+            else if (cls == IDCMP_INTUITICKS) { if (levels_follow()) show(); }   /* the PC's mixer moved them */
             else if ((cls == IDCMP_MOUSEMOVE || cls == IDCMP_GADGETUP || cls == IDCMP_GADGETDOWN) && gg) {
                 int id = gg->GadgetID, again = 0;
                 switch (id) {
-                case G_VOL: cur.volume = slider_value(gg, code); levels_now(); break;
-                case G_PAULA: cur.paula = slider_value(gg, code); levels_now(); break;
-                case G_AHI: cur.ahi = slider_value(gg, code); levels_now(); break;
-                case G_MUTE: cur.muted = (gg->Flags & GFLG_SELECTED) != 0; levels_now(); break;
+                case G_VOL: cur.volume = slider_value(gg, code); touched = 1; levels_now(); break;
+                case G_PAULA: cur.paula = slider_value(gg, code); touched = 1; levels_now(); break;
+                case G_AHI: cur.ahi = slider_value(gg, code); touched = 1; levels_now(); break;
+                case G_MUTE: cur.muted = (gg->Flags & GFLG_SELECTED) != 0; touched = 1; levels_now(); break;
                 case G_TPAULA:
                     status("Paula: a tone on one of its channels...");
                     status(sp_test_paula(100) ? "That was Paula." : "Paula's channels are all in use.");
@@ -401,6 +415,7 @@ int main(void)
     int rc;
     if (!rd) { PrintFault(IoErr(), (STRPTR)"Sound"); return RETURN_FAIL; }
     board = sp_board();
+    if (board) seen_seq = sp_board_seq(board);
     sp_load(&cur, args[0] ? (const char *)args[0] : NULL);
     if (args[1] || args[2]) {                /* from the Shell or at boot: no window */
         if (board && !args[0]) {             /* at boot the board starts at 100%: the saved levels, not the board's */

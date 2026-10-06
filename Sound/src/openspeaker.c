@@ -62,6 +62,7 @@ struct GfxBase *GfxBase;
 struct Library *GadToolsBase, *LayersBase, *CxBase;
 
 #define MENUS_ENV "ENV:OpenMenus/Menus"
+#define TRAY_PARENT "ENV:OpenMenus"
 #define TRAY_DIR  "ENV:OpenMenus/Tray"        /* the tray: a file per program on the menu bar's end, "width order" */
 #define TRAY_MINE "ENV:OpenMenus/Tray/Speaker"
 #define MY_ORDER  0                           /* lower is nearer the bar's end: the speaker is rightmost, the clock (10) left of it */
@@ -89,7 +90,7 @@ static struct Window *before;                /* the window that was active when 
 static struct Task *me;
 static ULONG sig_input;
 static volatile WORD wheel_steps;            /* up is positive */
-static volatile UBYTE want_mute, want_toggle;
+static volatile UBYTE want_mute, want_toggle, want_close;
 static volatile WORD hx0, hy0, hx1, hy1;     /* the speaker on the screen, for the handler */
 static volatile WORD px0, py0, px1, py1;     /* its levels, while open */
 static struct Screen *volatile hscr;
@@ -195,6 +196,8 @@ static void tray(int width)
     BPTR fh, lock;
     char t[24];
     if (width > 0) {
+        if ((lock = Lock((STRPTR)TRAY_PARENT, ACCESS_READ))) UnLock(lock);   /* a fresh system has neither yet */
+        else if ((lock = CreateDir((STRPTR)TRAY_PARENT))) UnLock(lock);
         if ((lock = Lock((STRPTR)TRAY_DIR, ACCESS_READ))) UnLock(lock);
         else if ((lock = CreateDir((STRPTR)TRAY_DIR))) UnLock(lock);
         if ((fh = Open((STRPTR)TRAY_MINE, MODE_NEWFILE))) { LONG n = snprintf(t, sizeof t, "%d %d\n", width, MY_ORDER); Write(fh, t, n); Close(fh); }
@@ -324,6 +327,18 @@ static void pop_draw_frame(void)
     (void)fh;
 }
 
+/* the window that was active before the levels opened, active again, if it is still open */
+static void give_back(void)
+{
+    struct Window *w;
+    ULONG lock;
+    if (!before || IntuitionBase->ActiveWindow == before) return;
+    lock = LockIBase(0);
+    for (w = scr->FirstWindow; w && w != before; w = w->NextWindow) ;
+    UnlockIBase(lock);
+    if (w) ActivateWindow(w);
+}
+
 static void pop_close(int activate_before)
 {
     if (!pop) return;
@@ -332,13 +347,7 @@ static void pop_close(int activate_before)
     FreeGadgets(pop_glist); pop_glist = NULL;
     if (vi) { FreeVisualInfo(vi); vi = NULL; }
     sp_save_levels(&cur, 1);                 /* where the knob was left, kept */
-    if (activate_before && before) {
-        struct Window *w;
-        ULONG lock = LockIBase(0);           /* only if it is still open */
-        for (w = scr->FirstWindow; w && w != before; w = w->NextWindow) ;
-        UnlockIBase(lock);
-        if (w) ActivateWindow(w);
-    }
+    if (activate_before) give_back();
     before = NULL;
     draw_speaker();
 }
@@ -383,8 +392,8 @@ static void pop_open(void)
     if (y < 0) y = 0;
     before = IntuitionBase->ActiveWindow;
     pop = OpenWindowTags(NULL, WA_CustomScreen, (ULONG)scr, WA_Left, x, WA_Top, y, WA_Width, W, WA_Height, H,
-                         WA_Borderless, TRUE, WA_Activate, TRUE, WA_RMBTrap, TRUE, WA_SmartRefresh, TRUE,
-                         WA_IDCMP, IDCMP_INACTIVEWINDOW | IDCMP_RAWKEY | IDCMP_REFRESHWINDOW | SLIDERIDCMP | BUTTONIDCMP | CHECKBOXIDCMP,
+                         WA_Borderless, TRUE, WA_Activate, FALSE, WA_RMBTrap, TRUE, WA_SmartRefresh, TRUE,   /* the program you are in stays active */
+                         WA_IDCMP, IDCMP_RAWKEY | IDCMP_REFRESHWINDOW | SLIDERIDCMP | BUTTONIDCMP | CHECKBOXIDCMP,
                          TAG_DONE);
     if (!pop) { FreeGadgets(pop_glist); pop_glist = NULL; FreeVisualInfo(vi); vi = NULL; before = NULL; return; }
     SetFont(pop->RPort, dri->dri_Font);
@@ -415,8 +424,7 @@ static int pop_events(void)
         UWORD code = m->Code;
         struct Gadget *gg = (struct Gadget *)m->IAddress;
         GT_ReplyIMsg(m);
-        if (cls == IDCMP_INACTIVEWINDOW) close = 1;
-        else if (cls == IDCMP_RAWKEY && code == 0x45) close = 2;            /* Esc */
+        if (cls == IDCMP_RAWKEY && code == 0x45) close = 2;            /* Esc */
         else if (cls == IDCMP_REFRESHWINDOW) { GT_BeginRefresh(pop); pop_draw_frame(); GT_EndRefresh(pop, TRUE); }
         else if ((cls == IDCMP_MOUSEMOVE || cls == IDCMP_GADGETUP || cls == IDCMP_GADGETDOWN) && gg) {
             int final = cls == IDCMP_GADGETUP;
@@ -428,6 +436,7 @@ static int pop_events(void)
             case P_PREFS: prefs = 1; close = 2; break;
             }
             draw_speaker();
+            if (final && !close) give_back();   /* a click on a gadget activated the levels: back to the program */
         }
     }
     if (close) pop_close(close == 2);
@@ -464,6 +473,8 @@ static void custom(CxMsg *msg, CxObj *co)
                 ie->ie_Class = IECLASS_NULL;     /* ours: the active window keeps the activation */
         } else if (ie->ie_Class == IECLASS_RAWMOUSE && on_pop && code == IECODE_MBUTTON) {
             want_mute = 1; ie->ie_Class = IECLASS_NULL; Signal(me, sig_input);
+        } else if (ie->ie_Class == IECLASS_RAWMOUSE && px1 > px0 && !on_pop && (code == IECODE_LBUTTON || code == IECODE_RBUTTON)) {
+            want_close = 1; Signal(me, sig_input);    /* a click anywhere else closes the levels, and goes on to where it was */
         }
     }
 }
@@ -549,6 +560,7 @@ int main(void)
                 levels_out(!board);
                 save_in = 10;                               /* kept when the wheel has been still for 2 s */
             }
+            if (want_close) { want_close = 0; if (pop) pop_close(0); }
             if (want_toggle) { want_toggle = 0; if (pop) pop_close(1); else pop_open(); }
             if (pop) pop_show();
             draw_speaker();

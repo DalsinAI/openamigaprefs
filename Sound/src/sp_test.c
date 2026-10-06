@@ -14,6 +14,7 @@
 #include <proto/exec.h>
 #include <proto/dos.h>
 #include <proto/ahi.h>
+#include <clib/alib_protos.h>
 
 #include <string.h>
 #include <stdio.h>
@@ -48,7 +49,7 @@ int sp_test_paula(int volume_pct)
         io->ioa_Period = (UWORD)(clock / (440UL * 32));
         io->ioa_Volume = (UWORD)(volume_pct * 64 / 100);
         io->ioa_Cycles = 220;                                        /* half a second at 440 Hz */
-        SendIO((struct IORequest *)io);
+        BeginIO((struct IORequest *)io);                             /* not SendIO, which clears io_Flags and so ADIOF_PERVOL: silent */
         WaitIO((struct IORequest *)io);
         ok = 1;
         CloseDevice((struct IORequest *)io);
