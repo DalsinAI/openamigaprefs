@@ -11,5 +11,5 @@ OGT=${OGT:-$HERE/../../../opengadtools}
 OUT=${1:-$HERE/../build/os3}
 mkdir -p "$OUT"
 "$CC" -noixemul -m68020 -std=gnu99 -Wall -Werror -O2 -fno-common -I"$OGT/lib" -I"$HERE/../src" -o "$OUT/OpenMenus" \
-    "$HERE/openmenus.c" "$HERE/../src/om_prefs.c" "$OGT/lib/ogt_theme.c"
+    "$HERE/openmenus.c" "$HERE/../src/om_prefs.c" "$HERE/../src/om_kbd.c" "$OGT/lib/ogt_theme.c"
 echo "$OUT/OpenMenus ($(wc -c < "$OUT/OpenMenus") bytes)"

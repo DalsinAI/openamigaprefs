@@ -6,3 +6,7 @@ HERE=$(cd "$(dirname "$0")" && pwd)
 OUT=${TMPDIR:-/tmp}/om_prefs_test
 ${CC:-cc} -std=gnu99 -Wall -Werror -O2 -I"$HERE/../src" -o "$OUT" "$HERE/test_om_prefs.c" "$HERE/../src/om_prefs.c"
 "$OUT" "$HERE"
+# The keyboard control's navigation (om_kbd.c).
+OUT2=${TMPDIR:-/tmp}/om_kbd_test
+${CC:-cc} -std=gnu99 -Wall -Wextra -Werror -O2 -I"$HERE/../src" -o "$OUT2" "$HERE/test_om_kbd.c" "$HERE/../src/om_kbd.c"
+"$OUT2"
