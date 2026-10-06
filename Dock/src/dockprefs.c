@@ -12,10 +12,13 @@
  *     name, command, icon, drawer and stack, the running marks, the names
  *     that pop up under the pointer and the hop when a program starts
  *
- *   Dock [FROM file] [TOOLMANAGER file] [AMIDOCK file] [AMISTART file] [USE] [SAVE] [ADVANCED]
+ *   Dock [FROM file] [TOOLMANAGER file] [AMIDOCK file] [AMISTART file] [USE] [SAVE] [ADVANCED] [ADD program ...]
  *
  * From the Shell, TOOLMANAGER, AMIDOCK or AMISTART takes that file over and
  * USE or SAVE puts it in place with no window: OpenUp's part does this once.
+ * ADD puts a button at the end for each program that's on this machine and
+ * not on the dock yet, so OpenUp can add OpenFiles and OpenView to a dock
+ * someone already has without touching the rest.
  *
  * MIT, Copyright (c) 2026 Dalsin Limited. */
 #include <exec/types.h>
@@ -635,8 +638,8 @@ out:
 
 int main(void)
 {
-    LONG args[7] = { 0, 0, 0, 0, 0, 0, 0 };
-    struct RDArgs *rd = ReadArgs((STRPTR)"FROM,TOOLMANAGER/K,AMIDOCK/K,AMISTART/K,USE/S,SAVE/S,ADVANCED/S", args, NULL);
+    LONG args[8] = { 0, 0, 0, 0, 0, 0, 0, 0 };
+    struct RDArgs *rd = ReadArgs((STRPTR)"FROM,TOOLMANAGER/K,AMIDOCK/K,AMISTART/K,USE/S,SAVE/S,ADVANCED/S,ADD/M", args, NULL);
     char *text, err[120];
     int rc = RETURN_OK, first;
     if (!rd) { PrintFault(IoErr(), (STRPTR)"Dock"); return RETURN_FAIL; }
@@ -686,6 +689,14 @@ int main(void)
                              r.added, r.added == 1 ? "" : "s", src_labels[s]);
                     break;
                 }
+            }
+    }
+    if (args[7]) {
+        /* ADD <program> ...: a button for each one on this machine and not on the dock yet */
+        for (STRPTR *p = (STRPTR *)args[7]; *p; p++)
+            if (exists((const char *)*p) && od_ensure(&cur, (const char *)*p) < 0) {
+                Printf((STRPTR)"Dock: the dock is full, so %s wasn't added.\n", (LONG)*p);
+                rc = RETURN_WARN;
             }
     }
     if (args[4] || args[5]) {                    /* from the Shell: no window */
