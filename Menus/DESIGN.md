@@ -179,7 +179,7 @@ patches nothing:
 
 `Menus/engine/wbprobe.c` sends commands to the port and prints the answers.
 
-**Settings** (format 1): `rightclick` (off by default), `rightclick.extras`
+**Settings** (format 1): `rightclick` (on by default since Dale approved it), `rightclick.extras`
 (the Open family's entries), `rightclick.selection all|one` and
 `rightclick.name`.
 
