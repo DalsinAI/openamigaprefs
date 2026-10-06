@@ -35,6 +35,7 @@
 #include <proto/dos.h>
 #include <proto/intuition.h>
 #include <proto/graphics.h>
+#include <proto/layers.h>
 #include <proto/gadtools.h>
 #include <proto/icon.h>
 #include <proto/wb.h>
@@ -262,6 +263,7 @@ static int hit(int x, int y)
     if (across < 0 || across >= (standing ? cellw : cellh)) return -1;
     for (int i = 0; i < dock.n; i++) {
         int s = item_size(i);
+        if (win && pos + s > (standing ? win->Height : win->Width) - 4) break;   /* past the edge: not drawn */
         if (at >= pos && at < pos + s) return dock.b[i].kind == OD_SEPARATOR ? -1 : i;
         pos += s;
     }
@@ -345,6 +347,8 @@ static void render(int lifted, int lift)
     for (int i = 0; i < dock.n; i++) {
         int s = item_size(i), x = standing ? bx : pos, y = standing ? pos : by;
         od_button *b = &dock.b[i];
+        /* the drawing has no layer to clip it: a dock longer than the screen stops at its edge */
+        if (pos + s > (standing ? H : W) - 4) break;
         if (b->kind == OD_SEPARATOR) {
             SetAPen(rp, shadow);
             if (standing) { Move(rp, x0 + 6, y + s / 2 - 1); Draw(rp, x1 - 6, y + s / 2 - 1); }
@@ -434,6 +438,12 @@ static void bubble_on(int i)
     struct RastPort *rp = &scr->RastPort;
     const char *name = dock.b[i].label;
     int n = strlen(name), bw = TextLength(rp, (STRPTR)name, n) + 14, bh = rp->TxHeight + 6, pos = standing ? by : bx, x, y;
+    if (bw > scr->Width) {
+        /* a name wider than the screen is cut to fit */
+        struct TextExtent te;
+        n = TextFit(rp, (STRPTR)name, n, &te, NULL, 1, scr->Width - 14, rp->TxHeight);
+        bw = te.te_Width + 14;
+    }
     for (int k = 0; k < i; k++) pos += item_size(k);
     if (standing) {
         y = win->TopEdge + pos + (cellh - bh) / 2;
@@ -447,7 +457,7 @@ static void bubble_on(int i)
     if (y < 0) y = 0;
     bubble_off();
     if ((bubble = OpenWindowTags(NULL, WA_PubScreen, (ULONG)scr, WA_Left, x, WA_Top, y, WA_Width, bw, WA_Height, bh,
-                                 WA_Borderless, TRUE, WA_SimpleRefresh, TRUE, WA_Activate, FALSE, WA_RMBTrap, TRUE, TAG_DONE))) {
+                                 WA_Borderless, TRUE, WA_SmartRefresh, TRUE, WA_Activate, FALSE, WA_RMBTrap, TRUE, TAG_DONE))) {
         struct DrawInfo *dri = GetScreenDrawInfo(scr);
         struct RastPort *b = bubble->RPort;
         SetAPen(b, dri ? dri->dri_Pens[SHINEPEN] : 2); RectFill(b, 1, 1, bw - 2, bh - 2);
@@ -467,7 +477,14 @@ static void check_hover(void)
     int i = -1;
     if (dock.hover && win && IntuitionBase->FirstScreen == scr) {
         int mx = scr->MouseX - win->LeftEdge, my = scr->MouseY - win->TopEdge;
-        if (mx >= 0 && my >= 0 && mx < win->Width && my < win->Height) i = hit(mx, my);
+        if (mx >= 0 && my >= 0 && mx < win->Width && my < win->Height) {
+            /* only where the dock is seen, not under a window over it */
+            struct Layer *l;
+            LockLayerInfo(&scr->LayerInfo);
+            l = WhichLayer(&scr->LayerInfo, scr->MouseX, scr->MouseY);
+            UnlockLayerInfo(&scr->LayerInfo);
+            if (l == win->WLayer) i = hit(mx, my);
+        }
     }
     if (i != bubble_for) { if (i >= 0) bubble_on(i); else bubble_off(); }
 }
@@ -515,6 +532,7 @@ static struct AppWindow *aw;
 
 static void free_bitmaps(void)
 {
+    WaitBlit();                                    /* the blitter may still be drawing in them */
     if (behind) { FreeBitMap(behind); behind = NULL; }
     if (back) { FreeBitMap(back); back = NULL; }
 }
@@ -539,10 +557,11 @@ static int open_dock(struct Menu *menus)
                          WA_Borderless, TRUE, WA_SmartRefresh, TRUE, WA_NewLookMenus, TRUE,
                          WA_ScreenTitle, (ULONG)"OpenDock 0.1",
                          WA_IDCMP, IDCMP_MOUSEBUTTONS | IDCMP_MENUPICK | IDCMP_REFRESHWINDOW | IDCMP_INACTIVEWINDOW, TAG_DONE);
-    if (!win) return 0;
+    if (!win) { free_bitmaps(); return 0; }
     if (menus) SetMenuStrip(win, menus);
     if (!back && behind) {
         /* without a drawing the copy can't be used: the dock is solid */
+        WaitBlit();
         FreeBitMap(behind);
         behind = NULL;
     }
