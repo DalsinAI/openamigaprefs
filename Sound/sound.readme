@@ -1,0 +1,33 @@
+Short:        One sound prefs, and a menu bar speaker
+Uploader:     (We fill this in at upload time)
+Author:       Dalsin Limited
+Type:         util/wb
+Version:      0.1
+Architecture: m68k-amigaos >= 3.2.0
+Distribution: Aminet
+
+OpenPrefs Sound is one preferences editor for all of the Amiga's sound, in
+place of Sound and AHI prefs, and OpenSpeaker puts a speaker on the menu bar
+that shows and turns the volume.
+
+- The volume, Paula's level, AHI's level and mute. On AmigaChrome they move
+  the sound as you drag them, and the PC's mixer page shows the same levels.
+  On other Amigas the volume is AHI's.
+- Who mixes AHI's sound on AmigaChrome: the PC, or the Amiga.
+- The beep: a sound, a flash, both or nothing, with a sound file and Test.
+- Advanced: AHI's units, modes, rates and channels, Clip, Anti-click and
+  CPU limit.
+- OpenSpeaker: click it for the levels; the mouse wheel over it turns the
+  volume; the middle button mutes. It sits at the end of the menu bar,
+  wherever OpenMenus puts the bar.
+
+Keeps the OS's own sound.prefs and AHI's ahi.prefs. GadTools, no patches.
+
+Status: built; testing.
+
+Free software under the MIT licence, Copyright (c) 2026 Dalsin Limited. Use
+it, change it, fork it and ship it; keep the copyright notice and the licence
+with every copy. If you build on it, please say it is based on OpenPrefs by
+Dalsin Limited.
+
+Source: https://github.com/DalsinAI/openamigaprefs
