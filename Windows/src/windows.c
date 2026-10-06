@@ -28,7 +28,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-static const char version[] = "$VER: Windows 0.1 (6.10.2026) OpenPrefs, MIT, Copyright (c) 2026 Dalsin Limited";
+static const char version[] = "$VER: Windows 0.2 (6.10.2026) OpenPrefs, MIT, Copyright (c) 2026 Dalsin Limited";
 
 #define PREFS_ENV "ENV:OpenPrefs/Windows"
 #define PREFS_ENVARC "ENVARC:OpenPrefs/Windows"
@@ -39,7 +39,7 @@ static const char version[] = "$VER: Windows 0.1 (6.10.2026) OpenPrefs, MIT, Cop
 #define VIEW_ENVARC "ENVARC:OpenAmiga/PrefsView"
 
 struct wprefs {
-    int snap, snap_dist, halves, switcher, wheel, places, drawer_w, drawer_h;
+    int snap, snap_dist, halves, switcher, wheel, places, places_wb, drawer_w, drawer_h;
     char key[48];
     char never[160];
 };
@@ -106,6 +106,7 @@ static void parse(struct wprefs *p, char *text)
         else if (!strcmp(line, "switcher.key")) strncpy(p->key, v, sizeof p->key - 1);
         else if (!strcmp(line, "wheel")) p->wheel = !strncmp(v, "on", 2);
         else if (!strcmp(line, "places")) p->places = !strncmp(v, "on", 2);
+        else if (!strcmp(line, "places.drawers")) p->places_wb = !strncmp(v, "on", 2);
         else if (!strcmp(line, "never")) {
             if (p->never[0] && strlen(p->never) + 2 < sizeof p->never) strcat(p->never, ", ");
             strncat(p->never, v, sizeof p->never - strlen(p->never) - 1);
@@ -119,9 +120,9 @@ static void make_text(const struct wprefs *p, char *out, int size)
     char never[160], *n, *e;
     int len = snprintf(out, size,
         "; OpenPrefs Windows 0.1: what OpenWindows does\n"
-        "snap %s %d\nsnap.halves %s\nswitcher %s\nswitcher.key %s\nwheel %s\nplaces %s\ndrawer %d %d\n",
+        "snap %s %d\nsnap.halves %s\nswitcher %s\nswitcher.key %s\nwheel %s\nplaces %s\nplaces.drawers %s\ndrawer %d %d\n",
         p->snap ? "on" : "off", p->snap_dist, p->halves ? "on" : "off", p->switcher ? "on" : "off", p->key,
-        p->wheel ? "on" : "off", p->places ? "on" : "off", p->drawer_w, p->drawer_h);
+        p->wheel ? "on" : "off", p->places ? "on" : "off", p->places_wb ? "on" : "off", p->drawer_w, p->drawer_h);
     strcpy(never, p->never);
     for (n = never; *n && len < size - 40; n = e) {
         while (*n == ' ' || *n == ',') n++;
@@ -167,7 +168,7 @@ static int put_in_place(int save)
 
 /* ---- the window ---------------------------------------------------------------------- */
 
-enum { G_SNAP, G_DIST, G_HALVES, G_SWITCH, G_KEY, G_WHEEL, G_PLACES, G_NEVER, G_FORGET, G_DRAWW, G_DRAWH,
+enum { G_SNAP, G_DIST, G_HALVES, G_SWITCH, G_KEY, G_WHEEL, G_PLACES, G_DRAWERS, G_NEVER, G_FORGET, G_DRAWW, G_DRAWH,
        G_STATUS, G_SAVE, G_USE, G_CANCEL, G_COUNT };
 static struct Gadget *gad[G_COUNT];
 static struct Window *win;
@@ -217,6 +218,7 @@ static void show(void)
     SET(G_WHEEL, GTCB_Checked, cur.wheel);
     SET(G_PLACES, GTCB_Checked, cur.places);
     SET(G_NEVER, GTST_String, (ULONG)cur.never, GA_Disabled, !cur.places);
+    SET(G_DRAWERS, GTCB_Checked, cur.places_wb, GA_Disabled, !cur.places);
     SET(G_DRAWW, GTIN_Number, cur.drawer_w);
     SET(G_DRAWH, GTIN_Number, cur.drawer_h);
 }
@@ -271,8 +273,11 @@ static int gui_once(void)
     row += lh + (advanced ? 10 : 4);
     G(CHECKBOX_KIND, G_WHEEL, X, row, 26, lh, "Wheel under pointer", PLACETEXT_LEFT, GTCB_Scaled, TRUE); row += lh + (advanced ? 10 : 4);
     G(CHECKBOX_KIND, G_PLACES, X, row, 26, lh, "Remember places", PLACETEXT_LEFT, GTCB_Scaled, TRUE);
+    if (advanced) G(BUTTON_KIND, G_FORGET, X + 120, row, 140, lh, "Forget all", 0, GA_Disabled, FALSE);
+    row += lh + 4;
+    G(CHECKBOX_KIND, G_DRAWERS, X, row, 26, lh, "Workbench drawers too", PLACETEXT_LEFT, GTCB_Scaled, TRUE);
     if (advanced) {
-        G(BUTTON_KIND, G_FORGET, X + 120, row, 140, lh, "Forget all", 0, GA_Disabled, FALSE); row += lh + 4;
+        row += lh + 4;
         G(STRING_KIND, G_NEVER, X, row, 260, lh, "Never for", PLACETEXT_LEFT, GTST_MaxChars, 158); row += lh + 10;
         G(INTEGER_KIND, G_DRAWW, X, row, 60, lh, "Drawers at least", PLACETEXT_LEFT, GTIN_MaxChars, 4);
         G(INTEGER_KIND, G_DRAWH, X + 90, row, 60, lh, "x", PLACETEXT_LEFT, GTIN_MaxChars, 4);
@@ -288,7 +293,7 @@ static int gui_once(void)
     }
     if (!g) { rc = -1; goto out; }
     menus[6].nm_Flags = CHECKIT | MENUTOGGLE | (advanced ? CHECKED : 0);
-    win = OpenWindowTags(NULL, WA_Title, (ULONG)"Windows", WA_ScreenTitle, (ULONG)"OpenPrefs Windows 0.1", WA_PubScreen, (ULONG)scr,
+    win = OpenWindowTags(NULL, WA_Title, (ULONG)"Windows", WA_ScreenTitle, (ULONG)"OpenPrefs Windows 0.2", WA_PubScreen, (ULONG)scr,
                          WA_Left, 60, WA_Top, scr->BarHeight + 20, WA_InnerWidth, W, WA_InnerHeight, row - scr->WBorTop - fh - 1,
                          WA_Gadgets, (ULONG)glist, WA_DragBar, TRUE, WA_DepthGadget, TRUE, WA_CloseGadget, TRUE, WA_Activate, TRUE,
                          WA_SmartRefresh, TRUE,
@@ -338,6 +343,7 @@ static int gui_once(void)
                     break;
                 case G_WHEEL: cur.wheel = sel; break;
                 case G_PLACES: cur.places = sel; show(); break;
+                case G_DRAWERS: cur.places_wb = sel; break;
                 case G_NEVER: strncpy(cur.never, str, sizeof cur.never - 1); break;
                 case G_FORGET: forget_places(); break;
                 case G_DRAWW: cur.drawer_w = num < 0 ? 0 : num; show(); break;

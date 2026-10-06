@@ -38,7 +38,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-static const char version[] = "$VER: OpenWindows 0.2 (6.10.2026) MIT, Copyright (c) 2026 Dalsin Limited";
+static const char version[] = "$VER: OpenWindows 0.3 (6.10.2026) MIT, Copyright (c) 2026 Dalsin Limited";
 
 #define PREFS_ENV "ENV:OpenPrefs/Windows"
 #define PLACES_ENV "ENV:OpenPrefs/WindowPlaces"
@@ -54,7 +54,7 @@ struct IntuitionBase *IntuitionBase;
 /* ---- settings ------------------------------------------------------------ */
 
 static struct {
-    int snap, snap_dist, halves, switcher, wheel, places, drawer_w, drawer_h;
+    int snap, snap_dist, halves, switcher, wheel, places, places_wb, drawer_w, drawer_h;
     char key[48];
     char never[MAX_NEVER][32];
     int nnever;
@@ -100,6 +100,7 @@ static void read_prefs(void)
         else if (!strcmp(line, "switcher.key")) { strncpy(cfg.key, v, sizeof cfg.key - 1); }
         else if (!strcmp(line, "wheel")) cfg.wheel = on_off(v);
         else if (!strcmp(line, "places")) cfg.places = on_off(v);
+        else if (!strcmp(line, "places.drawers")) cfg.places_wb = on_off(v);
         else if (!strcmp(line, "never") && cfg.nnever < MAX_NEVER) strncpy(cfg.never[cfg.nnever++], v, 31);
         else if (!strcmp(line, "drawer")) { cfg.drawer_w = atoi(v); if (strchr(v, ' ')) cfg.drawer_h = atoi(strchr(v, ' ') + 1); }
     }
@@ -415,12 +416,22 @@ static void make_key(struct Window *w, const char *prog, char *key, int size)
     snprintf(key, size, "%s:%s", prog, title);
 }
 
+/* A window whose place is kept: a program's (not one never to be touched),
+   or a Workbench drawer when "places.drawers" is on (Workbench's own windows
+   otherwise keep to its Snapshot) */
+static int placeable(const int *wb, int drawer, const char *prog)
+{
+    if (!prog[0] || never(prog)) return 0;
+    if (!*wb) return 1;
+    return drawer && cfg.places_wb;
+}
+
 /* Once a second: new windows go to their places (or, Workbench drawers, at
    least the drawer size); every known window's place is noted. */
 static void watch(void)
 {
     /* static: Run gives a commodity a 4 KB stack, and this is 12 KB */
-    static struct { struct Window *w; WORD l, t, wd, ht, minw, minh, maxw, maxh, sw, sh; ULONG flags; char prog[32]; char key[64]; int wb; } now[MAX_SEEN];
+    static struct { struct Window *w; WORD l, t, wd, ht, minw, minh, maxw, maxh, sw, sh; ULONG flags; char prog[32]; char key[64]; int wb, drawer; } now[MAX_SEEN];
     int n = 0, i, j;
     struct Screen *s;
     struct Window *w;
@@ -435,6 +446,8 @@ static void watch(void)
             now[n].minw = w->MinWidth; now[n].minh = w->MinHeight; now[n].maxw = w->MaxWidth; now[n].maxh = w->MaxHeight;
             now[n].sw = s->Width; now[n].sh = s->Height; now[n].flags = w->Flags;
             now[n].wb = (w->Flags & WFLG_WBENCHWINDOW) != 0;
+            /* a Workbench drawer, not its root window, takes a place when the switch says */
+            now[n].drawer = now[n].wb && w->Title && strncmp((const char *)w->Title, "Workbench", 9);
             program_of(w, now[n].prog, sizeof now[n].prog);      /* while the window is sure to be there */
             make_key(w, now[n].prog, now[n].key, sizeof now[n].key);
             n++;
@@ -446,7 +459,9 @@ static void watch(void)
         for (j = 0; j < nseen; j++) if (seen[j].w == now[i].w) { known = j; break; }
         if (known < 0 && places_clock > 1) {
             /* a new window (the first look only notes the windows already open) */
-            if (now[i].wb && cfg.drawer_w && (now[i].flags & WFLG_SIZEGADGET) && now[i].prog[0] && !stricmp(now[i].prog, "Workbench")) {
+            int placed = 0;
+            if (cfg.places && placeable(&now[i].wb, now[i].drawer, now[i].prog) && place_index(now[i].key, 0) >= 0) placed = 1;
+            if (!placed && now[i].wb && cfg.drawer_w && (now[i].flags & WFLG_SIZEGADGET) && now[i].prog[0] && !stricmp(now[i].prog, "Workbench")) {
                 WORD wd = now[i].wd < cfg.drawer_w ? cfg.drawer_w : now[i].wd, ht = now[i].ht < cfg.drawer_h ? cfg.drawer_h : now[i].ht;
                 WORD l = now[i].l, t = now[i].t;
                 if (wd > now[i].sw) wd = now[i].sw;
@@ -457,7 +472,7 @@ static void watch(void)
                     if (is_window(now[i].w)) ChangeWindowBox(now[i].w, l, t, wd, ht);
                     now[i].l = l; now[i].t = t; now[i].wd = wd; now[i].ht = ht;
                 }
-            } else if (cfg.places && !now[i].wb && now[i].prog[0] && !never(now[i].prog)) {
+            } else if (placed) {
                 int p = place_index(now[i].key, 0);
                 if (p >= 0) {
                     struct place *pl = &places[p];
@@ -479,7 +494,7 @@ static void watch(void)
                     pl->used = places_clock;
                 }
             }
-        } else if (known >= 0 && cfg.places && !now[i].wb && now[i].prog[0] && !never(now[i].prog) &&
+        } else if (known >= 0 && cfg.places && placeable(&now[i].wb, now[i].drawer, now[i].prog) &&
                    (seen[known].l != now[i].l || seen[known].t != now[i].t || seen[known].wd != now[i].wd || seen[known].ht != now[i].ht)) {
             /* the user moved or sized it: remember that */
             int p = place_index(now[i].key, 1);
