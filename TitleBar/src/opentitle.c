@@ -47,7 +47,7 @@
 #include "om_prefs.h"
 #include "logo.h"
 
-const char version[] __attribute__((used)) = "$VER: OpenTitle 0.1 (6.10.2026) OpenPrefs, Dalsin Limited";
+const char version[] __attribute__((used)) = "$VER: OpenTitle 0.2 (6.10.2026) OpenPrefs, Dalsin Limited";
 
 struct IntuitionBase *IntuitionBase;
 struct GfxBase *GfxBase;
@@ -386,10 +386,6 @@ static int open_all(void)
     if (!(scr = LockPubScreen((STRPTR)"Workbench"))) return 0;
     if (!(dri = GetScreenDrawInfo(scr))) { close_all(); return 0; }
     bar_edge = read_bar_edge();
-    if (prefs.logo) {
-        logo_w = bar_window(0, 0, scr->BarHeight + 2, scr->BarHeight);
-        if (logo_w) draw_logo();
-    }
     if (prefs.clock) {
         place();
         if ((clock_w = bar_window(cx, cy, cw, ch))) {
@@ -434,6 +430,29 @@ static void events(struct Window *w)
         }
         /* a click on ours: the window before stays the active one */
         else if (cls == IDCMP_ACTIVEWINDOW && last_other) ActivateWindow(last_other);
+    }
+}
+
+/* 1 when the bar's title has room for the logo: Workbench's, which OpenTitle's
+ * title format starts with spaces (another program's starts at the left edge) */
+static int wb_title_shown(void)
+{
+    struct Window *a = IntuitionBase->ActiveWindow;
+    const char *t;
+    if (!a || a->WScreen != scr || a == logo_w || a == clock_w) a = last_other;
+    t = (const char *)(a && a->WScreen == scr && a->ScreenTitle ? a->ScreenTitle : scr->Title);
+    return t && !strncmp(t, LOGO_PAD, strlen(LOGO_PAD));
+}
+
+/* the logo only beside Workbench's title: another program's title starts at the bar's left edge */
+static void logo_follow(void)
+{
+    int want = prefs.logo && wb_title_shown();
+    if (want && !logo_w) {
+        if ((logo_w = bar_window(0, 0, scr->BarHeight + 2, scr->BarHeight))) draw_logo();
+    } else if (!want && logo_w) {
+        CloseWindow(logo_w);
+        logo_w = NULL;
     }
 }
 
@@ -483,6 +502,7 @@ int main(void)
         act = IntuitionBase->ActiveWindow;
         if (act && act != logo_w && act != clock_w) last_other = act;
         if (last_other && !is_window(last_other)) last_other = NULL;
+        logo_follow();
         draw_clock(0);
         if (++tick % 4 == 0) {                 /* every 2 s: the tray and OpenMenus' bar may have moved */
             int edge = read_bar_edge();
