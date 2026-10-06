@@ -132,7 +132,7 @@ static od_button *add_program(od_dock *d, od_report *r, int kind, const char *la
 void od_starter(od_dock *d)
 {
     d->n = 0;
-    add_program(d, NULL, OD_WB, "Shell", "SYS:System/Shell");
+    add_program(d, NULL, OD_CLI, "Shell", "NewShell");      /* the Shell's icon moves between OS releases; NewShell doesn't */
     add_program(d, NULL, OD_WB, "Prefs", "SYS:Prefs");
     add_program(d, NULL, OD_WB, "MultiView", "SYS:Utilities/MultiView");
     add_program(d, NULL, OD_WB, "Look", "SYS:Prefs/Look");

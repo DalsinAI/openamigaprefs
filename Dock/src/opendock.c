@@ -127,6 +127,19 @@ static void free_icons(void)
     for (int i = 0; i < OD_MAX; i++) if (icons[i]) { FreeDiskObject(icons[i]); icons[i] = NULL; }
 }
 
+/* An icon laid out for the dock's screen: OS 3.5 colour icons (as 3.2's own
+ * are) and PNG icons are only drawn right once mapped to the screen's pens. */
+static struct DiskObject *screen_icon(const char *name, int or_default)
+{
+    struct DiskObject *d = GetIconTags((STRPTR)name, ICONGETA_Screen, (ULONG)scr, ICONGETA_RemapIcon, TRUE,
+                                       ICONGETA_GenerateImageMasks, TRUE, ICONGETA_FailIfUnavailable, TRUE, TAG_DONE);
+    /* none: the default icon for a program (a Shell command has no file to go by) */
+    if (!d && or_default)
+        d = GetIconTags(NULL, ICONGETA_Screen, (ULONG)scr, ICONGETA_RemapIcon, TRUE, ICONGETA_GenerateImageMasks, TRUE,
+                        ICONGETA_GetDefaultType, WBTOOL, TAG_DONE);
+    return d;
+}
+
 static void load_icons(void)
 {
     char prog[256];
@@ -134,8 +147,9 @@ static void load_icons(void)
     for (int i = 0; i < dock.n; i++) {
         od_button *b = &dock.b[i];
         if (b->kind == OD_SEPARATOR) continue;
-        if (b->icon[0]) icons[i] = GetDiskObject((STRPTR)b->icon);
-        if (!icons[i]) { program_of(b, prog, sizeof prog); icons[i] = GetDiskObjectNew((STRPTR)prog); }
+        if (b->icon[0]) icons[i] = screen_icon(b->icon, 0);
+        /* the program's own icon (a drawer's too), or the default one for its kind */
+        if (!icons[i]) { program_of(b, prog, sizeof prog); icons[i] = screen_icon(prog, 1); }
     }
 }
 
