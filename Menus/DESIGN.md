@@ -183,6 +183,17 @@ patches nothing:
 (the Open family's entries), `rightclick.selection all|one` and
 `rightclick.name`.
 
+**In the Menus editor** (board 4 of the design): the Simple view has an
+**Icon menus** checkbox, with the line "The right button on the screen bar or
+in a program's window always opens that program's own menus." under both
+columns. The Advanced view puts Icon menus beside Use OpenMenus, then
+**They show** (Workbench's only, or with Open's too), **Selected** (that icon
+only, or the whole selection) and **Name at the top**; the line shows on the
+status bar when Icon menus is switched. To fit a 256-line PAL Workbench with
+these, the two delays share a row, Open on last sits beside Programs run on,
+the shadow's size and strength share a row, and Take over MagicMenu's moves
+under the preview.
+
 ### For the OpenUp part (to add in openamigaup)
 
     menus = Part(top, "OpenMenus", "0.1", "OpenMenus: our own menus, and their editor")
@@ -195,5 +206,7 @@ patches nothing:
 
 ## Next
 
-Right-click menus stay a design until Dale has seen it. Before anything
-hooks Workbench, the design goes back to Dale.
+
+- In the engine: keyboard control, the opening delays, see-through and
+  pictures, and a pop-up opening on the item last chosen. The editor keeps
+  these settings already.

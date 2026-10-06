@@ -313,6 +313,7 @@ enum {
     G_OPEN, G_PDUSE, G_PUUSE, G_PDDELAY, G_PUDELAY, G_LAST, G_CENTRE, G_MARK, G_RUNNING,
     G_KEYBOARD, G_KEY, G_RALT, G_TOP,
     G_COLOURS, G_WHICH, G_HEX, G_BORDER, G_SHADOW, G_SSIZE, G_SSTRENGTH, G_BG, G_IMAGE, G_CHOOSE, G_SEPS,
+    G_RC, G_RCEXTRAS, G_RCSEL, G_RCNAME, G_RCNOTE1, G_RCNOTE2,
     G_ENABLED, G_TAKEOVER, G_FEEL, G_THEME, G_LOOK, G_STATUS, G_SAVE, G_USE, G_TEST, G_CANCEL, G_COUNT
 };
 
@@ -323,6 +324,10 @@ static const char *which_labels[] = { "Background", "Text", "Selected", "Selecte
 static const char *border_labels[] = { "Single", "Double", NULL };
 static const char *bg_labels[] = { "Solid", "See-through", "Image", "See-through image", NULL };
 static const char *seps_labels[] = { "Lite", "Bold", NULL };
+/* the right-click menus: rightclick.extras on|off, rightclick.selection all|one (in that order) */
+static const char *rcshow_labels[] = { "Workbench's only", "With Open's too", NULL };
+static const char *rcsel_labels[] = { "That icon only", "Whole selection", NULL };
+static const char rc_note[] = "The right button on the screen bar or in a program's window always opens that program's own menus.";
 
 static struct Gadget *gad[G_COUNT];
 static struct Window *win;
@@ -366,6 +371,10 @@ static void show(const om_prefs *p)
     SET(G_CHOOSE, GA_Disabled, !img || !AslBase);
     SET(G_SEPS, GTCY_Active, p->separators_bold);
     SET(G_ENABLED, GTCB_Checked, p->enabled);
+    SET(G_RC, GTCB_Checked, p->rightclick);
+    SET(G_RCEXTRAS, GTCY_Active, !!p->rightclick_extras, GA_Disabled, !p->rightclick);
+    SET(G_RCSEL, GTCY_Active, !!p->rightclick_selection, GA_Disabled, !p->rightclick);
+    SET(G_RCNAME, GTCB_Checked, p->rightclick_name, GA_Disabled, !p->rightclick);
     SET(G_TAKEOVER, GA_Disabled, magicmenu_file() == NULL);
     SET(G_FEEL, GTCY_Active, p->use[p->open == OM_OPEN_POPUP ? OM_PU : OM_PD]);
     SET(G_LOOK, GA_Disabled, !exists(LOOK_TOOL));
@@ -457,8 +466,8 @@ static int make_gadgets(struct Screen *scr, APTR vi, struct Gadget **glist, int 
 {
     static const char *const left_words[] = { "Menus open", "From the bar", "At the pointer", "Bar delay", "Pointer delay", "Open on last",
                                               "Centre submenus", "Programs run on", "Keyboard", "R.Amiga+R.Alt", "Use OpenMenus", "They work",
-                                              "Colours", "Shadow", NULL };
-    static const char *const right_words[] = { "Colours", "Border", "Shadow", "Strength", "Background", "Picture", NULL };
+                                              "Colours", "Shadow", "Delays", "They show", "Selected", "Name at the top", NULL };
+    static const char *const right_words[] = { "Colours", "Border", "Shadow", "Background", "Picture", NULL };
     struct Gadget *g;
     struct NewGadget ng;
     int fh = scr->Font->ta_YSize, lh = fh + 6, bl = scr->WBorLeft, top = scr->WBorTop + fh + 1 + 6, row, row2, i;
@@ -468,9 +477,13 @@ static int make_gadgets(struct Screen *scr, APTR vi, struct Gadget **glist, int 
     int cw = widest(scr, open_labels) > widest(scr, use_labels) ? widest(scr, open_labels) : widest(scr, use_labels);
     int lw, rx0, rx, rg, bw, sw, hexw, chw, W;
     if (widest(scr, colours_labels) > cw) cw = widest(scr, colours_labels);
+    if (widest(scr, rcshow_labels) > cw) cw = widest(scr, rcshow_labels);
+    if (widest(scr, rcsel_labels) > cw) cw = widest(scr, rcsel_labels);
     lw = cw + 30;                                                /* and the cycle's mark */
     if (lw < 2 * cb + 16 + text_w(scr, "Mark them")) lw = 2 * cb + 16 + text_w(scr, "Mark them");
     if (lw < 2 * cb + 16 + text_w(scr, "Pointer up")) lw = 2 * cb + 16 + text_w(scr, "Pointer up");
+    if (lw < 2 * cb + 16 + text_w(scr, "Open on last")) lw = 2 * cb + 16 + text_w(scr, "Open on last");
+    if (lw < 2 * cb + 16 + text_w(scr, "Icon menus")) lw = 2 * cb + 16 + text_w(scr, "Icon menus");
     /* the right column: labels, then gadgets */
     rx0 = lx + lw + 16;
     rx = rx0 + widest(scr, right_words) + 8;
@@ -504,25 +517,41 @@ static int make_gadgets(struct Screen *scr, APTR vi, struct Gadget **glist, int 
         G(CYCLE_KIND, G_OPEN, lx, row, lw, lh, "Menus open", PLACETEXT_LEFT, GTCY_Labels, (ULONG)open_labels); row += lh + gp;
         G(CYCLE_KIND, G_FEEL, lx, row, lw, lh, "They work", PLACETEXT_LEFT, GTCY_Labels, (ULONG)use_labels); row += lh + gp;
         G(CYCLE_KIND, G_COLOURS, lx, row, lw, lh, "Colours", PLACETEXT_LEFT, GTCY_Labels, (ULONG)colours_labels); row += lh + gp;
-        G(CHECKBOX_KIND, G_SHADOW, lx, row, cb, lh, "Shadow", PLACETEXT_LEFT, GTCB_Scaled, TRUE); row += lh + 2 * gp;
+        G(CHECKBOX_KIND, G_SHADOW, lx, row, cb, lh, "Shadow", PLACETEXT_LEFT, GTCB_Scaled, TRUE); row += lh + gp;
+        G(CHECKBOX_KIND, G_RC, lx, row, cb, lh, "Icon menus", PLACETEXT_LEFT, GTCB_Scaled, TRUE); row += lh + 2 * gp;
         G(TEXT_KIND, G_THEME, bl + 8, row, lx + lw - look - 6 - (bl + 8), lh, NULL, 0, GTTX_Text, (ULONG)theme_line);
         G(BUTTON_KIND, G_LOOK, lx + lw - look, row, look, lh, "Look...", 0, GA_Disabled, FALSE); row += lh + 2 * gp;
         row2 += ph + 2 * gp;
         G(BUTTON_KIND, G_TAKEOVER, rx0, row2, pw, lh, "Take over MagicMenu's...", 0, GA_Disabled, FALSE); row2 += lh + 2 * gp;
         if (row2 > row) row = row2;
+        {
+            /* the right button elsewhere, in two lines under both columns */
+            static char note1[64], note2[64];
+            const char *cut = strstr(rc_note, " always");
+            int n = cut ? (int)(cut - rc_note) : 0;
+            if (n <= 0 || n >= (int)sizeof note1) n = 0;
+            memcpy(note1, rc_note, n); note1[n] = 0;
+            strncpy(note2, n ? cut + 1 : rc_note, sizeof note2 - 1);
+            G(TEXT_KIND, G_RCNOTE1, bl + 8, row, W - 16, fh + 2, NULL, 0, GTTX_Text, (ULONG)note1); row += fh + 2;
+            G(TEXT_KIND, G_RCNOTE2, bl + 8, row, W - 16, fh + 2, NULL, 0, GTTX_Text, (ULONG)note2); row += fh + 2 + gp;
+        }
     } else {
         /* the left column: how menus open, and the keys */
         G(CYCLE_KIND, G_OPEN, lx, row, lw, lh, "Menus open", PLACETEXT_LEFT, GTCY_Labels, (ULONG)open_labels); row += lh + gp;
         G(CYCLE_KIND, G_PDUSE, lx, row, lw, lh, "From the bar", PLACETEXT_LEFT, GTCY_Labels, (ULONG)use_labels); row += lh + gp;
         G(CYCLE_KIND, G_PUUSE, lx, row, lw, lh, "At the pointer", PLACETEXT_LEFT, GTCY_Labels, (ULONG)use_labels); row += lh + gp;
-        G(SLIDER_KIND, G_PDDELAY, lx, row, lw - slv, lh, "Bar delay", PLACETEXT_LEFT, GTSL_Min, 0, GTSL_Max, OM_DELAY_MAX,
-          GTSL_LevelFormat, (ULONG)"%2ld", GTSL_MaxLevelLen, 2, GTSL_LevelPlace, PLACETEXT_RIGHT, GA_RelVerify, TRUE); row += lh + gp;
-        G(SLIDER_KIND, G_PUDELAY, lx, row, lw - slv, lh, "Pointer delay", PLACETEXT_LEFT, GTSL_Min, 0, GTSL_Max, OM_DELAY_MAX,
-          GTSL_LevelFormat, (ULONG)"%2ld", GTSL_MaxLevelLen, 2, GTSL_LevelPlace, PLACETEXT_RIGHT, GA_RelVerify, TRUE); row += lh + gp;
-        G(CHECKBOX_KIND, G_LAST, lx, row, cb, lh, "Open on last", PLACETEXT_LEFT, GTCB_Scaled, TRUE); row += lh + gp / 2;
+        {
+            /* the bar's delay and the pointer's, side by side as the two rows above */
+            int dw = (lw - 2 * slv - 8) / 2;
+            G(SLIDER_KIND, G_PDDELAY, lx, row, dw, lh, "Delays", PLACETEXT_LEFT, GTSL_Min, 0, GTSL_Max, OM_DELAY_MAX,
+              GTSL_LevelFormat, (ULONG)"%2ld", GTSL_MaxLevelLen, 2, GTSL_LevelPlace, PLACETEXT_RIGHT, GA_RelVerify, TRUE);
+            G(SLIDER_KIND, G_PUDELAY, lx + dw + slv + 8, row, dw, lh, NULL, 0, GTSL_Min, 0, GTSL_Max, OM_DELAY_MAX,
+              GTSL_LevelFormat, (ULONG)"%2ld", GTSL_MaxLevelLen, 2, GTSL_LevelPlace, PLACETEXT_RIGHT, GA_RelVerify, TRUE); row += lh + gp;
+        }
         G(CHECKBOX_KIND, G_CENTRE, lx, row, cb, lh, "Centre submenus", PLACETEXT_LEFT, GTCB_Scaled, TRUE);
         G(CHECKBOX_KIND, G_MARK, lx + lw - cb, row, cb, lh, "Mark them", PLACETEXT_LEFT, GTCB_Scaled, TRUE); row += lh + gp / 2;
-        G(CHECKBOX_KIND, G_RUNNING, lx, row, cb, lh, "Programs run on", PLACETEXT_LEFT, GTCB_Scaled, TRUE); row += lh + 2 * gp;
+        G(CHECKBOX_KIND, G_RUNNING, lx, row, cb, lh, "Programs run on", PLACETEXT_LEFT, GTCB_Scaled, TRUE);
+        G(CHECKBOX_KIND, G_LAST, lx + lw - cb, row, cb, lh, "Open on last", PLACETEXT_LEFT, GTCB_Scaled, TRUE); row += lh + 2 * gp;
         G(CHECKBOX_KIND, G_KEYBOARD, lx, row, cb, lh, "Keyboard", PLACETEXT_LEFT, GTCB_Scaled, TRUE);
         G(STRING_KIND, G_KEY, lx + cb + 8, row, lw - cb - 8, lh, NULL, 0, GTST_MaxChars, 60); row += lh + gp / 2;
         G(CHECKBOX_KIND, G_RALT, lx, row, cb, lh, "R.Amiga+R.Alt", PLACETEXT_LEFT, GTCB_Scaled, TRUE);
@@ -535,18 +564,26 @@ static int make_gadgets(struct Screen *scr, APTR vi, struct Gadget **glist, int 
         G(STRING_KIND, G_HEX, rx + rg - hexw, row2, hexw, lh, NULL, 0, GTST_MaxChars, 7); row2 += lh + gp;
         G(CYCLE_KIND, G_BORDER, rx, row2, bw, lh, "Border", PLACETEXT_LEFT, GTCY_Labels, (ULONG)border_labels);
         G(CYCLE_KIND, G_SEPS, rx + rg - sw, row2, sw, lh, "Lines", PLACETEXT_LEFT, GTCY_Labels, (ULONG)seps_labels); row2 += lh + gp;
-        G(CHECKBOX_KIND, G_SHADOW, rx, row2, cb, lh, "Shadow", PLACETEXT_LEFT, GTCB_Scaled, TRUE);
-        G(SLIDER_KIND, G_SSIZE, rx + cb + 8, row2, rg - cb - 8 - slv, lh, NULL, 0, GTSL_Min, 1, GTSL_Max, OM_SHADOW_SIZE_MAX,
-          GTSL_LevelFormat, (ULONG)"%2ld", GTSL_MaxLevelLen, 3, GTSL_LevelPlace, PLACETEXT_RIGHT, GA_RelVerify, TRUE); row2 += lh + gp;
-        G(SLIDER_KIND, G_SSTRENGTH, rx + cb + 8, row2, rg - cb - 8 - slv, lh, "Strength", PLACETEXT_LEFT, GTSL_Min, 1, GTSL_Max, OM_SHADOW_STRENGTH_MAX,
-          GTSL_LevelFormat, (ULONG)"%3ld", GTSL_MaxLevelLen, 3, GTSL_LevelPlace, PLACETEXT_RIGHT, GA_RelVerify, TRUE); row2 += lh + gp;
+        {
+            /* the shadow, its size and its strength on one row */
+            int sx = rx + cb + 8, ssw = (rg - cb - 8 - 2 * slv - 8) / 2;
+            G(CHECKBOX_KIND, G_SHADOW, rx, row2, cb, lh, "Shadow", PLACETEXT_LEFT, GTCB_Scaled, TRUE);
+            G(SLIDER_KIND, G_SSIZE, sx, row2, ssw, lh, NULL, 0, GTSL_Min, 1, GTSL_Max, OM_SHADOW_SIZE_MAX,
+              GTSL_LevelFormat, (ULONG)"%2ld", GTSL_MaxLevelLen, 3, GTSL_LevelPlace, PLACETEXT_RIGHT, GA_RelVerify, TRUE);
+            G(SLIDER_KIND, G_SSTRENGTH, sx + ssw + slv + 8, row2, ssw, lh, NULL, 0, GTSL_Min, 1, GTSL_Max, OM_SHADOW_STRENGTH_MAX,
+              GTSL_LevelFormat, (ULONG)"%3ld", GTSL_MaxLevelLen, 3, GTSL_LevelPlace, PLACETEXT_RIGHT, GA_RelVerify, TRUE); row2 += lh + gp;
+        }
         G(CYCLE_KIND, G_BG, rx, row2, rg, lh, "Background", PLACETEXT_LEFT, GTCY_Labels, (ULONG)bg_labels); row2 += lh + gp;
         G(STRING_KIND, G_IMAGE, rx, row2, rg - chw - 6, lh, "Picture", PLACETEXT_LEFT, GTST_MaxChars, 250);
         G(BUTTON_KIND, G_CHOOSE, rx + rg - chw, row2, chw, lh, "Choose...", 0, GA_Disabled, FALSE); row2 += lh + 2 * gp;
+        G(BUTTON_KIND, G_TAKEOVER, rx0, row2, pw, lh, "Take over MagicMenu's...", 0, GA_Disabled, FALSE); row2 += lh + 2 * gp;
 
-        /* at the foot of the left column, which is the shorter */
-        G(CHECKBOX_KIND, G_ENABLED, lx, row, cb, lh, "Use OpenMenus", PLACETEXT_LEFT, GTCB_Scaled, TRUE); row += lh + gp;
-        G(BUTTON_KIND, G_TAKEOVER, bl + 8, row, lx + lw - (bl + 8), lh, "Take over MagicMenu's...", 0, GA_Disabled, FALSE); row += lh + 2 * gp;
+        /* at the foot of the left column: OpenMenus itself, and the right-click menus on icons and the desktop */
+        G(CHECKBOX_KIND, G_ENABLED, lx, row, cb, lh, "Use OpenMenus", PLACETEXT_LEFT, GTCB_Scaled, TRUE);
+        G(CHECKBOX_KIND, G_RC, lx + lw - cb, row, cb, lh, "Icon menus", PLACETEXT_LEFT, GTCB_Scaled, TRUE); row += lh + gp;
+        G(CYCLE_KIND, G_RCEXTRAS, lx, row, lw, lh, "They show", PLACETEXT_LEFT, GTCY_Labels, (ULONG)rcshow_labels); row += lh + gp;
+        G(CYCLE_KIND, G_RCSEL, lx, row, lw, lh, "Selected", PLACETEXT_LEFT, GTCY_Labels, (ULONG)rcsel_labels); row += lh + gp;
+        G(CHECKBOX_KIND, G_RCNAME, lx, row, cb, lh, "Name at the top", PLACETEXT_LEFT, GTCB_Scaled, TRUE); row += lh + 2 * gp;
         if (row2 > row) row = row2;
     }
     G(TEXT_KIND, G_STATUS, bl + 8, row, W - 16, lh, NULL, 0, GTTX_Text, (ULONG)status_text, GTTX_Border, TRUE); row += lh + gp + 2;
@@ -696,6 +733,13 @@ static int gui(void)
             }
             case G_BORDER: cur.border_double = code; break;
             case G_SEPS: cur.separators_bold = code; break;
+            case G_RC:
+                cur.rightclick = (gg->Flags & GFLG_SELECTED) != 0;
+                if (advanced) status(rc_note);
+                break;
+            case G_RCEXTRAS: cur.rightclick_extras = code; redraw = 0; break;
+            case G_RCSEL: cur.rightclick_selection = code; redraw = 0; break;
+            case G_RCNAME: cur.rightclick_name = (gg->Flags & GFLG_SELECTED) != 0; redraw = 0; break;
             case G_SHADOW: cur.shadow = (gg->Flags & GFLG_SELECTED) != 0; break;
             case G_SSIZE: cur.shadow_size = (WORD)code; break;
             case G_SSTRENGTH: cur.shadow_strength = (WORD)code; redraw = 0; break;
