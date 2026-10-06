@@ -149,9 +149,13 @@ static void tell(void)
     if ((p = FindPort((STRPTR)"OpenWindows")) && p->mp_SigTask) Signal((struct Task *)p->mp_SigTask, SIGBREAKF_CTRL_F);
     Permit();
     if (!p && (cur.snap || cur.switcher || cur.wheel || cur.places || cur.drawer_w)) {
-        BPTR nil = Open((STRPTR)"NIL:", MODE_NEWFILE);
-        if (SystemTags((STRPTR)TOOL, SYS_Input, nil, SYS_Output, NULL, SYS_Asynch, TRUE, NP_StackSize, 16384, TAG_DONE) == -1 && nil)
-            Close(nil);
+        BPTR in = Open((STRPTR)"NIL:", MODE_OLDFILE), out = Open((STRPTR)"NIL:", MODE_NEWFILE);
+        /* asynchronous: both handles are the new process's, closed when it ends;
+         * with no output handle, System() fails without a word */
+        if (!in || !out || SystemTags((STRPTR)TOOL, SYS_Input, in, SYS_Output, out, SYS_Asynch, TRUE, NP_StackSize, 16384, TAG_DONE) == -1) {
+            if (in) Close(in);
+            if (out) Close(out);
+        }
     }
 }
 

@@ -411,11 +411,15 @@ static void start(const od_button *b)
     if (b->kind == OD_AREXX) snprintf(cmd, sizeof cmd, "SYS:Rexxc/RX \"%s\"", b->command);
     else snprintf(cmd, sizeof cmd, "%s", b->command);
     {
-        BPTR in = Open((STRPTR)"NIL:", MODE_OLDFILE), old = 0, dir = b->dir[0] ? Lock((STRPTR)b->dir, ACCESS_READ) : 0;
+        /* asynchronous: both handles are the new process's, closed when it ends;
+         * with no output handle, System() fails without a word */
+        BPTR in = Open((STRPTR)"NIL:", MODE_OLDFILE), out = Open((STRPTR)"NIL:", MODE_NEWFILE), old = 0;
+        BPTR dir = b->dir[0] ? Lock((STRPTR)b->dir, ACCESS_READ) : 0;
         if (dir) old = CurrentDir(dir);
-        if (!in || SystemTags((STRPTR)cmd, SYS_Input, in, SYS_Output, 0, SYS_Asynch, TRUE,
-                              NP_StackSize, b->stack > 4096 ? b->stack : 4096, TAG_DONE) == -1) {
+        if (!in || !out || SystemTags((STRPTR)cmd, SYS_Input, in, SYS_Output, out, SYS_Asynch, TRUE,
+                                      NP_StackSize, b->stack > 4096 ? b->stack : 4096, TAG_DONE) == -1) {
             if (in) Close(in);
+            if (out) Close(out);
             DisplayBeep(scr);
         }
         if (dir) { CurrentDir(old); UnLock(dir); }

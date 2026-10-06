@@ -1413,8 +1413,13 @@ static void selected_paths(void)
 
 static void run_async(const char *cmd)
 {
-    BPTR nil = Open((STRPTR)"NIL:", MODE_NEWFILE);
-    if (SystemTags((STRPTR)cmd, SYS_Input, nil, SYS_Output, NULL, SYS_Asynch, TRUE, NP_StackSize, 32768, TAG_DONE) == -1 && nil) Close(nil);
+    /* asynchronous: both handles are the new process's, closed when it ends;
+     * with no output handle, System() fails without a word */
+    BPTR in = Open((STRPTR)"NIL:", MODE_OLDFILE), out = Open((STRPTR)"NIL:", MODE_NEWFILE);
+    if (!in || !out || SystemTags((STRPTR)cmd, SYS_Input, in, SYS_Output, out, SYS_Asynch, TRUE, NP_StackSize, 32768, TAG_DONE) == -1) {
+        if (in) Close(in);
+        if (out) Close(out);
+    }
 }
 
 static void do_action(int a)
