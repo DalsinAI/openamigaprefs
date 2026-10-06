@@ -42,6 +42,8 @@ static void test_round_trip(void)
     strcpy(a.colour[OM_C_SELECTED], "#12ab34");
     strcpy(a.key, "lalt space");
     strcpy(a.imported, "ENVARC:MagicMenu.prefs");
+    a.bar = OM_BAR_LEFT;
+    a.bar_autohide = 1;
     CHECK(om_write(&a, text, sizeof text) > 0);
     CHECK(om_parse(&b, text));
     {
@@ -51,6 +53,7 @@ static void test_round_trip(void)
     }
     CHECK(b.open == OM_OPEN_POPUP && b.use[OM_PU] == OM_USE_CLICK && b.delay[OM_PD] == 3);
     CHECK(b.background == OM_BG_SEEIMAGE && !strcmp(b.image, a.image) && !strcmp(b.key, "lalt space"));
+    CHECK(b.bar == OM_BAR_LEFT && b.bar_autohide == 1);
     CHECK(om_write(&a, text, 40) == -1);
 }
 
@@ -63,6 +66,11 @@ static void test_parse_tolerant(void)
     CHECK(!strcmp(p.colour[OM_C_TEXT], "#121825"));
     CHECK(p.delay[OM_PU] == 0);
     CHECK(!om_parse(&p, NULL) && p.enabled);
+    CHECK(p.bar == OM_BAR_TITLE && !p.bar_autohide);          /* the default: the screen's own title bar */
+    om_parse(&p, "bar Bottom\nbar.autohide on\n");
+    CHECK(p.bar == OM_BAR_BOTTOM && p.bar_autohide);
+    om_parse(&p, "bar sideways\n");
+    CHECK(p.bar == OM_BAR_TITLE);
 }
 
 static void test_magicmenu(const char *dir)
