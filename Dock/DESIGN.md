@@ -31,7 +31,8 @@ over the docks people already have. MIT, Copyright (c) 2026 Dalsin Limited.
   - **Names pop up** above the icon under the pointer, in a small box, as
     the Mac's do. The pointer is looked at ten times a second, only while
     the Workbench screen is in front.
-  - **A started program's icon hops**: 12 frames, one a video frame apart,
+  - **A started program's icon hops**: twice and a little, 20 steps two
+    video frames apart (about a second),
     in room kept above the shelf (on the side away from the edge).
   - What is behind the dock is copied from the screen as the dock opens
     (and again whenever it opens anew: new settings, a button added or
