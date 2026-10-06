@@ -660,6 +660,10 @@ static int gui(void)
                 }
             }
             if (id < 0) continue;
+            /* settings kept for a later engine: OpenMenus 0.1 doesn't use them yet (DESIGN.md) */
+            if (id == G_PDDELAY || id == G_PUDELAY || id == G_LAST || id == G_KEYBOARD || id == G_KEY || id == G_RALT ||
+                id == G_TOP || id == G_IMAGE || id == G_CHOOSE || (id == G_BG && code != OM_BG_SOLID))
+                status("Kept for later: OpenMenus 0.1 has no keyboard, delays, see-through, images or open on last.");
             switch (id) {
             case G_OPEN: cur.open = code; break;
             case G_PDUSE: cur.use[OM_PD] = code; break;
