@@ -16,7 +16,12 @@
  * or by where the pointer is; hold and release, sticky on move, sticky on
  * click; submenus with an arrow; check marks and mutual exclusion; command
  * keys; ghosted items; MENUVERIFY asked first, as Intuition does; a shadow.
- * Not yet: keyboard control, opening delays, see-through and pictures.
+ * 0.3: keyboard control (Menus/DESIGN.md, KEYBOARD_CONTROL.md): keyboard.key
+ * (Right Amiga + Space) or Right Amiga + Right Alt opens the active window's
+ * menus from the bar; arrows, type-ahead, Return, Space, Esc and Help work
+ * them, and work a menu opened with the mouse too. Where a key moves the
+ * highlight is src/om_kbd.c, tested on the host.
+ * Not yet: opening delays, see-through and pictures.
  *
  * Safe against a program changing its menus while one is open: the strip is
  * copied when the menu opens, and before a choice is given or a check mark
@@ -47,6 +52,7 @@
 #include <dos/dostags.h>
 #include <libraries/asl.h>
 #include <proto/asl.h>
+#include <proto/keymap.h>
 
 #include <string.h>
 #include <stdarg.h>
@@ -55,9 +61,10 @@
 #include <stdlib.h>
 
 #include "om_prefs.h"
+#include "om_kbd.h"
 #include "ogt_theme.h"
 
-static const char version[] = "$VER: OpenMenus 0.2 (6.10.2026) MIT, Copyright (c) 2026 Dalsin Limited";
+static const char version[] = "$VER: OpenMenus 0.3 (6.10.2026) MIT, Copyright (c) 2026 Dalsin Limited";
 
 #define PREFS_ENV "ENV:OpenMenus/Menus"
 #define LOOK_ENV "ENV:OpenGadTools/Look"
@@ -69,6 +76,7 @@ struct Library *CxBase, *LayersBase;
 struct Device *TimerBase;
 struct RxsLib *RexxSysBase;
 struct Library *AslBase;
+struct Library *KeymapBase;
 
 /* ---- files and settings --------------------------------------------------- */
 
@@ -92,6 +100,8 @@ static char *read_file(const char *path)
 static om_prefs prefs;                   /* static: Run gives a commodity 4 KB of stack */
 static ogt_theme theme;
 static int theme_loaded, theme_dark, lite_on;
+static IX kbd_ix;                        /* keyboard.key, parsed */
+static volatile int kbd_ix_ok;
 
 static void read_settings(void)
 {
@@ -111,6 +121,8 @@ static void read_settings(void)
         DateStamp(&ds);
         theme_dark = ds.ds_Minute / 60 >= 19 || ds.ds_Minute / 60 < 7;
     }
+    kbd_ix_ok = 0;
+    if (prefs.keyboard && prefs.key[0] && ParseIX((STRPTR)prefs.key, &kbd_ix) == 0) kbd_ix_ok = 1;
     snprintf(path, sizeof path, THEME_DIR "/%s.theme", name);
     if ((t = read_file(path))) {
         if (ogt_theme_parse(&theme, t, err, sizeof err)) theme_loaded = 1;
@@ -126,10 +138,39 @@ static volatile int on = 1, session, cancelled;
 static volatile int rbutton, lbutton, rdown_seen, ldown_seen, moved;
 static volatile WORD start_x, start_y;
 static struct Window *volatile rc_window;        /* the Workbench window right-clicked (session 2) */
+static volatile int kbd_session;                  /* the menus were opened by a key */
+
+/* Keys pressed while a menu is open, for the menu's own task (MapRawKey there). */
+#define KQ 16
+static volatile UWORD kq_code[KQ], kq_qual[KQ];
+static volatile int kq_head, kq_tail;
+
+static void kq_put(UWORD code, UWORD qual)
+{
+    int n = (kq_head + 1) % KQ;
+    if (n == kq_tail) return;                    /* full: the key is dropped */
+    kq_code[kq_head] = code; kq_qual[kq_head] = qual;
+    kq_head = n;
+}
 
 static int menu_window(struct Window *w)
 {
     return w && w->MenuStrip && !(w->Flags & WFLG_RMBTRAP) && w->WScreen == IntuitionBase->FirstScreen;
+}
+
+/* By key, RMBTRAP doesn't matter: it is about the right button, not the menus. */
+static int kbd_window(struct Window *w)
+{
+    return w && w->MenuStrip && w->WScreen == IntuitionBase->FirstScreen;
+}
+
+/* keyboard.key, or Right Amiga + Right Alt pressed together (either first). */
+static int kbd_opens(struct InputEvent *ie)
+{
+    if (!prefs.keyboard || (ie->ie_Code & IECODE_UP_PREFIX)) return 0;
+    if (kbd_ix_ok && MatchIX(ie, &kbd_ix)) return 1;
+    return prefs.keyboard_ralt && ((ie->ie_Code == 0x65 && (ie->ie_Qualifier & IEQUALIFIER_RCOMMAND)) ||
+                                   (ie->ie_Code == 0x67 && (ie->ie_Qualifier & IEQUALIFIER_RALT)));
 }
 
 static void custom(CxMsg *msg, CxObj *co)
@@ -138,6 +179,18 @@ static void custom(CxMsg *msg, CxObj *co)
     (void)co;
     if (!on || !prefs.enabled) return;
     for (; ie; ie = ie->ie_NextEvent) {
+        if (!session && ie->ie_Class == IECLASS_RAWKEY) {
+            /* no menus (or OpenMenus off): the key goes on to the program */
+            if (kbd_opens(ie) && kbd_window(IntuitionBase->ActiveWindow)) {
+                struct Screen *s = IntuitionBase->FirstScreen;
+                kq_head = kq_tail = 0;
+                session = 1; kbd_session = 1; rbutton = lbutton = 0; rdown_seen = ldown_seen = moved = 0;
+                start_x = s->MouseX; start_y = s->MouseY;
+                ie->ie_Class = IECLASS_NULL;
+                Signal(me, sig_start);
+            }
+            continue;
+        }
         if (ie->ie_Class == IECLASS_RAWMOUSE) {
             UWORD code = ie->ie_Code;
             if (!session) {
@@ -174,8 +227,9 @@ static void custom(CxMsg *msg, CxObj *co)
             else if (code == (IECODE_LBUTTON | IECODE_UP_PREFIX)) { lbutton = 0; ie->ie_Class = IECLASS_NULL; }
             else moved = 1;
             Signal(me, sig_event);
-        } else if (session && ie->ie_Class == IECLASS_RAWKEY && (ie->ie_Code & 0x7f) == 0x45) {
-            if (!(ie->ie_Code & IECODE_UP_PREFIX)) { cancelled = 1; Signal(me, sig_event); }  /* Esc */
+        } else if (session && ie->ie_Class == IECLASS_RAWKEY) {
+            /* a menu is open: every key is OpenMenus', none reaches the program behind it */
+            if (!(ie->ie_Code & IECODE_UP_PREFIX)) { kq_put(ie->ie_Code, ie->ie_Qualifier); Signal(me, sig_event); }
             ie->ie_Class = IECLASS_NULL;
         }
     }
@@ -668,12 +722,12 @@ static int verify(struct Window *w)
     return 1;                                 /* no answer: Intuition goes on too */
 }
 
-/* The choice, and the check marks, put in the window's own strip as it is now. */
-static void pick(struct Window *w, int mi, int ii, int si)
+/* The choice's check marks, put in the window's own strip as it is now; its
+ * menu number, or MENUNULL when the program changed its menus meanwhile. */
+static UWORD mark(struct Window *w, int mi, int ii, int si)
 {
     struct MenuItem *it = mi >= 0 ? live_item(w, target_strip, mi, ii, si) : NULL;
     UWORD code = MENUNULL;
-    struct IntuiMessage *m;
     if (it) {
         if (it->Flags & CHECKIT) {
             if (it->Flags & MENUTOGGLE) it->Flags ^= CHECKED;
@@ -688,8 +742,172 @@ static void pick(struct Window *w, int mi, int ii, int si)
         it->NextSelect = MENUNULL;
         code = (UWORD)FULLMENUNUM(mi, ii, si >= 0 ? si : NOSUB);
     }
+    return code;
+}
+
+/* The choices made with Space (kept open), then the last one. */
+static UWORD chain[16];
+static int nchain;
+
+/* One IDCMP_MENUPICK for everything chosen: the first number, the rest as
+ * Intuition's multi-select gives them, through each item's NextSelect. */
+static void send_pick(struct Window *w)
+{
+    struct IntuiMessage *m;
+    for (int i = 0; i < nchain; i++) {
+        struct MenuItem *it = ItemAddress(w->MenuStrip, chain[i]);
+        if (it) it->NextSelect = i + 1 < nchain ? chain[i + 1] : MENUNULL;
+    }
     if (!w->UserPort || !(w->IDCMPFlags & IDCMP_MENUPICK)) return;
-    if ((m = new_msg(w, IDCMP_MENUPICK, code))) { out_msgs++; PutMsg(w->UserPort, (struct Message *)m); }
+    if ((m = new_msg(w, IDCMP_MENUPICK, nchain ? chain[0] : MENUNULL))) { out_msgs++; PutMsg(w->UserPort, (struct Message *)m); }
+}
+
+static void pick(struct Window *w, int mi, int ii, int si)
+{
+    UWORD code = mark(w, mi, ii, si);
+    if (code != MENUNULL && nchain < 16) chain[nchain++] = code;
+    send_pick(w);
+}
+
+/* Help for an item, to a window that asked for it (WA_MenuHelp, V39). */
+static void send_help(struct Window *w, int mi, int ii, int si)
+{
+    struct IntuiMessage *m;
+    if (!w->UserPort || !(w->IDCMPFlags & IDCMP_MENUHELP)) return;
+    if ((m = new_msg(w, IDCMP_MENUHELP, (UWORD)FULLMENUNUM(mi, ii, si >= 0 ? si : NOSUB)))) { out_msgs++; PutMsg(w->UserPort, (struct Message *)m); }
+}
+
+/* ---- the keys (where a key goes is om_kbd.c) ---------------------------------------------------- */
+
+static omk_menu km[MAX_MENUS];
+static omk_item ki[MAX_POOL];
+
+/* The copied strip as the keys see it. */
+static void kbd_model(omk_model *m)
+{
+    for (int mi = 0; mi < ncmenus; mi++) {
+        struct cmenu *c = &cmenus[mi];
+        km[mi].name = c->name; km[mi].enabled = (c->flags & MENUENABLED) != 0; km[mi].nitems = c->nitems;
+        km[mi].items = c->nitems ? &ki[c->items - pool] : NULL;
+        for (int ii = 0; ii < c->nitems; ii++) {
+            struct citem *list[2] = { &c->items[ii], NULL };
+            for (int si = -1; si < (int)c->items[ii].nsubs; si++) {
+                struct citem *e = si < 0 ? list[0] : &c->items[ii].subs[si];
+                omk_item *k = &ki[e - pool];
+                k->name = (e->flags & ITEMTEXT) && e->ntexts ? e->text[0].s : "";
+                k->command = (e->flags & COMMSEQ) ? e->command : 0;
+                k->enabled = (e->flags & ITEMENABLED) && !(e->flags & (OM_HEADER | OM_SEPARATOR));
+                k->checkit = (e->flags & CHECKIT) != 0;
+                k->nsubs = si < 0 ? e->nsubs : 0;
+                k->subs = si < 0 && e->subs ? &ki[e->subs - pool] : NULL;
+            }
+        }
+    }
+    m->nmenus = ncmenus; m->menus = km;
+}
+
+/* Where the highlight is, from the panels: with titles (a menu strip) panel 0
+ * is the bar, else (a Workbench right-click menu) it is the items. */
+static void kbd_pos(omk_pos *p, int titles)
+{
+    int base = titles ? 1 : 0;
+    p->menu = titles ? (panels[0].hot >= 0 ? panels[0].hot : 0) : 0;
+    p->item = npanels > base ? panels[base].hot : -1;
+    p->sub = npanels > base + 1 ? panels[base + 1].hot : -1;
+}
+
+/* The panels made to show p: the highlight looks just as the mouse's does. */
+static void kbd_show(const omk_pos *p, int titles)
+{
+    int base = titles ? 1 : 0;
+    if (titles) {
+        if (panels[0].hot != p->menu) { close_panel(1); set_hot(0, p->menu); }
+        if (npanels < 2 && (cmenus[p->menu].flags & MENUENABLED)) open_items(p->menu);
+        if (npanels < 2) return;
+    }
+    if (panels[base].hot != p->item) { close_panel(base + 1); set_hot(base, p->item); }
+    if (p->sub >= 0) {
+        if (npanels < base + 2) open_subs(p->menu, p->item);
+        if (npanels >= base + 2) set_hot(base + 1, p->sub);
+    } else close_panel(base + 1);
+}
+
+/* Space on a check mark: chosen now, the menu stays open and shows the new marks. */
+static void kbd_stay(const omk_pos *p)
+{
+    struct MenuItem *live;
+    struct citem *list;
+    int n;
+    UWORD code = mark(target, p->menu, p->item, p->sub);
+    if (code == MENUNULL) return;
+    if (nchain < 16) chain[nchain++] = code;
+    /* the copies take the marks the strip has now (mutual exclusion clears others) */
+    live = p->sub >= 0 ? live_item(target, target_strip, p->menu, p->item, -1)->SubItem : live_item(target, target_strip, p->menu, 0, -1);
+    list = p->sub >= 0 ? cmenus[p->menu].items[p->item].subs : cmenus[p->menu].items;
+    n = p->sub >= 0 ? cmenus[p->menu].items[p->item].nsubs : cmenus[p->menu].nitems;
+    for (int i = 0; live && i < n; live = live->NextItem, i++) list[i].flags = (list[i].flags & ~CHECKED) | (live->Flags & CHECKED);
+    draw_panel(&panels[npanels - 1]);
+}
+
+/* The keys pressed since last time. 1 when the menus close: *mi the choice
+ * (-1 none), *help 1 when it is Help for it. */
+static int kbd_keys(int titles, int *mi, int *ii, int *si, int *help)
+{
+    while (kq_tail != kq_head) {
+        UWORD code = kq_code[kq_tail], qual = kq_qual[kq_tail];
+        int key = -1, ch = 0, r;
+        omk_model m;
+        omk_pos p;
+        kq_tail = (kq_tail + 1) % KQ;
+        switch (code) {
+        case 0x4C: key = (qual & (IEQUALIFIER_LSHIFT | IEQUALIFIER_RSHIFT)) ? OMK_FIRST : OMK_UP; break;
+        case 0x4D: key = (qual & (IEQUALIFIER_LSHIFT | IEQUALIFIER_RSHIFT)) ? OMK_LAST : OMK_DOWN; break;
+        case 0x4E: key = OMK_RIGHT; break;
+        case 0x4F: key = OMK_LEFT; break;
+        case 0x44: case 0x43: key = OMK_RETURN; break;
+        case 0x40: key = OMK_SPACE; break;
+        case 0x45: key = OMK_ESC; break;
+        case 0x5F: key = OMK_HELP; break;
+        case 0x42: key = OMK_TAB; break;
+        default: {
+            /* a letter: through the keymap, so it follows the user's keyboard */
+            struct InputEvent ev;
+            char buf[4];
+            memset(&ev, 0, sizeof ev);
+            ev.ie_Class = IECLASS_RAWKEY; ev.ie_Code = code;
+            ev.ie_Qualifier = qual & ~(IEQUALIFIER_LCOMMAND | IEQUALIFIER_RCOMMAND);
+            if (KeymapBase && MapRawKey(&ev, (STRPTR)buf, sizeof buf, NULL) == 1 && (UBYTE)buf[0] > ' ') {
+                ch = (UBYTE)buf[0];
+                key = (qual & (IEQUALIFIER_LCOMMAND | IEQUALIFIER_RCOMMAND)) ? OMK_COMMAND : OMK_CHAR;
+            }
+        } }
+        if (key < 0 || !npanels) continue;
+        kbd_model(&m);
+        kbd_pos(&p, titles);
+        r = omk_key(&m, &p, key, ch);
+        switch (r) {
+        case OMK_MOVED: case OMK_OPEN_SUB: case OMK_CLOSE_LEVEL: kbd_show(&p, titles); break;
+        case OMK_CHOOSE_STAY: if (titles) kbd_stay(&p); break;
+        case OMK_CHOOSE: *mi = p.menu; *ii = p.item; *si = p.sub; return 1;
+        case OMK_HELP_ITEM: *mi = p.menu; *ii = p.item; *si = p.sub; *help = 1; return 1;
+        case OMK_CLOSE_ALL: *mi = -1; return 1;
+        }
+    }
+    return 0;
+}
+
+/* keyboard.top: the pointer to the screen bar, over the title that is open. */
+static void pointer_to_bar(int mi)
+{
+    struct InputEvent ev;
+    struct IEPointerPixel pp;
+    memset(&ev, 0, sizeof ev);
+    pp.iepp_Screen = scr;
+    pp.iepp_Position.X = cmenus[mi].left + scr->BarHBorder + 4;
+    pp.iepp_Position.Y = scr->BarHeight / 2;
+    ev.ie_Class = IECLASS_NEWPOINTERPOS; ev.ie_SubClass = IESUBCLASS_PIXEL;
+    ev.ie_EventAddress = (APTR)&pp;
+    AddIEvents(&ev);
 }
 
 /* ---- a menu, from the button going down to the choice ------------------------------------------ */
@@ -701,18 +919,20 @@ static void menu_session(void)
 {
     struct Window *w = IntuitionBase->ActiveWindow;
     WORD mx, my;
-    int mode, use, sticky = 0, done = 0, mi = -1, ii = -1, si = -1, any_moved = 0;
+    int mode, use, sticky = 0, done = 0, mi = -1, ii = -1, si = -1, any_moved = 0, help = 0, kbd = kbd_session;
     ULONG s0, m0, s1, m1;
-    if (!menu_window(w)) { session = 0; return; }
+    nchain = 0;
+    if (!(kbd ? kbd_window(w) : menu_window(w))) { session = 0; kbd_session = 0; return; }
     target = w; target_strip = w->MenuStrip;
-    if (!verify(w) || !copy_strip(target_strip)) { session = 0; return; }
+    if (!verify(w) || !copy_strip(target_strip)) { session = 0; kbd_session = 0; return; }
     scr = w->WScreen;
-    if (!(dri = GetScreenDrawInfo(scr))) { session = 0; return; }
+    if (!(dri = GetScreenDrawInfo(scr))) { session = 0; kbd_session = 0; return; }
     font = OpenFont(scr->Font);
     if (!font) font = dri->dri_Font;
     choose_pens();
     mx = start_x; my = start_y;
     mode = prefs.open == OM_OPEN_POINTER ? (my <= scr->BarHeight ? OM_OPEN_PULLDOWN : OM_OPEN_POPUP) : prefs.open;
+    if (kbd) { mode = OM_OPEN_PULLDOWN; sticky = 1; }  /* by key, always from the bar, nothing held */
     use = prefs.use[mode == OM_OPEN_PULLDOWN ? OM_PD : OM_PU];
     npanels = 0;
     if (mode == OM_OPEN_PULLDOWN) {
@@ -726,7 +946,15 @@ static void menu_session(void)
         open_panel(1, -1, -1, mx - 8, my - lh / 2 - 3, wmax + 30, ncmenus * lh + 6, 0, 3);
     }
     if (!npanels) goto out;
-    follow(mx, my);
+    if (kbd) {                                        /* on the first title, its items open */
+        omk_model m;
+        int first;
+        kbd_model(&m);
+        first = omk_first_menu(&m);
+        set_hot(0, first);
+        if (cmenus[first].flags & MENUENABLED) open_items(first);
+        if (prefs.keyboard_top) pointer_to_bar(first);
+    } else follow(mx, my);
     CurrentTime(&s0, &m0);
     while (!done) {
         ULONG got = Wait(sig_event | (1UL << tport->mp_SigBit) | SIGBREAKF_CTRL_C);
@@ -737,6 +965,10 @@ static void menu_session(void)
         }
         reap();
         if (cancelled || (got & SIGBREAKF_CTRL_C)) { mi = -1; break; }
+        if (kq_tail != kq_head) {
+            if (kbd_keys(1, &mi, &ii, &si, &help)) break;
+            sticky = 1; rdown_seen = ldown_seen = 0;  /* a key was used: the menu stays until it is done */
+        }
         if (scr->MouseX != mx || scr->MouseY != my) {
             if (abs(scr->MouseX - start_x) > 3 || abs(scr->MouseY - start_y) > 3) any_moved = 1;
             mx = scr->MouseX; my = scr->MouseY;
@@ -757,7 +989,12 @@ static void menu_session(void)
     }
 out:
     close_panel(0);
-    if (is_window(target)) pick(target, mi, ii, si);   /* not if the program closed it meanwhile */
+    if (is_window(target)) {                           /* not if the program closed it meanwhile */
+        if (help) { if (nchain) send_pick(target); send_help(target, mi, ii, si); }
+        else pick(target, mi, ii, si);
+    }
+    nchain = 0;
+    kbd_session = 0;
     free_pens();
     if (font && font != dri->dri_Font) CloseFont(font);
     font = NULL;
@@ -1146,6 +1383,11 @@ static void rc_session(void)
             SendIO((struct IORequest *)tr);
         }
         if (cancelled || (got & SIGBREAKF_CTRL_C)) { mi = -1; break; }
+        if (kq_tail != kq_head) {
+            int help = 0;
+            if (kbd_keys(0, &mi, &ii, &si, &help)) { if (help) mi = -1; break; }
+            sticky = 1;                               /* a key was used: the menu stays until it is done */
+        }
         if (scr->MouseX != mx || scr->MouseY != my) {
             if (abs(scr->MouseX - start_x) > 3 || abs(scr->MouseY - start_y) > 3) any_moved = 1;
             mx = scr->MouseX; my = scr->MouseY;
@@ -1184,7 +1426,7 @@ out:
 /* ---- the commodity ----------------------------------------------------------------------------- */
 
 static struct NewBroker nb = {
-    NB_VERSION, (STRPTR)"OpenMenus", (STRPTR)"OpenMenus 0.2", (STRPTR)"The Open family's own menus",
+    NB_VERSION, (STRPTR)"OpenMenus", (STRPTR)"OpenMenus 0.3", (STRPTR)"The Open family's own menus",
     NBU_UNIQUE | NBU_NOTIFY, 0, 0, NULL, 0
 };
 
@@ -1199,6 +1441,7 @@ int main(void)
     GfxBase = (struct GfxBase *)OpenLibrary((STRPTR)"graphics.library", 39);
     LayersBase = OpenLibrary((STRPTR)"layers.library", 39);
     CxBase = OpenLibrary((STRPTR)"commodities.library", 39);
+    KeymapBase = OpenLibrary((STRPTR)"keymap.library", 37);
     if (!IntuitionBase || !GfxBase || !LayersBase || !CxBase) goto out;
     me = FindTask(NULL);
     if ((s1 = AllocSignal(-1)) < 0 || (s2 = AllocSignal(-1)) < 0) goto out;
@@ -1260,6 +1503,7 @@ out:
     if (theme_loaded) ogt_theme_free(&theme);
     if (RexxSysBase) CloseLibrary((struct Library *)RexxSysBase);
     if (AslBase) CloseLibrary(AslBase);
+    if (KeymapBase) CloseLibrary(KeymapBase);
     if (CxBase) CloseLibrary(CxBase);
     if (LayersBase) CloseLibrary(LayersBase);
     if (GfxBase) CloseLibrary((struct Library *)GfxBase);
