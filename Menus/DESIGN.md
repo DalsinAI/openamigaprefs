@@ -149,6 +149,28 @@ and a pop-up that opens on the item last chosen. The sticky modes are written
 but not yet tested. The Menus editor keeps these settings, and changing one
 says on its status line that OpenMenus 0.1 keeps it for later.
 
+## Keyboard control (0.3)
+
+`keyboard.key` (Right Amiga + Space) or Right Amiga + Right Alt opens the
+active window's menus from the bar, on the first title. Left and Right move
+between titles (Right on an item with a submenu opens it, Left closes it),
+Up and Down between the items that can be chosen (Shift for the first and
+last), a letter moves to the next item starting with it, Right Amiga + a
+letter chooses by command key, Return chooses, Space chooses a check mark
+and keeps the menu open (the choices go as one NextSelect chain), Esc closes
+one level and Help sends IDCMP_MENUHELP. The same keys work a menu opened
+with the mouse, and the mouse takes over from the keys at once. While a menu
+is open every key is OpenMenus'; with no menu strip the key goes on to the
+program. Where a key moves the highlight is `src/om_kbd.c`, tested on the
+host by `tests/test_om_kbd.c`. Design: KEYBOARD_CONTROL.md (6 October 2026).
+
+Tried on OS 3.2.3 (OpenRTG off, Picasso96), 6 October 2026: Right Amiga +
+Space opened Workbench's menus; Down, Right, Return on Open volume > RAM Disk
+opened it; "u" in Window moved to Update; Space on Backdrop? set the check
+and kept the menu open, and Esc then switched Workbench to backdrop; Right
+Amiga + B in the open menu switched it back; the mouse took over from the
+keys and the keys from the mouse.
+
 ### Right-click on icons and the desktop (OpenMenus 0.2)
 
 The design Dale approved on 6 October 2026 ("build it"). The right button on
@@ -208,6 +230,5 @@ so it is 251 lines high (Topaz 8) wherever it is measured.
 ## Next
 
 
-- In the engine: keyboard control, the opening delays, see-through and
-  pictures, and a pop-up opening on the item last chosen. The editor keeps
-  these settings already.
+- In the engine: the opening delays, see-through and pictures, and a pop-up
+  opening on the item last chosen. The editor keeps these settings already.
