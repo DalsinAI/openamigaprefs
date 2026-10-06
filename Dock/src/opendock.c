@@ -26,6 +26,7 @@
 #include <intuition/intuitionbase.h>
 #include <intuition/imageclass.h>
 #include <libraries/gadtools.h>
+#include <graphics/gfxmacros.h>
 #include <workbench/workbench.h>
 #include <workbench/startup.h>
 #include <workbench/icon.h>
@@ -34,6 +35,7 @@
 #include <proto/dos.h>
 #include <proto/intuition.h>
 #include <proto/graphics.h>
+#include <proto/layers.h>
 #include <proto/gadtools.h>
 #include <proto/icon.h>
 #include <proto/wb.h>
@@ -234,17 +236,34 @@ static void start(const od_button *b)
     }
 }
 
-/* ---- the window ------------------------------------------------------------------------------- */
+/* ---- the window -------------------------------------------------------------------------------
+ *
+ * Like the Mac's: a shelf along the edge, see-through (frosted by default),
+ * with room above it for an icon to hop when its program starts. What is
+ * behind the dock is copied from the screen as the dock opens, so seeing
+ * through costs one blit and never reads the screen again; everything is
+ * drawn into a bitmap of the window's size and copied in at once, so
+ * nothing flickers. */
+
+#define HOP_ROOM 10                                /* the hop's height, outside the shelf */
+
+static struct BitMap *behind, *back;               /* the screen behind the dock; the drawing */
+static struct RastPort brp;
+static int room, bx, by;                           /* hop room; where the first cell starts */
+static struct Window *bubble;
+static int bubble_for = -1;
+static void bubble_off(void);
 
 static int item_size(int i) { return dock.b[i].kind == OD_SEPARATOR ? SEP_W : (standing ? cellh : cellw); }
 
 /* The button under a point in the window, or -1. */
 static int hit(int x, int y)
 {
-    int pos = 4, at = standing ? y : x;
-    (void)(standing ? x : y);
+    int pos = standing ? by : bx, at = standing ? y : x, across = standing ? x - bx : y - by;
+    if (across < 0 || across >= (standing ? cellw : cellh)) return -1;
     for (int i = 0; i < dock.n; i++) {
         int s = item_size(i);
+        if (win && pos + s > (standing ? win->Height : win->Width) - 4) break;   /* past the edge: not drawn */
         if (at >= pos && at < pos + s) return dock.b[i].kind == OD_SEPARATOR ? -1 : i;
         pos += s;
     }
@@ -265,11 +284,15 @@ static void layout(int *w, int *h)
         }
     cellw = big;
     cellh = big + label + 4;                       /* and the running mark */
+    room = dock.hop ? HOP_ROOM : 0;
     along = 8;
     for (int i = 0; i < dock.n; i++) along += item_size(i);
     if (along < 8 + cellw) along = 8 + cellw;
-    if (standing) { *w = cellw + 8; *h = along; }
-    else { *w = along; *h = cellh + 8; }
+    /* the hop room is on the side away from the edge */
+    bx = 4 + (dock.place == OD_RIGHT ? room : 0);
+    by = 4 + (dock.place == OD_BOTTOM ? room : 0);
+    if (standing) { *w = cellw + 8 + room; *h = along; }
+    else { *w = along; *h = cellh + 8 + room; }
     if (*w > scr->Width) *w = scr->Width;
     if (*h > scr->Height) *h = scr->Height;
 }
@@ -284,33 +307,66 @@ static void place_of(int w, int h, int *x, int *y)
     }
 }
 
-static void draw(void)
+/* The shelf: the window less the hop room. */
+static void shelf(int W, int H, int *x0, int *y0, int *x1, int *y1)
 {
-    struct RastPort *rp = win->RPort;
+    *x0 = dock.place == OD_RIGHT ? room : 0;
+    *y0 = dock.place == OD_BOTTOM ? room : 0;
+    *x1 = W - 1 - (dock.place == OD_LEFT ? room : 0);
+    *y1 = H - 1 - (dock.place == OD_TOP ? room : 0);
+}
+
+/* Everything, into the drawing, with button lift (if any) raised by lift pixels. */
+static void render(int lifted, int lift)
+{
+    struct RastPort *rp = &brp;
     struct DrawInfo *dri = GetScreenDrawInfo(scr);
     UWORD *pens = dri ? dri->dri_Pens : NULL;
-    int W = win->Width, H = win->Height, pos = 4;
+    int W = win->Width, H = win->Height, pos = standing ? by : bx, x0, y0, x1, y1;
     int bg = pens ? pens[BACKGROUNDPEN] : 0, shine = pens ? pens[SHINEPEN] : 2, shadow = pens ? pens[SHADOWPEN] : 1;
     int text = pens ? pens[TEXTPEN] : 1, fill = pens ? pens[FILLPEN] : 3;
-    SetAPen(rp, bg); RectFill(rp, 0, 0, W - 1, H - 1);
-    SetAPen(rp, shine); Move(rp, 0, H - 1); Draw(rp, 0, 0); Draw(rp, W - 1, 0);
-    SetAPen(rp, shadow); Draw(rp, W - 1, H - 1); Draw(rp, 1, H - 1);
+    static UWORD frost[2] = { 0x5555, 0xaaaa };
+    shelf(W, H, &x0, &y0, &x1, &y1);
+    SetDrMd(rp, JAM1);
+    /* behind the dock, then the shelf: rounded by leaving its corners see-through */
+    if (behind) BltBitMap(behind, 0, 0, rp->BitMap, 0, 0, W, H, 0xc0, 0xff, NULL);
+    else { SetAPen(rp, bg); RectFill(rp, 0, 0, W - 1, H - 1); }
+    if (dock.background != OD_BG_CLEAR || !behind) {
+        SetAPen(rp, dock.background == OD_BG_GLASS && behind ? shine : bg);
+        if (dock.background == OD_BG_GLASS && behind) SetAfPt(rp, frost, 1);
+        RectFill(rp, x0 + 2, y0, x1 - 2, y1);
+        RectFill(rp, x0, y0 + 2, x0 + 1, y1 - 2);
+        RectFill(rp, x1 - 1, y0 + 2, x1, y1 - 2);
+        RectFill(rp, x0 + 1, y0 + 1, x0 + 1, y1 - 1);
+        RectFill(rp, x1 - 1, y0 + 1, x1 - 1, y1 - 1);
+        SetAfPt(rp, NULL, 0);
+    }
+    SetAPen(rp, shine); Move(rp, x0, y1 - 2); Draw(rp, x0, y0 + 2); Draw(rp, x0 + 2, y0); Draw(rp, x1 - 2, y0);
+    SetAPen(rp, shadow); Move(rp, x1 - 1, y0 + 1); Draw(rp, x1, y0 + 2); Draw(rp, x1, y1 - 2); Draw(rp, x1 - 2, y1); Draw(rp, x0 + 2, y1);
+    Draw(rp, x0 + 1, y1 - 1);
     for (int i = 0; i < dock.n; i++) {
-        int s = item_size(i), x = standing ? 4 : pos, y = standing ? pos : 4;
+        int s = item_size(i), x = standing ? bx : pos, y = standing ? pos : by;
         od_button *b = &dock.b[i];
+        /* the drawing has no layer to clip it: a dock longer than the screen stops at its edge */
+        if (pos + s > (standing ? H : W) - 4) break;
         if (b->kind == OD_SEPARATOR) {
             SetAPen(rp, shadow);
-            if (standing) { Move(rp, 6, y + s / 2 - 1); Draw(rp, W - 7, y + s / 2 - 1); }
-            else { Move(rp, x + s / 2 - 1, 6); Draw(rp, x + s / 2 - 1, H - 7); }
+            if (standing) { Move(rp, x0 + 6, y + s / 2 - 1); Draw(rp, x1 - 6, y + s / 2 - 1); }
+            else { Move(rp, x + s / 2 - 1, y0 + 6); Draw(rp, x + s / 2 - 1, y1 - 6); }
             SetAPen(rp, shine);
-            if (standing) { Move(rp, 6, y + s / 2); Draw(rp, W - 7, y + s / 2); }
-            else { Move(rp, x + s / 2, 6); Draw(rp, x + s / 2, H - 7); }
+            if (standing) { Move(rp, x0 + 6, y + s / 2); Draw(rp, x1 - 6, y + s / 2); }
+            else { Move(rp, x + s / 2, y0 + 6); Draw(rp, x + s / 2, y1 - 6); }
         } else {
             struct Rectangle r = { 0, 0, 0, 0 };
-            int iw = 0, ih = 0;
+            int iw = 0, ih = 0, big = cellw, dx = 0, dy = 0;
+            if (i == lifted) {
+                /* away from the edge */
+                if (dock.place == OD_BOTTOM) dy = -lift; else if (dock.place == OD_TOP) dy = lift;
+                else if (dock.place == OD_LEFT) dx = lift; else dx = -lift;
+            }
             if (icons[i] && GetIconRectangleA(rp, icons[i], NULL, &r, NULL)) { iw = r.MaxX - r.MinX + 1; ih = r.MaxY - r.MinY + 1; }
             {
-                int big = cellw, ix = x + (cellw - iw) / 2, iy = y + (big - ih) / 2;
+                int ix = x + (cellw - iw) / 2 + dx, iy = y + (big - ih) / 2 + dy;
                 static struct TagItem plain[] = {
                     { ICONDRAWA_Frameless, TRUE }, { ICONDRAWA_Borderless, TRUE }, { ICONDRAWA_EraseBackground, FALSE }, { TAG_DONE, 0 }
                 };
@@ -333,9 +389,10 @@ static void draw(void)
                     Text(rp, (STRPTR)b->label, n);
                 }
                 if (dock.running && running[i]) {
-                    int my = y + cellh - 3;
+                    /* the Mac's dot, under the icon */
+                    int my = y + cellh - 3, mx = x + cellw / 2;
                     SetAPen(rp, fill);
-                    RectFill(rp, x + cellw / 2 - 3, my, x + cellw / 2 + 2, my + 1);
+                    RectFill(rp, mx - 1, my - 1, mx + 1, my + 1);
                 }
             }
         }
@@ -344,39 +401,194 @@ static void draw(void)
     if (dri) FreeScreenDrawInfo(scr, dri);
 }
 
+static void show(int lifted, int lift)
+{
+    if (!win) return;
+    if (back) {
+        render(lifted, lift);
+        BltBitMapRastPort(back, 0, 0, win->RPort, 0, 0, win->Width, win->Height, 0xc0);
+    } else {
+        /* no memory for a drawing: straight into the window */
+        brp = *win->RPort;
+        render(lifted, lift);
+    }
+}
+
+static void draw(void) { show(-1, 0); }
+
+/* A started program's icon hops, as on the Mac. */
+static void hop(int i)
+{
+    static const int lifts[] = { 3, 6, 8, 9, 8, 6, 3, 0, 2, 3, 2, 0 };
+    if (!dock.hop || !back) return;
+    bubble_off();
+    for (unsigned k = 0; k < sizeof lifts / sizeof lifts[0]; k++) { show(i, lifts[k]); Delay(1); }
+}
+
+/* ---- the name above the icon under the pointer -------------------------------------------- */
+
+static void bubble_off(void)
+{
+    if (bubble) { CloseWindow(bubble); bubble = NULL; }
+    bubble_for = -1;
+}
+
+static void bubble_on(int i)
+{
+    struct RastPort *rp = &scr->RastPort;
+    const char *name = dock.b[i].label;
+    int n = strlen(name), bw = TextLength(rp, (STRPTR)name, n) + 14, bh = rp->TxHeight + 6, pos = standing ? by : bx, x, y;
+    if (bw > scr->Width) {
+        /* a name wider than the screen is cut to fit */
+        struct TextExtent te;
+        n = TextFit(rp, (STRPTR)name, n, &te, NULL, 1, scr->Width - 14, rp->TxHeight);
+        bw = te.te_Width + 14;
+    }
+    for (int k = 0; k < i; k++) pos += item_size(k);
+    if (standing) {
+        y = win->TopEdge + pos + (cellh - bh) / 2;
+        x = dock.place == OD_LEFT ? win->LeftEdge + win->Width + 2 : win->LeftEdge - bw - 2;
+    } else {
+        x = win->LeftEdge + pos + (cellw - bw) / 2;
+        y = dock.place == OD_BOTTOM ? win->TopEdge + room - bh - 2 : win->TopEdge + win->Height + 2;
+    }
+    if (x < 0) x = 0;
+    if (x + bw > scr->Width) x = scr->Width - bw;
+    if (y < 0) y = 0;
+    bubble_off();
+    if ((bubble = OpenWindowTags(NULL, WA_PubScreen, (ULONG)scr, WA_Left, x, WA_Top, y, WA_Width, bw, WA_Height, bh,
+                                 WA_Borderless, TRUE, WA_SmartRefresh, TRUE, WA_Activate, FALSE, WA_RMBTrap, TRUE, TAG_DONE))) {
+        struct DrawInfo *dri = GetScreenDrawInfo(scr);
+        struct RastPort *b = bubble->RPort;
+        SetAPen(b, dri ? dri->dri_Pens[SHINEPEN] : 2); RectFill(b, 1, 1, bw - 2, bh - 2);
+        SetAPen(b, dri ? dri->dri_Pens[SHADOWPEN] : 1);
+        Move(b, 1, 0); Draw(b, bw - 2, 0); Move(b, bw - 1, 1); Draw(b, bw - 1, bh - 2);
+        Move(b, bw - 2, bh - 1); Draw(b, 1, bh - 1); Move(b, 0, bh - 2); Draw(b, 0, 1);
+        SetAPen(b, dri ? dri->dri_Pens[TEXTPEN] : 1); SetDrMd(b, JAM1);
+        Move(b, 7, 3 + b->TxBaseline); Text(b, (STRPTR)name, n);
+        if (dri) FreeScreenDrawInfo(scr, dri);
+        bubble_for = i;
+    }
+}
+
+/* Called ten times a second: the name follows the pointer. */
+static void check_hover(void)
+{
+    int i = -1;
+    if (dock.hover && win && IntuitionBase->FirstScreen == scr) {
+        int mx = scr->MouseX - win->LeftEdge, my = scr->MouseY - win->TopEdge;
+        if (mx >= 0 && my >= 0 && mx < win->Width && my < win->Height) {
+            /* only where the dock is seen, not under a window over it */
+            struct Layer *l;
+            LockLayerInfo(&scr->LayerInfo);
+            l = WhichLayer(&scr->LayerInfo, scr->MouseX, scr->MouseY);
+            UnlockLayerInfo(&scr->LayerInfo);
+            if (l == win->WLayer) i = hit(mx, my);
+        }
+    }
+    if (i != bubble_for) { if (i >= 0) bubble_on(i); else bubble_off(); }
+}
+
+/* ---- seeing through, kept up to date ------------------------------------------------------- */
+
+/* The windows over the dock's place, as one number: where each is, how big,
+ * in their order. It changes when a window is moved, sized, opened or closed
+ * there, or brought in front of another. */
+static ULONG behind_sig(void)
+{
+    ULONG sig = 0, lock = LockIBase(0);
+    for (struct Window *w = scr->FirstWindow; w; w = w->NextWindow) {
+        if (w == win || w == bubble) continue;
+        if (w->LeftEdge >= win->LeftEdge + win->Width || w->LeftEdge + w->Width <= win->LeftEdge ||
+            w->TopEdge >= win->TopEdge + win->Height || w->TopEdge + w->Height <= win->TopEdge) continue;
+        sig = sig * 31 + (ULONG)w;
+        sig = sig * 31 + (((ULONG)(UWORD)w->LeftEdge << 16) | (UWORD)w->TopEdge);
+        sig = sig * 31 + (((ULONG)(UWORD)w->Width << 16) | (UWORD)w->Height);
+    }
+    UnlockIBase(lock);
+    return sig;
+}
+
+static ULONG seen_sig, moving_sig;
+static int still;
+
+/* Called ten times a second. True once a window has been dropped behind the
+ * dock (what is there changed, then stayed put for 0.3 seconds, so a window
+ * dragged solidly is copied once, where it lands): time to copy afresh. */
+static int behind_changed(void)
+{
+    ULONG sig;
+    if (!win || !behind) return 0;
+    sig = behind_sig();
+    if (sig == seen_sig) { still = 0; return 0; }
+    if (sig != moving_sig) { moving_sig = sig; still = 0; return 0; }
+    return ++still >= 3;
+}
+
+/* ---- opening and closing -------------------------------------------------------------------- */
+
+static struct MsgPort *appport;
+static struct AppWindow *aw;
+
+static void free_bitmaps(void)
+{
+    WaitBlit();                                    /* the blitter may still be drawing in them */
+    if (behind) { FreeBitMap(behind); behind = NULL; }
+    if (back) { FreeBitMap(back); back = NULL; }
+}
+
 static int open_dock(struct Menu *menus)
 {
-    int w, h, x, y;
+    int w, h, x, y, depth = GetBitMapAttr(scr->RastPort.BitMap, BMA_DEPTH);
     load_icons();
     layout(&w, &h);
     place_of(w, h, &x, &y);
+    /* what is behind the dock, before it opens; and the bitmap it is drawn in */
+    free_bitmaps();
+    if (dock.background != OD_BG_SOLID || dock.hop) {
+        if ((behind = AllocBitMap(w, h, depth, 0, scr->RastPort.BitMap)))
+            BltBitMap(scr->RastPort.BitMap, x, y, behind, 0, 0, w, h, 0xc0, 0xff, NULL);
+    }
+    back = AllocBitMap(w, h, depth, 0, scr->RastPort.BitMap);
+    InitRastPort(&brp);
+    brp.BitMap = back;
+    SetFont(&brp, scr->RastPort.Font);
     win = OpenWindowTags(NULL, WA_PubScreen, (ULONG)scr, WA_Left, x, WA_Top, y, WA_Width, w, WA_Height, h,
                          WA_Borderless, TRUE, WA_SmartRefresh, TRUE, WA_NewLookMenus, TRUE,
                          WA_ScreenTitle, (ULONG)"OpenDock 0.1",
                          WA_IDCMP, IDCMP_MOUSEBUTTONS | IDCMP_MENUPICK | IDCMP_REFRESHWINDOW | IDCMP_INACTIVEWINDOW, TAG_DONE);
-    if (!win) return 0;
+    if (!win) { free_bitmaps(); return 0; }
     if (menus) SetMenuStrip(win, menus);
+    if (!back && behind) {
+        /* without a drawing the copy can't be used: the dock is solid */
+        WaitBlit();
+        FreeBitMap(behind);
+        behind = NULL;
+    }
     draw();
+    seen_sig = moving_sig = behind_sig();
+    still = 0;
+    if (WorkbenchBase && appport) aw = AddAppWindowA(0, 0, win, appport, NULL);
     return 1;
 }
 
 static void close_dock(void)
 {
+    bubble_off();
+    if (aw) { RemoveAppWindow(aw); aw = NULL; }
     if (!win) return;
     ClearMenuStrip(win);
     CloseWindow(win);
     win = NULL;
+    free_bitmaps();
 }
 
-/* Settings changed: the window again, where the place says. */
-static void relayout(struct Menu *menus)
+/* Settings or buttons changed: the dock opens again, so what is behind it is copied afresh. */
+static int relayout(struct Menu *menus)
 {
-    int w, h, x, y;
-    load_icons();
-    layout(&w, &h);
-    place_of(w, h, &x, &y);
-    ChangeWindowBox(win, x, y, w, h);
-    (void)menus;
+    close_dock();
+    Delay(5);                                      /* Workbench redraws what the dock covered */
+    return open_dock(menus);
 }
 
 static void check_running(void)
@@ -432,12 +644,11 @@ static struct NewMenu newmenus[] = {
 
 int main(void)
 {
-    struct MsgPort *port, *appport = NULL, *tport = NULL;
+    struct MsgPort *port, *tport = NULL;
     struct timerequest *tr = NULL;
-    struct AppWindow *aw = NULL;
     struct Menu *menus = NULL;
     APTR vi = NULL;
-    int quit = 0, timer = 0, rc = RETURN_OK;
+    int quit = 0, timer = 0, ticks = 0, rc = RETURN_OK;
 
     Forbid();
     if ((port = FindPort((STRPTR)PORT_NAME))) {
@@ -458,14 +669,15 @@ int main(void)
     if (!(scr = LockPubScreen((STRPTR)"Workbench"))) { rc = RETURN_FAIL; goto out; }
     if ((vi = GetVisualInfoA(scr, NULL)) && (menus = CreateMenus(newmenus, TAG_DONE)))
         LayoutMenus(menus, vi, GTMN_NewLookMenus, TRUE, TAG_DONE);
+    if (WorkbenchBase) appport = CreateMsgPort();
     if (!open_dock(menus)) { rc = RETURN_FAIL; goto out; }
-    if (WorkbenchBase && (appport = CreateMsgPort())) aw = AddAppWindowA(0, 0, win, appport, NULL);
     if ((tport = CreateMsgPort()) && (tr = (struct timerequest *)CreateIORequest(tport, sizeof *tr)))
         timer = !OpenDevice((STRPTR)TIMERNAME, UNIT_VBLANK, (struct IORequest *)tr, 0);
     check_running();
-    if (timer) { tr->tr_node.io_Command = TR_ADDREQUEST; tr->tr_time.tv_secs = 2; tr->tr_time.tv_micro = 0; SendIO((struct IORequest *)tr); }
+    /* ten times a second for the name under the pointer; every two seconds for running programs */
+    if (timer) { tr->tr_node.io_Command = TR_ADDREQUEST; tr->tr_time.tv_secs = 0; tr->tr_time.tv_micro = 100000; SendIO((struct IORequest *)tr); }
 
-    while (!quit) {
+    while (!quit && win) {
         ULONG got = Wait((1UL << win->UserPort->mp_SigBit) | (appport ? 1UL << appport->mp_SigBit : 0) |
                          (timer ? 1UL << tport->mp_SigBit : 0) | SIGBREAKF_CTRL_C | SIGBREAKF_CTRL_F);
         struct IntuiMessage *m;
@@ -473,8 +685,10 @@ int main(void)
         if (got & SIGBREAKF_CTRL_F) { load(); relayout(menus); check_running(); }
         if (timer && CheckIO((struct IORequest *)tr)) {
             WaitIO((struct IORequest *)tr);
-            check_running();
-            tr->tr_time.tv_secs = 2; tr->tr_time.tv_micro = 0;
+            check_hover();
+            if (behind_changed()) relayout(menus);
+            if (++ticks >= 20) { ticks = 0; check_running(); }
+            tr->tr_time.tv_secs = 0; tr->tr_time.tv_micro = 100000;
             SendIO((struct IORequest *)tr);
         }
         if (appport) {
@@ -497,7 +711,7 @@ int main(void)
                 if (was >= 0) draw();
                 if (i >= 0 && i == was) {
                     if (removing) { removing = 0; remove_button(i); relayout(menus); check_running(); }
-                    else if (!(running[i] && to_front(running[i]))) start(&dock.b[i]);
+                    else if (!(running[i] && to_front(running[i]))) { start(&dock.b[i]); hop(i); }
                 }
             } else if (cls == IDCMP_MENUPICK) {
                 while (code != MENUNULL) {
@@ -517,9 +731,8 @@ out:
     if (timer) { if (!CheckIO((struct IORequest *)tr)) AbortIO((struct IORequest *)tr); WaitIO((struct IORequest *)tr); CloseDevice((struct IORequest *)tr); }
     if (tr) DeleteIORequest((struct IORequest *)tr);
     if (tport) DeleteMsgPort(tport);
-    if (aw) RemoveAppWindow(aw);
-    if (appport) { struct Message *m; while ((m = GetMsg(appport))) ReplyMsg(m); DeleteMsgPort(appport); }
     close_dock();
+    if (appport) { struct Message *m; while ((m = GetMsg(appport))) ReplyMsg(m); DeleteMsgPort(appport); }
     if (menus) FreeMenus(menus);
     if (vi) FreeVisualInfo(vi);
     if (scr) UnlockPubScreen(NULL, scr);
