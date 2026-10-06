@@ -1,0 +1,87 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE pobjects PUBLIC "-//Amiga Inc.//DTD POBJECTS 1.0//EN" "http://www.amiga.com/DTDs/PrefsObjects-1.0.dtd">
+<!-- written for OpenDock's tests in the layout AmiDock (AmigaOS 4) saves -->
+<pobjects version="1.0">
+<dict>
+	<key>AutosaveConfig</key>
+	<bool>TRUE</bool>
+	<key>AppDockNr</key>
+	<integer>0</integer>
+	<key>Docks</key>
+	<array>
+		<dict>
+			<key>Name</key>
+			<string>Maindock</string>
+			<key>Orientation</key>
+			<string>HORIZONTALR</string>
+			<key>Categories</key>
+			<array>
+				<dict>
+					<key>Name</key>
+					<string>Default Category</string>
+					<key>Icons</key>
+					<array>
+						<dict>
+							<key>Name</key>
+							<string>Shell</string>
+							<key>FileName</key>
+							<string>SYS:System/Shell</string>
+							<key>DndAtOnce</key>
+							<bool>FALSE</bool>
+						</dict>
+						<dict>
+							<key>Name</key>
+							<string>Separator</string>
+							<key>FileName</key>
+							<string>SYS:Utilities/Dockies/Separator.docky</string>
+						</dict>
+						<dict>
+							<key>Name</key>
+							<string>Notes &amp; Caf&#233;</string>
+							<key>FileName</key>
+							<string>Work:Notes &amp; Things/Notes</string>
+						</dict>
+						<dict>
+							<key>Name</key>
+							<string>Extras</string>
+							<key>FileName</key>
+							<string>SYS:Utilities/Dockies/SubDock.docky</string>
+							<key>DockyPrefs</key>
+							<dict>
+								<key>OwnDockNr</key>
+								<integer>1</integer>
+								<key>IconFile</key>
+								<string>ENV:Sys/def_extras_dock</string>
+							</dict>
+						</dict>
+						<dict>
+							<key>Name</key>
+							<string>Ünits</string>
+							<key>FileName</key>
+							<string>SYS:Utilities/Units</string>
+						</dict>
+					</array>
+				</dict>
+			</array>
+		</dict>
+		<dict>
+			<key>Name</key>
+			<string>Extras</string>
+			<key>Categories</key>
+			<array>
+				<dict>
+					<key>Icons</key>
+					<array>
+						<dict>
+							<key>Name</key>
+							<string>MultiView</string>
+							<key>FileName</key>
+							<string>SYS:Utilities/MultiView</string>
+						</dict>
+					</array>
+				</dict>
+			</array>
+		</dict>
+	</array>
+</dict>
+</pobjects>
