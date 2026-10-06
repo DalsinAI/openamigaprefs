@@ -80,10 +80,14 @@ static void tell(void)
     Forbid();
     if ((p = FindPort((STRPTR)TB_PORT)) && p->mp_SigTask) Signal((struct Task *)p->mp_SigTask, SIGBREAKF_CTRL_F);
     Permit();
-    if (!p && (cur.logo || cur.memory || cur.clock || cur.border_black)) {
-        BPTR nil = Open((STRPTR)"NIL:", MODE_NEWFILE);
-        if (SystemTags((STRPTR)TB_TOOL, SYS_Input, nil, SYS_Output, NULL, SYS_Asynch, TRUE, NP_StackSize, 16384, TAG_DONE) == -1 && nil)
-            Close(nil);
+    if (!p && (cur.logo || cur.memory || cur.clock || cur.network || cur.border_black)) {
+        BPTR in = Open((STRPTR)"NIL:", MODE_OLDFILE), out = Open((STRPTR)"NIL:", MODE_NEWFILE);
+        /* asynchronous: both handles are the new process's, closed when it ends */
+        if (!in || !out || SystemTags((STRPTR)TB_TOOL, SYS_Input, in, SYS_Output, out, SYS_Asynch, TRUE, SYS_UserShell, TRUE,
+                                      NP_StackSize, 16384, TAG_DONE) == -1) {
+            if (in) Close(in);
+            if (out) Close(out);
+        }
     }
 }
 
@@ -100,7 +104,7 @@ static int put_in_place(int save)
 
 /* ---- the window ---------------------------------------------------------------------- */
 
-enum { G_LOGO, G_MEMORY, G_CLOCK, G_DATE, G_BORDER, G_STATUS, G_SAVE, G_USE, G_CANCEL, G_COUNT };
+enum { G_LOGO, G_MEMORY, G_CLOCK, G_DATE, G_NET, G_BORDER, G_STATUS, G_SAVE, G_USE, G_CANCEL, G_COUNT };
 static struct Gadget *gad[G_COUNT];
 static struct Window *win;
 static char status_text[120];
@@ -122,6 +126,7 @@ static void show(void)
     SET(G_MEMORY, GTCB_Checked, cur.memory);
     SET(G_CLOCK, GTCB_Checked, cur.clock);
     SET(G_DATE, GTCB_Checked, cur.date, GA_Disabled, !cur.clock);
+    SET(G_NET, GTCB_Checked, cur.network);
     SET(G_BORDER, GTCB_Checked, cur.border_black);
 }
 
@@ -151,7 +156,8 @@ static int gui(void)
     G(CHECKBOX_KIND, G_LOGO, X, row, 26, lh, "AmigaChrome logo at the left", PLACETEXT_LEFT, GTCB_Scaled, TRUE); row += lh + 4;
     G(CHECKBOX_KIND, G_MEMORY, X, row, 26, lh, "Free chip and fast memory", PLACETEXT_LEFT, GTCB_Scaled, TRUE); row += lh + 4;
     G(CHECKBOX_KIND, G_CLOCK, X, row, 26, lh, "Clock at the right", PLACETEXT_LEFT, GTCB_Scaled, TRUE); row += lh + 4;
-    G(CHECKBOX_KIND, G_DATE, X, row, 26, lh, "Day and date with the clock", PLACETEXT_LEFT, GTCB_Scaled, TRUE); row += lh + 10;
+    G(CHECKBOX_KIND, G_DATE, X, row, 26, lh, "Day and date with the clock", PLACETEXT_LEFT, GTCB_Scaled, TRUE); row += lh + 4;
+    G(CHECKBOX_KIND, G_NET, X, row, 26, lh, "Network icons (LAN, Wi-Fi)", PLACETEXT_LEFT, GTCB_Scaled, TRUE); row += lh + 10;
     G(CHECKBOX_KIND, G_BORDER, X, row, 26, lh, "Black border around the screen", PLACETEXT_LEFT, GTCB_Scaled, TRUE); row += lh + 10;
     G(TEXT_KIND, G_STATUS, 10, row, W - 20, lh, NULL, 0, GTTX_Text, (ULONG)status_text, GTTX_Border, TRUE); row += lh + 6;
     {
@@ -202,6 +208,7 @@ static int gui(void)
                 case G_MEMORY: cur.memory = sel; break;
                 case G_CLOCK: cur.clock = sel; show(); break;
                 case G_DATE: cur.date = sel; break;
+                case G_NET: cur.network = sel; break;
                 case G_BORDER: cur.border_black = sel; break;
                 case G_USE: put_in_place(0); quit = 1; break;
                 case G_SAVE: put_in_place(1); quit = 1; break;
