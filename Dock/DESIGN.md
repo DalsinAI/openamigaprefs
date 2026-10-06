@@ -99,15 +99,20 @@ program that wrote the file.
 
 On the first start, when there is no `ENVARC:OpenDock/Dock`, Dock takes
 over the first of these it finds, once. Otherwise it starts with Shell
-(`NewShell`), Prefs, MultiView and Look. Workbench buttons whose program
+(`NewShell`), OpenFiles, OpenView, Prefs and Look (OpenView took
+MultiView's place on 6 October 2026). Workbench buttons whose program
 isn't on the machine are left out, both from the starter set and from a
 take-over. **Take over its buttons** does it on request:
 the buttons are added after the dock's own, and when the file isn't where
 it usually is, a requester asks for it. From the Shell,
 `Dock TOOLMANAGER ENVARC:ToolManager.prefs SAVE` does it with no window
 (AMIDOCK and AMISTART work the same way).
+`Dock ADD SYS:Utilities/OpenFiles SYS:Utilities/OpenPrint/OpenView SAVE`
+puts a button at the dock's end for each program that's installed and not
+on the dock yet, and leaves the rest alone. OpenUp runs it on every
+install, so a dock someone already has gains OpenFiles and OpenView too.
 
-`tests/run.sh` runs 43 checks on the host's `cc`. They cover the format
+`tests/run.sh` runs 49 checks on the host's `cc`. They cover the format
 both ways, a ToolManager 2 file built to the format, an AmiDock file and
 an AmiStart file written in their layouts, ToolManager 3 and AmiDock 3.9
 refusals, entities and UTF-8, and a full dock. The ToolManager sample was
