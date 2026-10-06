@@ -15,6 +15,7 @@ Limited.
 | Switcher | Amiga+Tab brings the window at the back to the front and activates it; Amiga+Shift+Tab sends the front window to the back | `switcher on`, `switcher.key lcommand tab` (commodity words) |
 | Wheel | The mouse wheel goes to the window under the pointer, which becomes active first | `wheel on` |
 | Places | A program's window opens where it was last left, and at the same size when it can be resized | `places on`, `never <program>` lines |
+| Drawers too (0.3) | Workbench's drawer windows are remembered the same way, with no Snapshot needed | `places.drawers on` |
 | Drawers | Workbench drawer windows open at least this big | `drawer 400 250` (0 0 leaves them) |
 
 The settings are in `ENV:OpenPrefs/Windows`. Save writes `ENV:` and
@@ -28,8 +29,12 @@ ten seconds of a change, as lines of `"program:title" left top width height`.
 The program is the task's name, or the command a Shell runs. A window with
 no IDCMP port, such as a console, is known as `window:<title>`. The title is
 cut at its first digit, bracket or quote, so a title that shows a count or a
-file name still matches. Workbench's own windows are left to Workbench,
-which has Snapshot. Forget all deletes the file and restarts OpenWindows.
+file name still matches. Workbench's own windows are left to Workbench, which has Snapshot, unless
+"Workbench drawers too" is on (0.3, Dale 6 Oct 2026 for a 1920x1080
+Workbench). Then each drawer is kept as `Workbench:<drawer>` and reopens
+where it was left; the root window is never moved. Tested on a scratch
+OS 3.2.3: the Work drawer was moved to 188,241 and reopened there after a
+reboot. Forget all deletes the file and restarts OpenWindows.
 
 **Views.** The editor opens in Simple, which shows the four switches. View >
 Advanced (Amiga-A, or `ADVANCED` from the Shell) shows every setting. The
