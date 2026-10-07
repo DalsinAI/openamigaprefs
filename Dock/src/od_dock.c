@@ -26,6 +26,7 @@ void od_defaults(od_dock *d)
     d->background = OD_BG_GLASS;
     d->scale = 100;
     d->border = 1;
+    d->opacity = 60;
 }
 
 /* ---- small helpers ------------------------------------------------------------------- */
@@ -171,6 +172,7 @@ int od_ensure(od_dock *d, const char *command)
 int od_parse(od_dock *d, const char *text)
 {
     const char *line;
+    int opacity_given = 0;
     od_defaults(d);
     if (!text) return 0;
     for (line = text; *line; ) {
@@ -205,12 +207,15 @@ int od_parse(od_dock *d, const char *text)
                 else if (same(k, "magnify")) d->magnify = on;
                 else if (same(k, "item-size")) { int n = atoi(v); d->scale = n <= 37 ? 25 : n <= 62 ? 50 : n <= 87 ? 75 : 100; }
                 else if (same(k, "borders")) d->border = on;
+                else if (same(k, "opacity")) { int n = atoi(v); d->opacity = n < 0 ? 0 : n > 100 ? 100 : n; opacity_given = 1; }
                 else if (same(k, "imported")) copy(d->imported, v, sizeof d->imported);
             }
         }
         if (!next) break;
         line = next + 1;
     }
+    /* a file from before the opacity line: a solid shelf stays solid */
+    if (!opacity_given && d->background == OD_BG_SOLID) d->opacity = 100;
     return 1;
 }
 
@@ -231,6 +236,7 @@ int od_write(const od_dock *d, char *out, int size)
     ADD("magnify %s\n", onoff[!!d->magnify]);
     ADD("item-size %d\n", d->scale == 25 || d->scale == 50 || d->scale == 75 ? d->scale : 100);
     ADD("borders %s\n", onoff[!!d->border]);
+    ADD("opacity %d\n", d->opacity < 0 ? 0 : d->opacity > 100 ? 100 : d->opacity);
     if (d->imported[0]) ADD("imported \"%s\"\n", quoted(d->imported, q, sizeof q));
     for (int i = 0; i < d->n; i++) {
         const od_button *b = &d->b[i];

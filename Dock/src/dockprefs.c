@@ -1,10 +1,10 @@
-/* OpenPrefs Dock 0.1: the editor for OpenDock (MIT). A GadTools prefs
+/* OpenPrefs Dock 0.2: the editor for OpenDock (MIT). A GadTools prefs
  * editor, as the OS's own: Save, Use, Test (put back after 15 seconds
  * unless kept) and Cancel. What it sets lives in ENV:OpenDock/Dock
  * (ENVARC: when saved), in the format of od_dock.h; OpenDock draws.
  *
  *   - where the dock sits (bottom, top, left, right), its size, names under
- *     the icons, and its shelf: solid, see-through or glass
+ *     the icons, and its shelf: solid, clear or glass, and how see-through
  *   - its buttons, in order: moved up and down, removed, separators added
  *   - another dock's buttons, taken over: ToolManager 2, AmiDock (AmigaOS 4's)
  *     or AmiStart's taskbar; on the first start, the first one found
@@ -45,7 +45,7 @@
 
 #include "od_dock.h"
 
-const char version[] __attribute__((used)) = "$VER: Dock 0.1 (6.10.2026) OpenPrefs, Dalsin Limited";
+const char version[] __attribute__((used)) = "$VER: Dock 0.2 (7.10.2026) OpenPrefs, Dalsin Limited";
 
 #define PREFS_ENV "ENV:OpenDock/Dock"
 #define PREFS_ENVARC "ENVARC:OpenDock/Dock"
@@ -260,7 +260,7 @@ static int take_over(od_dock *d, const char *file, const char *base, od_report *
 /* ---- the window ---------------------------------------------------------------------------- */
 
 enum {
-    G_PLACE, G_SIZE, G_ITEMS, G_BORDER, G_LABELS, G_RUNNING, G_SHELF, G_HOVER, G_HOP, G_LIST, G_UP, G_DOWN, G_REMOVE, G_SEPARATOR,
+    G_PLACE, G_SIZE, G_ITEMS, G_BORDER, G_LABELS, G_RUNNING, G_SHELF, G_OPACITY, G_HOVER, G_HOP, G_LIST, G_UP, G_DOWN, G_REMOVE, G_SEPARATOR,
     G_SOURCE, G_TAKEOVER, G_KIND, G_NAME, G_COMMAND, G_ICON, G_DIR, G_STACK,
     G_STATUS, G_SAVE, G_USE, G_TEST, G_CANCEL, G_COUNT
 };
@@ -270,7 +270,8 @@ static const char *size_labels[] = { "Small", "Medium", "Large", NULL };
 static const char *items_labels[] = { "100%", "75%", "50%", "25%", NULL };   /* the icons' size on the dock */
 static const int items_scale[] = { 100, 75, 50, 25 };
 static const char *kind_labels[] = { "Workbench", "Shell", "ARexx", NULL };
-static const char *shelf_labels[] = { "Solid", "See-through", "Glass", NULL };   /* OD_BG_ order */
+/* OD_BG_ order. "Clear" is the file's see-through: tinted, not frosted (the slider says how see-through) */
+static const char *shelf_labels[] = { "Solid", "Clear", "Glass", NULL };
 
 static struct Gadget *gad[G_COUNT];
 static struct Window *win;
@@ -315,6 +316,7 @@ static void show(void)
     SET(G_LABELS, GTCB_Checked, cur.labels);
     SET(G_RUNNING, GTCB_Checked, cur.running);
     SET(G_SHELF, GTCY_Active, cur.background);
+    SET(G_OPACITY, GTSL_Level, cur.background == OD_BG_SOLID ? 100 : cur.opacity, GA_Disabled, cur.background == OD_BG_SOLID);
     SET(G_HOVER, GTCB_Checked, cur.hover);
     SET(G_HOP, GTCB_Checked, cur.hop);
     SET(G_UP, GA_Disabled, !b || sel == 0);
@@ -415,6 +417,16 @@ static int make_gadgets(struct Screen *scr, APTR vi, struct Gadget **glist, int 
     row += lh + 2 * gp;
     /* how the dock looks: the shelf, and in Advanced the names that pop up and the hop */
     G(CYCLE_KIND, G_SHELF, L + 60, row, R - L - 80, lh, "Shelf", PLACETEXT_LEFT, GTCY_Labels, (ULONG)shelf_labels); row += lh + gp;
+    {
+        /* how see-through the shelf is: from clear at the left to solid at the right (the file's opacity) */
+        struct RastPort *srp = &scr->RastPort;
+        int lw = TextLength(srp, (STRPTR)"See-through", 11) + 8, sw = TextLength(srp, (STRPTR)"Solid", 5) + 8;
+        G(SLIDER_KIND, G_OPACITY, L + lw, row, R - L - 20 - lw - sw, lh, "See-through", PLACETEXT_LEFT,
+          GTSL_Min, 0, GTSL_Max, 100, GTSL_Level, cur.background == OD_BG_SOLID ? 100 : cur.opacity,
+          GTSL_LevelFormat, (ULONG)"Solid", GTSL_MaxLevelLen, 5, GTSL_LevelPlace, PLACETEXT_RIGHT,
+          GA_RelVerify, TRUE, GA_Disabled, cur.background == OD_BG_SOLID);
+        row += lh + gp;
+    }
     if (advanced) {
         G(CHECKBOX_KIND, G_HOVER, L + 110, row, 26, lh, "Pop-up names", PLACETEXT_LEFT, GTCB_Scaled, TRUE);
         G(CHECKBOX_KIND, G_HOP, L + 220, row, 26, lh, "Hop", PLACETEXT_LEFT, GTCB_Scaled, TRUE);
@@ -511,12 +523,12 @@ static int gui(void)
         int tall = inner + scr->WBorTop + scr->Font->ta_YSize + 1 + scr->WBorBottom;
         if (wy + tall > scr->Height) wy = scr->Height - tall > 0 ? scr->Height - tall : 0;
     }
-    win = OpenWindowTags(NULL, WA_Title, (ULONG)"Dock", WA_ScreenTitle, (ULONG)"OpenPrefs Dock 0.1", WA_PubScreen, (ULONG)scr,
+    win = OpenWindowTags(NULL, WA_Title, (ULONG)"Dock", WA_ScreenTitle, (ULONG)"OpenPrefs Dock 0.2", WA_PubScreen, (ULONG)scr,
                          WA_Left, wx, WA_Top, wy, WA_InnerWidth, W, WA_InnerHeight, inner,
                          WA_Gadgets, (ULONG)glist, WA_DragBar, TRUE, WA_DepthGadget, TRUE, WA_CloseGadget, TRUE, WA_Activate, TRUE,
                          WA_SmartRefresh, TRUE, WA_NewLookMenus, TRUE,
                          WA_IDCMP, IDCMP_CLOSEWINDOW | IDCMP_REFRESHWINDOW | IDCMP_VANILLAKEY | IDCMP_MENUPICK | BUTTONIDCMP | CYCLEIDCMP |
-                                   STRINGIDCMP | INTEGERIDCMP | CHECKBOXIDCMP | LISTVIEWIDCMP,
+                                   STRINGIDCMP | INTEGERIDCMP | CHECKBOXIDCMP | LISTVIEWIDCMP | SLIDERIDCMP,
                          TAG_DONE);
     if (!win) { rc = RETURN_FAIL; goto out; }
     SetMenuStrip(win, menus);
@@ -578,6 +590,7 @@ static int gui(void)
             case G_LABELS: cur.labels = (gg->Flags & GFLG_SELECTED) != 0; break;
             case G_RUNNING: cur.running = (gg->Flags & GFLG_SELECTED) != 0; break;
             case G_SHELF: cur.background = code; break;
+            case G_OPACITY: cur.opacity = (WORD)code; redraw = 0; break;
             case G_HOVER: cur.hover = (gg->Flags & GFLG_SELECTED) != 0; break;
             case G_HOP: cur.hop = (gg->Flags & GFLG_SELECTED) != 0; break;
             case G_LIST: sel = code; break;
