@@ -1,4 +1,4 @@
-/* OpenDock 0.2: a dock on the Workbench screen (MIT). One row of icons
+/* OpenDock 0.3: a dock on the Workbench screen (MIT). One row of icons
  * along an edge of the screen: a click starts the program, or brings it to
  * the front when it is running already; a small mark shows which are
  * running. Icons dropped on the dock are added to it; the menu (the right
@@ -10,9 +10,12 @@
  * Ctrl-C (or Quit) ends it. A second OpenDock tells the first to read its
  * settings again and ends.
  *
- * No magnification, no see-through: it draws with the screen's own pens and
- * the icons as they are, so a real 68040 on its native chipset or a graphics
- * card is never slowed.
+ * It looks like the Mac's dock: one rounded shelf, tinted to the look and
+ * see-through by the opacity setting, the icons evenly spaced on it. On a
+ * graphics card the tint is mixed with what is behind, pixel by pixel; on
+ * the native chipset it is drawn with the nearest pens. The shelf is made
+ * once when the dock opens and kept, so a redraw is one blit and the icons,
+ * and a real 68040 is never slowed. No magnification.
  *
  * MIT, Copyright (c) 2026 Dalsin Limited. */
 #include <exec/types.h>
@@ -47,13 +50,12 @@
 
 #include "od_dock.h"
 
-const char version[] __attribute__((used)) = "$VER: OpenDock 0.2 (6.10.2026) OpenPrefs, Dalsin Limited";
+const char version[] __attribute__((used)) = "$VER: OpenDock 0.3 (7.10.2026) OpenPrefs, Dalsin Limited";
 
 #define PREFS_ENV "ENV:OpenDock/Dock"
 #define PREFS_ENVARC "ENVARC:OpenDock/Dock"
 #define DOCK_PREFS "SYS:Prefs/Dock"
 #define PORT_NAME "OpenDock"
-#define SEP_W 8                                    /* a separator's width (or height, standing) */
 
 struct Library *IconBase, *WorkbenchBase, *CyberGfxBase;
 
@@ -424,24 +426,31 @@ static void start(const od_button *b)
 
 /* ---- the window -------------------------------------------------------------------------------
  *
- * Like the Mac's: a shelf along the edge, see-through (frosted by default),
- * with room above it for an icon to hop when its program starts. What is
- * behind the dock is copied from the screen as the dock opens, so seeing
- * through costs one blit and never reads the screen again; everything is
- * drawn into a bitmap of the window's size and copied in at once, so
- * nothing flickers. */
+ * Like the Mac's: one shelf along the edge, a rounded rectangle tinted to
+ * the look (dark on a dark look, light on a light one) through which the
+ * desktop shows, with even room around and between the icons, a dot under
+ * each running program and a thin line before a group. Above it is room for
+ * an icon to hop when its program starts. What is behind the dock is copied
+ * from the screen as the dock opens; the shelf is made from it once (on a
+ * graphics card the tint is mixed into it pixel by pixel, the corners
+ * smoothed) and kept, so a redraw, and each step of a hop, is one blit and
+ * the icons. Everything is drawn into a bitmap of the window's size and
+ * copied in at once, so nothing flickers. */
 
 #define HOP_ROOM 10                                /* the hop's height, outside the shelf */
+#define MAX_RADIUS 48
 
-static struct BitMap *behind, *back;               /* the screen behind the dock; the drawing */
+static struct BitMap *behind, *back, *shelfbm;    /* the screen behind the dock; the drawing; the shelf, made once */
 static struct RastPort brp;
 static int room, bx, by;                           /* hop room; where the first cell starts */
+static int big, pad, sepw, radius, gap;            /* an icon's square; the room around; a separator's; the corners'; off the edge */
+static int apad, dot_at, dot_big;                  /* the room across the shelf; the dot's centre from its edge; a 5-pixel dot */
 static int behind_w, behind_h;                     /* the size behind was copied at */
 static struct Window *bubble;
 static int bubble_for = -1;
 static void bubble_off(void);
 
-static int item_size(int i) { return dock.b[i].kind == OD_SEPARATOR ? SEP_W : (standing ? cellh : cellw); }
+static int item_size(int i) { return dock.b[i].kind == OD_SEPARATOR ? sepw : (standing ? cellh : cellw); }
 
 /* The button under a point in the window, or -1. */
 static int hit(int x, int y)
@@ -450,7 +459,7 @@ static int hit(int x, int y)
     if (across < 0 || across >= (standing ? cellw : cellh)) return -1;
     for (int i = 0; i < dock.n; i++) {
         int s = item_size(i);
-        if (win && pos + s > (standing ? win->Height : win->Width) - 4) break;   /* past the edge: not drawn */
+        if (win && pos + s > (standing ? win->Height : win->Width) - pad) break;   /* past the edge: not drawn */
         if (at >= pos && at < pos + s) return dock.b[i].kind == OD_SEPARATOR ? -1 : i;
         pos += s;
     }
@@ -460,29 +469,49 @@ static int hit(int x, int y)
 static void layout(int *w, int *h)
 {
     struct Rectangle r;
-    int big = od_cell(dock.size), label = dock.labels ? scr->RastPort.TxHeight + 2 : 0;
+    int label = dock.labels ? scr->RastPort.TxHeight + 2 : 0, thick, most = 0, margin, rows;
+    big = od_cell(dock.size);
     standing = dock.place == OD_LEFT || dock.place == OD_RIGHT;
     /* a cell fits the largest icon */
     for (int i = 0; i < dock.n; i++)
         if (icons[i] && GetIconRectangleA(&scr->RastPort, icons[i], NULL, &r, NULL)) {
-            int iw = r.MaxX - r.MinX + 1 + 8, ih = r.MaxY - r.MinY + 1 + 8;
+            int iw = r.MaxX - r.MinX + 1 + 8, ih = r.MaxY - r.MinY + 1 + 8, a = standing ? iw : ih;
             if (iw > big) big = iw;
             if (ih > big) big = ih;
+            if (a > most) most = a;                /* the largest across the shelf, with its 8 */
         }
     /* 25, 50 or 75 per cent: the cells shrink with the icons; the names stay readable */
     big = od_scaled(big, dock.scale);
     if (big < 12) big = 12;
+    /* the Mac's proportions: a tenth of an icon around and between them, a
+     * quarter of the shelf's height for its corners, a third for a group's gap */
+    pad = big / 10 < 4 ? 4 : big / 10;
+    sepw = big / 3 < 8 ? 8 : big / 3;
+    gap = pad / 2;                                 /* the shelf floats a little off the screen's edge */
     cellw = big;
-    cellh = big + label + 4;                       /* and the running mark */
+    cellh = big + label;
+    /* across the shelf a little tighter than along it, as long as the running
+     * dot keeps a clear row on both sides between the edge and what is nearest
+     * it (the largest icon, or the names under the icons) */
+    most = most ? od_scaled(most - 8, dock.scale) : big - 16;
+    margin = dock.labels && dock.place == OD_BOTTOM ? 2 : (big - most) / 2;
+    apad = pad - (big / 20 < 2 ? 2 : big / 20);
+    if (apad < 6 - margin) apad = 6 - margin;
+    if (apad < 2) apad = 2;
+    rows = apad - 1 + margin;                      /* between the shelf's edge line and the nearest icon */
+    dot_big = big >= 40 && rows >= 7;
+    dot_at = 1 + (rows - 1) / 2;
+    thick = (standing ? cellw : cellh) + 2 * apad;
+    radius = thick / 4 > MAX_RADIUS ? MAX_RADIUS : thick / 4;
     room = dock.hop ? HOP_ROOM : 0;
-    along = 8;
+    along = 2 * pad;
     for (int i = 0; i < dock.n; i++) along += item_size(i);
-    if (along < 8 + cellw) along = 8 + cellw;
-    /* the hop room is on the side away from the edge */
-    bx = 4 + (dock.place == OD_RIGHT ? room : 0);
-    by = 4 + (dock.place == OD_BOTTOM ? room : 0);
-    if (standing) { *w = cellw + 8 + room; *h = along; }
-    else { *w = along; *h = cellh + 8 + room; }
+    if (along < 2 * pad + cellw) along = 2 * pad + cellw;
+    /* the hop room is on the side away from the edge, the gap on the edge's side */
+    bx = (standing ? apad : pad) + (dock.place == OD_RIGHT ? room : 0) + (dock.place == OD_LEFT ? gap : 0);
+    by = (standing ? pad : apad) + (dock.place == OD_BOTTOM ? room : 0) + (dock.place == OD_TOP ? gap : 0);
+    if (standing) { *w = thick + room + gap; *h = along; }
+    else { *w = along; *h = thick + room + gap; }
     if (*w > scr->Width) *w = scr->Width;
     if (*h > scr->Height) *h = scr->Height;
 }
@@ -497,13 +526,352 @@ static void place_of(int w, int h, int *x, int *y)
     }
 }
 
-/* The shelf: the window less the hop room. */
+/* The shelf: the window less the hop room and the gap at the screen's edge. */
 static void shelf(int W, int H, int *x0, int *y0, int *x1, int *y1)
 {
-    *x0 = dock.place == OD_RIGHT ? room : 0;
-    *y0 = dock.place == OD_BOTTOM ? room : 0;
-    *x1 = W - 1 - (dock.place == OD_LEFT ? room : 0);
-    *y1 = H - 1 - (dock.place == OD_TOP ? room : 0);
+    *x0 = (dock.place == OD_RIGHT ? room : 0) + (dock.place == OD_LEFT ? gap : 0);
+    *y0 = (dock.place == OD_BOTTOM ? room : 0) + (dock.place == OD_TOP ? gap : 0);
+    *x1 = W - 1 - (dock.place == OD_LEFT ? room : 0) - (dock.place == OD_RIGHT ? gap : 0);
+    *y1 = H - 1 - (dock.place == OD_TOP ? room : 0) - (dock.place == OD_BOTTOM ? gap : 0);
+}
+
+/* ---- the shelf's colours ------------------------------------------------------------------- */
+
+#define LOOK_ENV "ENV:OpenGadTools/Look"
+
+typedef struct { int r, g, b; } colour;
+static colour tint, rim, sep_c, dot_c, bg_c;
+static LONG tint_pen = -1, rim_pen = -1, sep_pen = -1, dot_pen = -1;
+static int card;                                   /* a graphics card's true colour: the tint is mixed in */
+
+static int luma(colour c) { return (c.r * 77 + c.g * 150 + c.b * 29) >> 8; }
+
+static colour mix(colour a, colour b, int t)       /* t of 256 parts b */
+{
+    colour c;
+    c.r = a.r + (b.r - a.r) * t / 256; c.g = a.g + (b.g - a.g) * t / 256; c.b = a.b + (b.b - a.b) * t / 256;
+    return c;
+}
+
+static colour pen_colour(int pen)
+{
+    ULONG v[3] = { 0, 0, 0 };
+    colour c;
+    GetRGB32(scr->ViewPort.ColorMap, pen, 1, v);
+    c.r = v[0] >> 24; c.g = v[1] >> 24; c.b = v[2] >> 24;
+    return c;
+}
+
+/* The look's mode in Look prefs (its first line, "<theme> light|dark|auto"): 0 light, 1 dark, -1 none. */
+static int look_mode(void)
+{
+    char *t = read_file(LOOK_ENV), name[48], mode[8];
+    int m = -1;
+    if (!t) return -1;
+    if (sscanf(t, "%47s %7s", name, mode) == 2) {
+        if (!strcmp(mode, "dark")) m = 1;
+        else if (!strcmp(mode, "auto")) {
+            struct DateStamp ds;
+            int hour;
+            DateStamp(&ds);
+            hour = (int)(ds.ds_Minute / 60);
+            m = hour >= 19 || hour < 7;
+        } else m = 0;
+    }
+    FreeVec(t);
+    return m;
+}
+
+static LONG best_pen(colour c)
+{
+    return ObtainBestPen(scr->ViewPort.ColorMap, (ULONG)c.r * 0x01010101UL, (ULONG)c.g * 0x01010101UL, (ULONG)c.b * 0x01010101UL,
+                         OBP_Precision, PRECISION_IMAGE, TAG_DONE);
+}
+
+static void free_pens(void)
+{
+    LONG *p[4] = { &tint_pen, &rim_pen, &sep_pen, &dot_pen };
+    for (int i = 0; i < 4; i++) {
+        if (*p[i] >= 0) ReleasePen(scr->ViewPort.ColorMap, *p[i]);
+        *p[i] = -1;
+    }
+}
+
+/* The tint follows the look: dark for a dark look, light for a light one,
+ * from the screen's background where it fits; a neutral grey with no look. */
+static void choose_colours(void)
+{
+    static const colour white = { 255, 255, 255 }, black = { 0, 0, 0 };
+    struct DrawInfo *dri = GetScreenDrawInfo(scr);
+    colour text = black;
+    int mode = look_mode(), dark;
+    bg_c = (colour){ 150, 150, 154 };
+    if (dri) {
+        bg_c = pen_colour(dri->dri_Pens[BACKGROUNDPEN]);
+        text = pen_colour(dri->dri_Pens[TEXTPEN]);
+        FreeScreenDrawInfo(scr, dri);
+    }
+    if (mode == 1) tint = luma(bg_c) < 110 ? mix(bg_c, black, 64) : (colour){ 36, 36, 40 };
+    else if (mode == 0) tint = luma(bg_c) >= 150 ? mix(bg_c, white, 160) : (colour){ 236, 236, 240 };
+    else tint = (colour){ 150, 150, 154 };
+    dark = luma(tint) < 128;
+    /* a slightly lighter edge; a group's line a step from the tint; the dot in the text's colour where it shows */
+    rim = mix(tint, white, dark ? 72 : 150);
+    sep_c = dark ? mix(tint, white, 48) : mix(tint, black, 64);
+    dot_c = (luma(text) > luma(tint) ? luma(text) - luma(tint) : luma(tint) - luma(text)) >= 100 ? text :
+            dark ? (colour){ 236, 236, 236 } : (colour){ 28, 28, 30 };
+    free_pens();
+    card = truecolour();
+    dot_pen = best_pen(dot_c);
+    if (!card) {
+        /* the native chipset or 256 colours: the nearest pens, kept apart */
+        tint_pen = best_pen(tint);
+        rim_pen = best_pen(rim);
+        if (rim_pen == tint_pen) { ReleasePen(scr->ViewPort.ColorMap, rim_pen); rim_pen = best_pen(mix(tint, dark ? white : black, 128)); }
+        sep_pen = best_pen(sep_c);
+        if (sep_pen == tint_pen) { ReleasePen(scr->ViewPort.ColorMap, sep_pen); sep_pen = best_pen(mix(tint, dark ? white : black, 160)); }
+    }
+}
+
+/* ---- the shelf ----------------------------------------------------------------------------- */
+
+/* A corner, as radius x radius cover: how much of each pixel is inside the
+ * rounded edge, and how much of it is the 1-pixel rim, 0 to 255 (16 samples
+ * a pixel). Index [j * radius + i], i and j counted from the corner. */
+static UBYTE inside[MAX_RADIUS * MAX_RADIUS], rimcov[MAX_RADIUS * MAX_RADIUS];
+
+static void make_corner(void)
+{
+    int R = radius, R8 = R * 8, in2 = R8 * R8, rim2 = (R8 - 8) * (R8 - 8);
+    for (int j = 0; j < R; j++)
+        for (int i = 0; i < R; i++) {
+            int a = 0, b = 0;
+            for (int v = 0; v < 4; v++)
+                for (int u = 0; u < 4; u++) {
+                    /* the sample's distance from the corner circle's centre, in eighths of a pixel */
+                    int dx = R8 - (8 * i + 2 * u + 1), dy = R8 - (8 * j + 2 * v + 1), d2 = dx * dx + dy * dy;
+                    if (d2 <= in2) { a++; if (d2 > rim2) b++; }
+                }
+            inside[j * R + i] = a * 255 / 16;
+            rimcov[j * R + i] = b * 255 / 16;
+        }
+}
+
+/* The cover of a pixel at (x, y) of a w x h shelf: in, and on the rim. */
+static void cover(int x, int y, int w, int h, int *in, int *on_rim)
+{
+    int i = x < radius ? x : x >= w - radius ? w - 1 - x : -1;
+    int j = y < radius ? y : y >= h - radius ? h - 1 - y : -1;
+    if (i >= 0 && j >= 0) { *in = inside[j * radius + i]; *on_rim = rimcov[j * radius + i]; return; }
+    *in = 255;
+    *on_rim = x == 0 || y == 0 || x == w - 1 || y == h - 1 ? 255 : 0;
+}
+
+static int opacity(void) { return dock.background == OD_BG_SOLID ? 100 : dock.opacity; }
+
+/* Calls fn for each separator with where its line goes. */
+static void each_separator(int W, int H, void (*fn)(void *, int, int, int, int), void *ctx)
+{
+    int x0, y0, x1, y1, pos = standing ? by : bx;
+    /* inset from the shelf's top and bottom as the Mac's is */
+    int inset;
+    shelf(W, H, &x0, &y0, &x1, &y1);
+    inset = apad + (standing ? cellw : cellh) / 8;
+    for (int i = 0; i < dock.n; i++) {
+        int s = item_size(i);
+        if (pos + s > (standing ? H : W) - pad) break;
+        if (dock.b[i].kind == OD_SEPARATOR) {
+            if (standing) fn(ctx, x0 + inset, pos + s / 2, x1 - inset, pos + s / 2);
+            else fn(ctx, pos + s / 2, y0 + inset, pos + s / 2, y1 - inset);
+        }
+        pos += s;
+    }
+}
+
+/* ---- on a graphics card: the tint mixed in -------------------------------------------------- */
+
+typedef struct { ULONG *px; int W; } argb_buf;
+
+static ULONG blend(ULONG p, colour c, int a)       /* a of 255 parts c over p */
+{
+    int r = (p >> 16) & 255, g = (p >> 8) & 255, b = p & 255;
+    r += (c.r - r) * a / 255; g += (c.g - g) * a / 255; b += (c.b - b) * a / 255;
+    return 0xff000000UL | (ULONG)r << 16 | (ULONG)g << 8 | (ULONG)b;
+}
+
+/* Frosted glass: what is behind, blurred (a box of 2 radius+1 pixels, across then down). */
+static void frost(ULONG *px, int W, int x0, int y0, int x1, int y1, int r)
+{
+    int n = (x1 - x0 + 1) > (y1 - y0 + 1) ? x1 - x0 + 1 : y1 - y0 + 1;
+    ULONG *line = AllocVec(n * 4, MEMF_ANY);
+    if (!line) return;
+    for (int pass = 0; pass < 2; pass++) {
+        int len = pass ? y1 - y0 + 1 : x1 - x0 + 1, lines = pass ? x1 - x0 + 1 : y1 - y0 + 1;
+        for (int k = 0; k < lines; k++) {
+            ULONG *first = pass ? px + y0 * W + x0 + k : px + (y0 + k) * W + x0;
+            int step = pass ? W : 1, sr = 0, sg = 0, sb = 0, cnt = 2 * r + 1;
+            for (int t = 0; t < len; t++) line[t] = first[t * step];
+            /* a running sum, the ends repeated */
+            for (int t = -r; t <= r; t++) {
+                ULONG p = line[t < 0 ? 0 : t >= len ? len - 1 : t];
+                sr += (p >> 16) & 255; sg += (p >> 8) & 255; sb += p & 255;
+            }
+            for (int t = 0; t < len; t++) {
+                ULONG in, out;
+                first[t * step] = 0xff000000UL | (ULONG)(sr / cnt) << 16 | (ULONG)(sg / cnt) << 8 | (ULONG)(sb / cnt);
+                in = line[t + r + 1 < len ? t + r + 1 : len - 1];
+                out = line[t - r < 0 ? 0 : t - r];
+                sr += (int)((in >> 16) & 255) - (int)((out >> 16) & 255);
+                sg += (int)((in >> 8) & 255) - (int)((out >> 8) & 255);
+                sb += (int)(in & 255) - (int)(out & 255);
+            }
+        }
+    }
+    FreeVec(line);
+}
+
+static int dark_tint(void) { return luma(tint) < 128; }
+
+/* A group's line: a step from the shelf as it shows, lighter on a dark tint, darker on a light one. */
+static void argb_line(void *ctx, int xa, int ya, int xb, int yb)
+{
+    static const colour white = { 255, 255, 255 }, black = { 0, 0, 0 };
+    argb_buf *b = ctx;
+    int dark = dark_tint();
+    for (int y = ya; y <= yb; y++)
+        for (int x = xa; x <= xb; x++) b->px[y * b->W + x] = blend(b->px[y * b->W + x], dark ? white : black, dark ? 56 : 48);
+}
+
+/* The shelf into rp (W x H at 0, 0) on a graphics card. 0 when there's no memory for it. */
+static int make_shelf_card(struct RastPort *rp, int W, int H)
+{
+    ULONG *px = AllocVec(W * H * 4, MEMF_ANY);
+    static const colour white = { 255, 255, 255 };
+    int x0, y0, x1, y1, a = opacity() * 255 / 100, ra = dark_tint() ? 72 : 150, sw, sh;
+    argb_buf b;
+    if (!px) return 0;
+    shelf(W, H, &x0, &y0, &x1, &y1);
+    sw = x1 - x0 + 1; sh = y1 - y0 + 1;
+    if (behind) {
+        struct RastPort brp2;
+        InitRastPort(&brp2);
+        brp2.BitMap = behind;
+        ReadPixelArray(px, 0, 0, W * 4, &brp2, 0, 0, W, H, RECTFMT_ARGB);
+        if (dock.background == OD_BG_GLASS && a < 255) frost(px, W, x0, y0, x1, y1, big / 16 < 2 ? 2 : big / 16);
+    } else {
+        /* nothing seen through: the screen's background */
+        ULONG c = 0xff000000UL | (ULONG)bg_c.r << 16 | (ULONG)bg_c.g << 8 | (ULONG)bg_c.b;
+        for (int n = 0; n < W * H; n++) px[n] = c;
+        a = 255;
+    }
+    for (int y = 0; y < sh; y++)
+        for (int x = 0; x < sw; x++) {
+            int in, on_rim;
+            ULONG *p = &px[(y0 + y) * W + x0 + x];
+            cover(x, y, sw, sh, &in, &on_rim);
+            if (!in) continue;
+            if (a) *p = blend(*p, tint, a * in / 255);
+            /* the edge: a little lighter than the shelf as it shows */
+            if (dock.border && on_rim) *p = blend(*p, white, ra * on_rim / 255);
+        }
+    b.px = px; b.W = W;
+    each_separator(W, H, argb_line, &b);
+    WritePixelArray(px, 0, 0, W * 4, rp, 0, 0, W, H, RECTFMT_ARGB);
+    FreeVec(px);
+    return 1;
+}
+
+/* ---- on the native chipset (or 256 colours): the nearest pens ------------------------------- */
+
+static void pen_line(void *ctx, int xa, int ya, int xb, int yb)
+{
+    struct RastPort *rp = ctx;
+    RectFill(rp, xa, ya, xb, yb);
+}
+
+static void make_shelf_pens(struct RastPort *rp, int W, int H)
+{
+    static UWORD quarter[2] = { 0x8888, 0x2222 }, half[2] = { 0x5555, 0xaaaa }, three[2] = { 0x7777, 0xdddd };
+    int x0, y0, x1, y1, sh, op = opacity(), R = radius;
+    UWORD *pattern = NULL;
+    int fill;
+    shelf(W, H, &x0, &y0, &x1, &y1);
+    sh = y1 - y0 + 1;
+    SetDrMd(rp, JAM1);
+    if (behind) BltBitMapRastPort(behind, 0, 0, rp, 0, 0, W, H, 0xc0);
+    else {
+        /* nothing seen through: the screen's background */
+        struct DrawInfo *dri = GetScreenDrawInfo(scr);
+        SetAPen(rp, dri ? dri->dri_Pens[BACKGROUNDPEN] : 0);
+        RectFill(rp, 0, 0, W - 1, H - 1);
+        if (dri) FreeScreenDrawInfo(scr, dri);
+    }
+    /* solid at 100 (or with nothing to see through); dithered for glass, by how solid; see-through: the edge alone */
+    fill = op >= 100 || !behind || (dock.background == OD_BG_GLASS && op > 0);
+    if (behind && op < 100) pattern = op < 35 ? quarter : op < 70 ? half : three;
+    if (fill && tint_pen >= 0) {
+        SetAPen(rp, tint_pen);
+        if (pattern) SetAfPt(rp, pattern, 1);
+        for (int y = 0; y < sh; y++) {
+            int j = y < R ? y : y >= sh - R ? sh - 1 - y : -1, l = 0;
+            if (j < 0) {
+                /* the straight part, at once */
+                RectFill(rp, x0, y0 + y, x1, y0 + sh - R - 1);
+                y = sh - R - 1;
+                continue;
+            }
+            while (l < R && inside[j * R + l] < 128) l++;
+            if (x0 + l <= x1 - l) RectFill(rp, x0 + l, y0 + y, x1 - l, y0 + y);
+        }
+        SetAfPt(rp, NULL, 0);
+    }
+    if (dock.border && rim_pen >= 0) {
+        /* the edge: the straight lines, and the corners' outermost pixels inside */
+        SetAPen(rp, rim_pen);
+        RectFill(rp, x0 + R, y0, x1 - R, y0); RectFill(rp, x0 + R, y1, x1 - R, y1);
+        RectFill(rp, x0, y0 + R, x0, y1 - R); RectFill(rp, x1, y0 + R, x1, y1 - R);
+        for (int j = 0; j < R; j++)
+            for (int i = 0; i < R; i++) {
+                int in = inside[j * R + i] >= 128;
+                int out_l = i == 0 || inside[j * R + i - 1] < 128, out_u = j == 0 || inside[(j - 1) * R + i] < 128;
+                if (!in || !(out_l || out_u)) continue;
+                WritePixel(rp, x0 + i, y0 + j); WritePixel(rp, x1 - i, y0 + j);
+                WritePixel(rp, x0 + i, y1 - j); WritePixel(rp, x1 - i, y1 - j);
+            }
+    }
+    if (sep_pen >= 0) { SetAPen(rp, sep_pen); each_separator(W, H, pen_line, rp); }
+}
+
+/* The shelf, made once into shelfbm (or straight into rp when there's no memory for it). */
+static void make_shelf(struct RastPort *rp, int W, int H)
+{
+    make_corner();
+    if (!(card && make_shelf_card(rp, W, H))) make_shelf_pens(rp, W, H);
+}
+
+/* The Mac's dot: a small round one in the dot's colour, smooth on a card. */
+static void dot(struct RastPort *rp, int cx, int cy)
+{
+    int r4 = dot_big ? 10 : 6;                     /* 2.5 or 1.5 pixels, in quarters */
+    if (card) {
+        ULONG px[7 * 7];
+        ReadPixelArray(px, 0, 0, 7 * 4, rp, cx - 3, cy - 3, 7, 7, RECTFMT_ARGB);
+        for (int y = 0; y < 7; y++)
+            for (int x = 0; x < 7; x++) {
+                int n = 0;
+                for (int v = 0; v < 4; v++)
+                    for (int u = 0; u < 4; u++) {
+                        int dx = 8 * x + 2 * u + 1 - 28, dy = 8 * y + 2 * v + 1 - 28;   /* from the dot's centre, in eighths */
+                        if (dx * dx + dy * dy <= 4 * r4 * r4) n++;
+                    }
+                if (n) px[y * 7 + x] = blend(px[y * 7 + x], dot_c, n * 255 / 16);
+            }
+        WritePixelArray(px, 0, 0, 7 * 4, rp, cx - 3, cy - 3, 7, 7, RECTFMT_ARGB);
+    } else {
+        SetAPen(rp, dot_pen >= 0 ? dot_pen : 1);
+        if (r4 > 6) { RectFill(rp, cx - 1, cy - 2, cx + 1, cy + 2); RectFill(rp, cx - 2, cy - 1, cx + 2, cy + 1); }
+        else RectFill(rp, cx - 1, cy - 1, cx + 1, cy + 1);
+    }
 }
 
 /* Everything, into the drawing, with button lift (if any) raised by lift pixels. */
@@ -513,44 +881,21 @@ static void render(int lifted, int lift)
     struct DrawInfo *dri = GetScreenDrawInfo(scr);
     UWORD *pens = dri ? dri->dri_Pens : NULL;
     int W = win->Width, H = win->Height, pos = standing ? by : bx, x0, y0, x1, y1;
-    int bg = pens ? pens[BACKGROUNDPEN] : 0, shine = pens ? pens[SHINEPEN] : 2, shadow = pens ? pens[SHADOWPEN] : 1;
-    int text = pens ? pens[TEXTPEN] : 1, fill = pens ? pens[FILLPEN] : 3;
-    static UWORD frost[2] = { 0x5555, 0xaaaa };
+    int shadow = pens ? pens[SHADOWPEN] : 1, text = dot_pen >= 0 ? dot_pen : pens ? pens[TEXTPEN] : 1;
+    int edge = dot_at;                             /* the dot's centre, from the shelf's edge */
     shelf(W, H, &x0, &y0, &x1, &y1);
     SetDrMd(rp, JAM1);
-    /* behind the dock, then the shelf: rounded by leaving its corners see-through */
-    if (behind) BltBitMap(behind, 0, 0, rp->BitMap, 0, 0, W, H, 0xc0, 0xff, NULL);
-    else { SetAPen(rp, bg); RectFill(rp, 0, 0, W - 1, H - 1); }
-    if (dock.background != OD_BG_CLEAR || !behind) {
-        SetAPen(rp, dock.background == OD_BG_GLASS && behind ? shine : bg);
-        if (dock.background == OD_BG_GLASS && behind) SetAfPt(rp, frost, 1);
-        RectFill(rp, x0 + 2, y0, x1 - 2, y1);
-        RectFill(rp, x0, y0 + 2, x0 + 1, y1 - 2);
-        RectFill(rp, x1 - 1, y0 + 2, x1, y1 - 2);
-        RectFill(rp, x0 + 1, y0 + 1, x0 + 1, y1 - 1);
-        RectFill(rp, x1 - 1, y0 + 1, x1 - 1, y1 - 1);
-        SetAfPt(rp, NULL, 0);
-    }
-    if (dock.border) {
-        SetAPen(rp, shine); Move(rp, x0, y1 - 2); Draw(rp, x0, y0 + 2); Draw(rp, x0 + 2, y0); Draw(rp, x1 - 2, y0);
-        SetAPen(rp, shadow); Move(rp, x1 - 1, y0 + 1); Draw(rp, x1, y0 + 2); Draw(rp, x1, y1 - 2); Draw(rp, x1 - 2, y1); Draw(rp, x0 + 2, y1);
-        Draw(rp, x0 + 1, y1 - 1);
-    }
+    /* the shelf, as made when the dock opened: one blit */
+    if (shelfbm) BltBitMapRastPort(shelfbm, 0, 0, rp, 0, 0, W, H, 0xc0);
+    else make_shelf(rp, W, H);
     for (int i = 0; i < dock.n; i++) {
         int s = item_size(i), x = standing ? bx : pos, y = standing ? pos : by;
         od_button *b = &dock.b[i];
         /* the drawing has no layer to clip it: a dock longer than the screen stops at its edge */
-        if (pos + s > (standing ? H : W) - 4) break;
-        if (b->kind == OD_SEPARATOR) {
-            SetAPen(rp, shadow);
-            if (standing) { Move(rp, x0 + 6, y + s / 2 - 1); Draw(rp, x1 - 6, y + s / 2 - 1); }
-            else { Move(rp, x + s / 2 - 1, y0 + 6); Draw(rp, x + s / 2 - 1, y1 - 6); }
-            SetAPen(rp, shine);
-            if (standing) { Move(rp, x0 + 6, y + s / 2); Draw(rp, x1 - 6, y + s / 2); }
-            else { Move(rp, x + s / 2, y0 + 6); Draw(rp, x + s / 2, y1 - 6); }
-        } else {
+        if (pos + s > (standing ? H : W) - pad) break;
+        if (b->kind != OD_SEPARATOR) {
             struct Rectangle r = { 0, 0, 0, 0 };
-            int iw = 0, ih = 0, big = cellw, dx = 0, dy = 0;
+            int iw = 0, ih = 0, dx = 0, dy = 0;
             if (i == lifted) {
                 /* away from the edge */
                 if (dock.place == OD_BOTTOM) dy = -lift; else if (dock.place == OD_TOP) dy = lift;
@@ -584,10 +929,13 @@ static void render(int lifted, int lift)
                     Text(rp, (STRPTR)b->label, n);
                 }
                 if (dock.running && running[i]) {
-                    /* the Mac's dot, under the icon */
-                    int my = y + cellh - 3, mx = x + cellw / 2;
-                    SetAPen(rp, fill);
-                    RectFill(rp, mx - 1, my - 1, mx + 1, my + 1);
+                    /* the Mac's dot, between the icon and the screen's edge */
+                    switch (dock.place) {
+                    case OD_TOP: dot(rp, x + cellw / 2, y0 + edge); break;
+                    case OD_LEFT: dot(rp, x0 + edge, y + big / 2); break;
+                    case OD_RIGHT: dot(rp, x1 - edge, y + big / 2); break;
+                    default: dot(rp, x + cellw / 2, y1 - edge);
+                    }
                 }
             }
         }
@@ -611,7 +959,7 @@ static void show(int lifted, int lift)
 
 static void draw(void) { show(-1, 0); }
 
-/* A started program's icon hops, as on the Mac. */
+/* A started program's icon hops, as on the Mac: the shelf is the one made already. */
 static void hop(int i)
 {
     /* two bounces and a small one, two video frames a step: about a second */
@@ -733,6 +1081,7 @@ static void free_bitmaps(void)
     WaitBlit();                                    /* the blitter may still be drawing in them */
     if (behind) { FreeBitMap(behind); behind = NULL; }
     if (back) { FreeBitMap(back); back = NULL; }
+    if (shelfbm) { FreeBitMap(shelfbm); shelfbm = NULL; }
 }
 
 /* True when a window other than a backdrop one is over the box: the screen
@@ -754,6 +1103,7 @@ static int open_dock(struct Menu *menus)
     int w, h, x, y, depth = GetBitMapAttr(scr->RastPort.BitMap, BMA_DEPTH);
     load_icons();
     for (int i = 0; i < dock.n; i++) make_small(i);
+    choose_colours();
     layout(&w, &h);
     place_of(w, h, &x, &y);
     /* what is behind the dock, before it opens; and the bitmap it is drawn in.
@@ -765,7 +1115,7 @@ static int open_dock(struct Menu *menus)
         if (over && behind && behind_w == w && behind_h == h) { kept = behind; behind = NULL; }
         free_bitmaps();
         behind = kept;
-        if (!behind && !over && (dock.background != OD_BG_SOLID || dock.hop)) {
+        if (!behind && !over) {                    /* a solid shelf too: its corners are rounded */
             if ((behind = AllocBitMap(w, h, depth, 0, scr->RastPort.BitMap)))
                 BltBitMap(scr->RastPort.BitMap, x, y, behind, 0, 0, w, h, 0xc0, 0xff, NULL);
         }
@@ -775,9 +1125,16 @@ static int open_dock(struct Menu *menus)
     InitRastPort(&brp);
     brp.BitMap = back;
     SetFont(&brp, scr->RastPort.Font);
+    /* the shelf, made once for this size, this copy of what is behind and these settings */
+    if (back && (shelfbm = AllocBitMap(w, h, depth, 0, scr->RastPort.BitMap))) {
+        struct RastPort srp;
+        InitRastPort(&srp);
+        srp.BitMap = shelfbm;
+        make_shelf(&srp, w, h);
+    }
     win = OpenWindowTags(NULL, WA_PubScreen, (ULONG)scr, WA_Left, x, WA_Top, y, WA_Width, w, WA_Height, h,
                          WA_Borderless, TRUE, WA_SmartRefresh, TRUE, WA_NewLookMenus, TRUE,
-                         WA_ScreenTitle, (ULONG)"OpenDock 0.2",
+                         WA_ScreenTitle, (ULONG)"OpenDock 0.3",
                          WA_IDCMP, IDCMP_MOUSEBUTTONS | IDCMP_MENUPICK | IDCMP_REFRESHWINDOW | IDCMP_INACTIVEWINDOW |
                                    IDCMP_ACTIVEWINDOW, TAG_DONE);
     if (!win) { free_bitmaps(); return 0; }
@@ -800,6 +1157,7 @@ static int open_dock(struct Menu *menus)
 static void close_dock(void)
 {
     bubble_off();
+    if (scr) free_pens();
     if (aw) { RemoveAppWindow(aw); aw = NULL; }
     if (!win) return;
     ClearMenuStrip(win);
