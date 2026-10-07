@@ -812,13 +812,15 @@ out:
     return rc;
 }
 
-int main(void)
+int main(int argc, char **argv)
 {
     LONG args[5] = { 0, 0, 0, 0, 0 };
-    struct RDArgs *rd = ReadArgs((STRPTR)"FROM,MAGICMENU/K,USE/S,SAVE/S,ADVANCED/S", args, NULL);
+    /* from Workbench (argc 0) there are no arguments: ReadArgs would read them from
+     * libnix's console window, which opens empty and waits */
+    struct RDArgs *rd = argc > 0 ? ReadArgs((STRPTR)"FROM,MAGICMENU/K,USE/S,SAVE/S,ADVANCED/S", args, NULL) : NULL;
     char *text, err[100];
     int rc = RETURN_OK;
-    if (!rd) { PrintFault(IoErr(), (STRPTR)"Menus"); return RETURN_FAIL; }
+    if (!rd && argc > 0) { PrintFault(IoErr(), (STRPTR)"Menus"); return RETURN_FAIL; }
     /* orig is always what ENV: holds now; FROM only fills the window */
     text = read_file(PREFS_ENV, NULL);
     om_parse(&orig, text);
@@ -827,7 +829,7 @@ int main(void)
     else {
         if (!(text = read_file((const char *)args[0], NULL))) {
             Printf((STRPTR)"Menus: %s can't be read.\n", args[0]);
-            FreeArgs(rd);
+            if (rd) FreeArgs(rd);
             return RETURN_FAIL;
         }
         om_parse(&cur, text);
@@ -838,7 +840,7 @@ int main(void)
         if (!take_over(&cur, (const char *)args[1], err, sizeof err)) {
             /* nothing else is written: USE or SAVE was for these settings */
             Printf((STRPTR)"Menus: MagicMenu's settings couldn't be taken over: %s.\n", (LONG)err);
-            FreeArgs(rd);
+            if (rd) FreeArgs(rd);
             return RETURN_WARN;
         }
     } else if (!cur.imported[0] && !exists(PREFS_ENVARC) && magicmenu_file()) {
@@ -850,12 +852,12 @@ int main(void)
             PutStr((STRPTR)"Menus: the settings couldn't be written.\n");
             rc = RETURN_FAIL;
         } else tell_openmenus();
-        FreeArgs(rd);
+        if (rd) FreeArgs(rd);
         return rc;
     }
     read_view();
     if (args[4]) advanced = 1;
-    FreeArgs(rd);
+    if (rd) FreeArgs(rd);
     AslBase = OpenLibrary((STRPTR)"asl.library", 39);
     load_theme();
     rc = gui();

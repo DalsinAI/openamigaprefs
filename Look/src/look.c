@@ -25,6 +25,7 @@
 #include <exec/memory.h>
 #include <exec/ports.h>
 #include <dos/dos.h>
+#include <dos/dostags.h>
 #include <dos/dosextens.h>
 #include <dos/dosasl.h>
 #include <intuition/intuition.h>
@@ -319,6 +320,16 @@ static int running(const char *tool)
     return t != NULL;
 }
 
+/* A command with NIL: for its input and output: from Workbench, Input() is libnix's
+ * console window, which a command reading or writing it would open. */
+static void run_quiet(const char *cmd)
+{
+    BPTR in = Open((STRPTR)"NIL:", MODE_OLDFILE), out = Open((STRPTR)"NIL:", MODE_NEWFILE);
+    if (in && out) SystemTags((STRPTR)cmd, SYS_Input, in, SYS_Output, out, TAG_DONE);
+    if (in) Close(in);                     /* a command that isn't asynchronous leaves them to us */
+    if (out) Close(out);
+}
+
 /* On at start: the tool and its icon in WBStartup; and running now, or stopped. */
 static void set_focus_tool(const char *tool, int on, const char *qualifier)
 {
@@ -326,9 +337,9 @@ static void set_focus_tool(const char *tool, int on, const char *qualifier)
     snprintf(dst, sizeof dst, WBSTARTUP "%s", base_name(tool));
     if (on && !at_start(tool) && exists(tool)) {
         snprintf(cmd, sizeof cmd, "Copy \"%s\" \"%s\" CLONE QUIET >NIL:", tool, dst);
-        SystemTags((STRPTR)cmd, TAG_DONE);
+        run_quiet(cmd);
         snprintf(cmd, sizeof cmd, "Copy \"%s.info\" \"%s.info\" CLONE QUIET >NIL:", tool, dst);
-        SystemTags((STRPTR)cmd, TAG_DONE);
+        run_quiet(cmd);
     }
     if (!on && at_start(tool)) {
         DeleteFile((STRPTR)dst);
@@ -355,7 +366,7 @@ static void set_focus_tool(const char *tool, int on, const char *qualifier)
     if (on && !running(tool) && exists(tool)) {
         snprintf(cmd, sizeof cmd, "Run >NIL: \"%s\"%s%s", on && at_start(tool) ? dst : tool,
                  qualifier ? " QUALIFIER=" : "", qualifier ? qualifier : "");
-        SystemTags((STRPTR)cmd, TAG_DONE);
+        run_quiet(cmd);
     }
     if (!on && running(tool)) {
         struct Task *t;
@@ -837,13 +848,15 @@ static int gui(void)
     return r;
 }
 
-int main(void)
+int main(int argc, char **argv)
 {
     LONG args[4] = { 0, 0, 0, 0 };
-    struct RDArgs *rd = ReadArgs((STRPTR)"FROM,USE/S,SAVE/S,ADVANCED/S", args, NULL);
+    /* from Workbench (argc 0) there are no arguments: ReadArgs would read them from
+     * libnix's console window, which opens empty and waits */
+    struct RDArgs *rd = argc > 0 ? ReadArgs((STRPTR)"FROM,USE/S,SAVE/S,ADVANCED/S", args, NULL) : NULL;
     char *text;
     int rc;
-    if (!rd) { PrintFault(IoErr(), (STRPTR)"Look"); return RETURN_FAIL; }
+    if (!rd && argc > 0) { PrintFault(IoErr(), (STRPTR)"Look"); return RETURN_FAIL; }
     text = read_file(args[0] ? (const char *)args[0] : PREFS_ENV, NULL);
     parse_look(&cur, text);
     if (text) FreeVec(text);
@@ -853,11 +866,11 @@ int main(void)
     ap_on = ap_orig = at_start(AP_TOOL) || running(AP_TOOL);
     if (args[1] || args[2]) {                /* from the Shell: no window */
         put_in_place(args[2] != 0);
-        FreeArgs(rd);
+        if (rd) FreeArgs(rd);
         return RETURN_OK;
     }
     advanced = args[3] ? 1 : read_view();
-    FreeArgs(rd);
+    if (rd) FreeArgs(rd);
     list_dir(THEME_DIR, ".theme", theme_names, MAX_THEMES, &nthemes);
     list_dir(PROFILE_DIR, ".profile", profile_names, MAX_PROFILES, &nprofiles);
     rc = gui();

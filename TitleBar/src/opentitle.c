@@ -4,6 +4,11 @@
  * right end, just left of OpenSpeaker. Optionally the display's border
  * around the screen is black.
  *
+ * 0.5 (8 October 2026): a cog at the bar's far end, right of OpenSpeaker and
+ * left of the screen's depth gadget. A click lists the Open settings editors
+ * that are installed, and "All Prefs..." (the SYS:Prefs drawer); choosing
+ * one starts it as a double-click on its icon does.
+ *
  * The free memory is Workbench's own: its title format (the WBTF chunk of
  * Sys/Workbench.prefs, as Prefs/Workbench writes it) becomes
  *   "Workbench %r  Chip %mcek KB  Fast %mfem MB"
@@ -41,6 +46,9 @@
 #include <proto/bsdsocket.h>
 #include <exec/io.h>
 #include <dos/dostags.h>
+#include <devices/timer.h>
+#include <workbench/workbench.h>
+#include <proto/wb.h>
 
 #include <string.h>
 #include <stdio.h>
@@ -50,16 +58,17 @@
 #include "om_prefs.h"
 #include "logo.h"
 
-const char version[] __attribute__((used)) = "$VER: OpenTitle 0.4 (6.10.2026) OpenPrefs, Dalsin Limited";
+const char version[] __attribute__((used)) = "$VER: OpenTitle 0.5 (8.10.2026) OpenPrefs, Dalsin Limited";
 
 struct IntuitionBase *IntuitionBase;
 struct GfxBase *GfxBase;
-struct Library *LayersBase, *UtilityBase, *SocketBase;
+struct Library *LayersBase, *UtilityBase, *SocketBase, *WorkbenchBase;
 
 #define MENUS_ENV  "ENV:OpenMenus/Menus"
 #define TRAY_DIR   "ENV:OpenMenus/Tray"
 #define CLOCK_ORDER 10                         /* left of the network icons (5) and OpenSpeaker (0) */
 #define NET_ORDER   5
+#define COG_ORDER   (-5)                       /* the far end: right of OpenSpeaker (0), left of the depth gadget */
 #define NET_TOOL   "SYS:Tools/Commodities/OpenSocketControl"
 #define WIFI_DEVICE "opensocketwifi.device"    /* OpenSocket's: the PC's (or the card's) Wi-Fi */
 #define WIFI_STATUS 2
@@ -86,6 +95,13 @@ static int wifi_state = -1;                    /* -1 no Wi-Fi to show, 0 not con
 static int wifi_signal, pop_ticks;
 static char lan_addr[20], wifi_ssid[34];
 static int net_drawn = -100;                   /* what the icons show, to draw only on change */
+
+/* the cog and its list of settings editors */
+static struct Window *cog_w, *menu_w;
+static WORD gx, gy, gw, gh;
+static int cog_drawn = -1;                     /* 0 plain, 1 the pointer over it, 2 its list open */
+static int cog_skip;                           /* the click that closed the list was on the cog: don't open it again */
+static int menu_hot = -1;
 
 static LONG pens[64];
 static ULONG pen_rgb[64];
@@ -607,11 +623,283 @@ static void pop_click(WORD my)
     pop_close();
 }
 
+/* ---- the cog: the settings editors --------------------------------------------------------- */
+
+/* The cog, drawn at three sizes; the largest that fits the bar is used. */
+static const char *const cog9[9] = {
+    "....#....", ".#.###.#.", "..##.##..", ".##...##.", "###...###", ".##...##.", "..##.##..", ".#.###.#.", "....#....",
+};
+static const char *const cog11[11] = {
+    "....###....", ".##.###.##.", ".#########.", "..##...##..", "###.....###", "###.....###",
+    "###.....###", "..##...##..", ".#########.", ".##.###.##.", "....###....",
+};
+static const char *const cog13[13] = {
+    ".....###.....", ".##..###..##.", ".###########.", "..#########..", "..###...###..", "####.....####", "####.....####",
+    "####.....####", "..###...###..", "..#########..", ".###########.", ".##..###..##.", ".....###.....",
+};
+
+/* The settings editors, as in OpenUpMenu's Tools > Preferences (openamigaup src/openupmenu.c):
+ * each shows when its program is there (needs, or path when NULL). */
+static const struct { const char *label, *path, *needs; } cog_items[] = {
+    { "Look",         "SYS:Prefs/Look",         NULL },
+    { "Windows",      "SYS:Prefs/Windows",      NULL },
+    { "Dock",         "SYS:Prefs/Dock",         NULL },
+    { "Menus",        "SYS:Prefs/Menus",        NULL },
+    { "Title bar",    "SYS:Prefs/TitleBar",     NULL },
+    { "Sound",        "SYS:Prefs/Sound",        "SYS:C/OpenSpeaker" },    /* OS 3.2's own until OpenUp's Sound replaces it */
+    { "OpenTypes",    "SYS:Prefs/OpenTypes",    NULL },
+    { "OpenUp Setup", "SYS:Prefs/OpenUp-Setup", NULL },
+    { NULL,           NULL,                     NULL },                   /* a line */
+    { "All Prefs...", "SYS:Prefs",              NULL },
+};
+#define COG_ITEMS (int)(sizeof cog_items / sizeof cog_items[0])
+#define COG_PAD 10
+static int menu_idx[COG_ITEMS], menu_n;        /* what the list shows: indexes into cog_items */
+static WORD menu_y[COG_ITEMS + 1], menu_rh;
+static const char *menu_title;
+
+static int exists(const char *path)
+{
+    BPTR l = Lock((STRPTR)path, ACCESS_READ);
+    if (l) UnLock(l);
+    return l != 0;
+}
+
+static int cog_size(void)
+{
+    int h = scr->BarHeight - 2;
+    return h >= 13 ? 13 : h >= 11 ? 11 : 9;
+}
+
+static void cog_place(void)
+{
+    WORD bh = scr->BarHeight + 1;
+    int n, off = tray_before("Cog", COG_ORDER, &n);
+    gw = cog_size() + 10;
+    switch (bar_edge) {
+    case OM_BAR_BOTTOM: gh = bh; gx = scr->Width - gw - off; gy = scr->Height - bh; break;
+    case OM_BAR_LEFT:   gh = bh; gx = 0; gy = scr->Height - bh * (n + 1); break;
+    case OM_BAR_RIGHT:  gh = bh; gx = scr->Width - gw; gy = scr->Height - bh * (n + 1); break;
+    case OM_BAR_TOP:    gh = bh; gx = scr->Width - 2 * scr->BarHeight - gw - off; gy = 0; break;
+    default:            gh = scr->BarHeight; gx = scr->Width - 2 * scr->BarHeight - gw - off; gy = 0; break;
+    }
+}
+
+static int over_cog(void)
+{
+    WORD x = scr->MouseX, y = scr->MouseY;
+    return cog_w && IntuitionBase->FirstScreen == scr && x >= gx && x < gx + gw && y >= gy && y < gy + gh;
+}
+
+/* plain in the bar's pens; raised under the pointer; filled while its list is open, as OpenSpeaker is */
+static void draw_cog(int force)
+{
+    struct RastPort *rp;
+    const char *const *rows;
+    int state = menu_w ? 2 : over_cog() ? 1 : 0, size, x, y;
+    WORD h, ox, oy;
+    if (!cog_w || (!force && state == cog_drawn)) return;
+    cog_drawn = state;
+    rp = cog_w->RPort;
+    h = gh - (bar_edge == OM_BAR_TITLE ? 1 : 0);
+    SetAPen(rp, dri->dri_Pens[state == 2 ? FILLPEN : BARBLOCKPEN]);
+    RectFill(rp, 0, 0, gw - 1, gh - 1);
+    if (state == 1) {
+        SetAPen(rp, dri->dri_Pens[SHINEPEN]);
+        Move(rp, 1, h - 1); Draw(rp, 1, 0); Draw(rp, gw - 2, 0);
+        SetAPen(rp, dri->dri_Pens[SHADOWPEN]);
+        Draw(rp, gw - 2, h - 1); Draw(rp, 2, h - 1);
+    }
+    size = cog_size();
+    rows = size == 13 ? cog13 : size == 11 ? cog11 : cog9;
+    ox = (gw - size) / 2;
+    oy = (h - size) / 2;
+    if (oy < 0) oy = 0;
+    SetAPen(rp, dri->dri_Pens[state == 2 ? FILLTEXTPEN : BARDETAILPEN]);
+    for (y = 0; y < size && oy + y < gh; y++)
+        for (x = 0; x < size; ) {
+            int run;
+            if (rows[y][x] != '#') { x++; continue; }
+            for (run = x; run < size && rows[y][run] == '#'; run++) ;
+            RectFill(rp, ox + x, oy + y, ox + run - 1, oy + y);
+            x = run;
+        }
+}
+
+static void cog_open(void)
+{
+    cog_place();
+    if ((cog_w = net_window(gx, gy, gw, gh))) {
+        cog_drawn = -1;
+        draw_cog(1);
+        tray("Cog", gw, COG_ORDER);
+    }
+}
+
+static void draw_menu(void)
+{
+    struct RastPort *rp;
+    WORD w, h;
+    int i;
+    if (!menu_w) return;
+    rp = menu_w->RPort;
+    w = menu_w->Width; h = menu_w->Height;
+    SetAPen(rp, dri->dri_Pens[BARBLOCKPEN]);
+    RectFill(rp, 1, 1, w - 2, h - 2);
+    SetAPen(rp, dri->dri_Pens[SHADOWPEN]);
+    Move(rp, 0, 0); Draw(rp, w - 1, 0); Draw(rp, w - 1, h - 1); Draw(rp, 0, h - 1); Draw(rp, 0, 0);
+    SetDrMd(rp, JAM1);
+    for (i = 0; i < menu_n; i++) {
+        const char *t = cog_items[menu_idx[i]].label;
+        WORD y0 = menu_y[i], y1 = menu_y[i + 1] - 1;
+        if (!t) {
+            SetAPen(rp, dri->dri_Pens[SHADOWPEN]);
+            Move(rp, 4, (y0 + y1) / 2); Draw(rp, w - 5, (y0 + y1) / 2);
+            SetAPen(rp, dri->dri_Pens[SHINEPEN]);
+            Move(rp, 4, (y0 + y1) / 2 + 1); Draw(rp, w - 5, (y0 + y1) / 2 + 1);
+            continue;
+        }
+        if (i == menu_hot) { SetAPen(rp, dri->dri_Pens[FILLPEN]); RectFill(rp, 2, y0, w - 3, y1); }
+        SetAPen(rp, dri->dri_Pens[i == menu_hot ? FILLTEXTPEN : BARDETAILPEN]);
+        Move(rp, COG_PAD, y0 + (y1 - y0 + 1 - rp->TxHeight) / 2 + rp->TxBaseline);
+        Text(rp, (STRPTR)t, strlen(t));
+    }
+}
+
+static int menu_row(WORD my)
+{
+    int i;
+    for (i = 0; i < menu_n; i++)
+        if (my >= menu_y[i] && my < menu_y[i + 1]) return cog_items[menu_idx[i]].label ? i : -1;
+    return -1;
+}
+
+static void menu_close(int give_back)
+{
+    if (!menu_w) return;
+    CloseWindow(menu_w);
+    menu_w = NULL;
+    menu_hot = -1;
+    if (give_back && last_other) ActivateWindow(last_other);
+    draw_cog(1);
+}
+
+static void menu_open(void)
+{
+    struct RastPort trp;
+    WORD W = 0, H, x, y;
+    int i;
+    InitRastPort(&trp);
+    SetFont(&trp, dri->dri_Font);
+    menu_rh = dri->dri_Font->tf_YSize + 4;
+    menu_n = 0;
+    H = 3;
+    for (i = 0; i < COG_ITEMS; i++) {
+        const char *t = cog_items[i].label;
+        if (t && !exists(cog_items[i].needs ? cog_items[i].needs : cog_items[i].path)) continue;
+        if (!t && !menu_n) continue;                   /* no line at the top */
+        menu_y[menu_n] = H;
+        menu_idx[menu_n++] = i;
+        if (t) { WORD tw = TextLength(&trp, (STRPTR)t, strlen(t)); if (tw > W) W = tw; }
+        H += t ? menu_rh : 6;
+    }
+    menu_y[menu_n] = H;
+    H += 3;
+    W += 2 * COG_PAD;
+    if (W < 120) W = 120;
+    x = gx + gw - W;                                    /* under the cog, towards the middle of the screen */
+    if (bar_edge == OM_BAR_LEFT) x = 0;
+    if (x < 0) x = 0;
+    y = (bar_edge == OM_BAR_BOTTOM || bar_edge == OM_BAR_LEFT || bar_edge == OM_BAR_RIGHT) ? gy - H : gy + gh + (bar_edge == OM_BAR_TITLE ? 1 : 0);
+    if (y < 0) y = 0;
+    if (y + H > scr->Height) y = scr->Height - H;
+    menu_hot = -1;
+    {   /* the bar keeps the title it shows now while the list is active */
+        static char title[120];
+        strncpy(title, scr->Title ? (const char *)scr->Title : "", sizeof title - 1);
+        title[sizeof title - 1] = 0;
+        menu_title = title;
+    }
+    /* active while open, so the pointer lights the entries and a click elsewhere closes it */
+    menu_w = OpenWindowTags(NULL, WA_CustomScreen, (ULONG)scr, WA_Left, x, WA_Top, y, WA_Width, W, WA_Height, H,
+                            WA_Borderless, TRUE, WA_Activate, TRUE, WA_RMBTrap, TRUE, WA_SmartRefresh, TRUE, WA_ReportMouse, TRUE,
+                            WA_ScreenTitle, (ULONG)menu_title,
+                            WA_IDCMP, IDCMP_REFRESHWINDOW | IDCMP_MOUSEBUTTONS | IDCMP_MOUSEMOVE | IDCMP_INACTIVEWINDOW | IDCMP_RAWKEY,
+                            TAG_DONE);
+    if (menu_w) {
+        SetFont(menu_w->RPort, dri->dri_Font);
+        draw_menu();
+    }
+    draw_cog(1);
+}
+
+/* starts an editor as a double-click on its icon does (its icon's stack and tool types count) */
+static void cog_start(const char *path)
+{
+    BPTR in, out;
+    char cmd[80];
+    if (!WorkbenchBase) WorkbenchBase = OpenLibrary((STRPTR)"workbench.library", 44);
+    if (WorkbenchBase && OpenWorkbenchObjectA((STRPTR)path, NULL)) return;
+    if (!strcmp(path, "SYS:Prefs")) return;             /* a drawer needs Workbench */
+    snprintf(cmd, sizeof cmd, "\"%s\"", path);
+    in = Open((STRPTR)"NIL:", MODE_OLDFILE);
+    out = Open((STRPTR)"NIL:", MODE_NEWFILE);
+    if (!in || !out || SystemTags((STRPTR)cmd, SYS_Input, in, SYS_Output, out, SYS_Asynch, TRUE, SYS_UserShell, TRUE,
+                                  NP_StackSize, 16384, TAG_DONE) == -1) {
+        if (in) Close(in);
+        if (out) Close(out);
+    }
+}
+
+static void menu_pick(int row)
+{
+    const char *path;
+    if (row < 0 || row >= menu_n || !(path = cog_items[menu_idx[row]].path)) return;
+    menu_close(1);
+    cog_start(path);
+}
+
+/* the list's messages; first, so a click on the cog that closed it isn't taken as one to open it again */
+static void menu_events(void)
+{
+    struct IntuiMessage *m;
+    while (menu_w && (m = (struct IntuiMessage *)GetMsg(menu_w->UserPort))) {
+        ULONG cls = m->Class;
+        UWORD code = m->Code;
+        WORD my = m->MouseY, mx = m->MouseX;
+        int inside = mx >= 0 && mx < menu_w->Width && my >= 0 && my < menu_w->Height;
+        ReplyMsg((struct Message *)m);
+        if (cls == IDCMP_REFRESHWINDOW) { BeginRefresh(menu_w); draw_menu(); EndRefresh(menu_w, TRUE); }
+        else if (cls == IDCMP_MOUSEMOVE) {
+            int hot = inside ? menu_row(my) : -1;
+            if (hot != menu_hot) { menu_hot = hot; draw_menu(); }
+        }
+        else if (cls == IDCMP_MOUSEBUTTONS && code == SELECTUP && inside) menu_pick(menu_row(my));
+        else if (cls == IDCMP_INACTIVEWINDOW) {          /* a click elsewhere */
+            cog_skip = over_cog();
+            menu_close(0);
+        }
+        else if (cls == IDCMP_RAWKEY) {
+            int i = menu_hot;
+            if (code == 0x45) menu_close(1);                                  /* Esc */
+            else if (code == 0x44 || code == 0x43) menu_pick(menu_hot);       /* Return, Enter */
+            else if (code == 0x4C || code == 0x4D) {                          /* up, down */
+                do i = code == 0x4D ? (i + 1) % menu_n : (i <= 0 ? menu_n - 1 : i - 1);
+                while (!cog_items[menu_idx[i]].label);
+                menu_hot = i;
+                draw_menu();
+            }
+        }
+    }
+}
+
 static void close_all(void)
 {
     if (clock_w) { CloseWindow(clock_w); clock_w = NULL; tray("Clock", 0, CLOCK_ORDER); }
     if (pop_w) { CloseWindow(pop_w); pop_w = NULL; }
     if (net_w) { CloseWindow(net_w); net_w = NULL; tray("Network", 0, NET_ORDER); }
+    if (menu_w) { CloseWindow(menu_w); menu_w = NULL; }
+    if (cog_w) { CloseWindow(cog_w); cog_w = NULL; tray("Cog", 0, COG_ORDER); }
     if (logo_w) { CloseWindow(logo_w); logo_w = NULL; }
     if (border_set) { prefs.border_black = 0; apply_border(); }
     free_pens();
@@ -634,6 +922,7 @@ static int open_all(void)
         }
     }
     if (prefs.network) net_open();
+    if (prefs.cog) cog_open();
     apply_border();
     return 1;
 }
@@ -666,12 +955,19 @@ static void events(struct Window *w)
         ReplyMsg((struct Message *)m);
         if (cls == IDCMP_REFRESHWINDOW) {
             BeginRefresh(w);
-            if (w == logo_w) draw_logo(); else if (w == net_w) draw_net(1); else if (w == pop_w) draw_pop(); else draw_clock(1);
+            if (w == logo_w) draw_logo(); else if (w == net_w) draw_net(1); else if (w == pop_w) draw_pop();
+            else if (w == cog_w) draw_cog(1); else draw_clock(1);
             EndRefresh(w, TRUE);
         }
         else if (cls == IDCMP_MOUSEBUTTONS && code == SELECTDOWN) {
             if (w == net_w) { if (pop_w) pop_close(); else pop_open(); return; }
             if (w == pop_w) { pop_click(my); return; }
+            if (w == cog_w) {
+                if (menu_w) menu_close(1);
+                else if (cog_skip) cog_skip = 0;        /* the click closed the list */
+                else menu_open();
+                return;
+            }
         }
         /* a click on ours: the window before stays the active one (the panel keeps it while open) */
         else if (cls == IDCMP_ACTIVEWINDOW && last_other && w != pop_w) ActivateWindow(last_other);
@@ -684,7 +980,7 @@ static int wb_title_shown(void)
 {
     struct Window *a = IntuitionBase->ActiveWindow;
     const char *t;
-    if (!a || a->WScreen != scr || a == logo_w || a == clock_w || a == net_w || a == pop_w) a = last_other;
+    if (!a || a->WScreen != scr || a == logo_w || a == clock_w || a == net_w || a == pop_w || a == cog_w || a == menu_w) a = last_other;
     t = (const char *)(a && a->WScreen == scr && a->ScreenTitle ? a->ScreenTitle : scr->Title);
     return t && !strncmp(t, LOGO_PAD, strlen(LOGO_PAD));
 }
@@ -709,10 +1005,22 @@ static int is_window(struct Window *w)
     return 0;
 }
 
+/* the windows that wake the task */
+static ULONG window_sigs(void)
+{
+    struct Window *const ws[6] = { logo_w, clock_w, net_w, pop_w, cog_w, menu_w };
+    ULONG m = 0;
+    int i;
+    for (i = 0; i < 6; i++) if (ws[i]) m |= 1UL << ws[i]->UserPort->mp_SigBit;
+    return m;
+}
+
 int main(void)
 {
-    struct MsgPort *port;
-    int tick = 0, quit = 0;
+    struct MsgPort *port, *tport = NULL;
+    struct timerequest *tr = NULL;
+    int tick = 0, quit = 0, timer = 0;
+    ULONG waited = 0;                          /* ms since the last half-second's work */
     (void)version;
     IntuitionBase = (struct IntuitionBase *)OpenLibrary((STRPTR)"intuition.library", 39);
     GfxBase = (struct GfxBase *)OpenLibrary((STRPTR)"graphics.library", 39);
@@ -727,35 +1035,57 @@ int main(void)
     port->mp_Node.ln_Name = (char *)TB_PORT;
     port->mp_Node.ln_Pri = 0;
     AddPort(port);
+    if ((tport = CreateMsgPort()) && (tr = (struct timerequest *)CreateIORequest(tport, sizeof *tr)))
+        timer = !OpenDevice((STRPTR)TIMERNAME, UNIT_VBLANK, (struct IORequest *)tr, 0);
 
     read_prefs();
     apply_title();
     if (!open_all()) quit = 1;
     while (!quit) {
-        ULONG sig = SetSignal(0, SIGBREAKF_CTRL_C | SIGBREAKF_CTRL_F);
+        ULONG sig, ms;
         struct Window *act;
+        /* a tenth of a second while the pointer is on the bar or the list is open (the cog lights up), else half */
+        ms = menu_w || cog_drawn > 0 || (scr && IntuitionBase->FirstScreen == scr && scr->MouseY <= scr->BarHeight) ? 100 : 500;
+        if (timer) {
+            tr->tr_node.io_Command = TR_ADDREQUEST; tr->tr_time.tv_secs = 0; tr->tr_time.tv_micro = ms * 1000;
+            SendIO((struct IORequest *)tr);
+            sig = Wait(SIGBREAKF_CTRL_C | SIGBREAKF_CTRL_F | (1UL << tport->mp_SigBit) | window_sigs());
+            if (!CheckIO((struct IORequest *)tr)) AbortIO((struct IORequest *)tr);
+            WaitIO((struct IORequest *)tr);
+            if (sig & (1UL << tport->mp_SigBit)) waited += ms;
+        } else {
+            Delay(TICKS_PER_SECOND / 2);
+            sig = SetSignal(0, SIGBREAKF_CTRL_C | SIGBREAKF_CTRL_F);
+            waited += 500;
+        }
         if (sig & SIGBREAKF_CTRL_C) break;
         if (sig & SIGBREAKF_CTRL_F) {
             close_all();
             read_prefs();
             apply_title();
-            if (!prefs.logo && !prefs.memory && !prefs.clock && !prefs.network && !prefs.border_black) break;
+            if (!prefs.logo && !prefs.memory && !prefs.clock && !prefs.network && !prefs.cog && !prefs.border_black) break;
             if (!open_all()) break;
         }
+        menu_events();
         events(logo_w);
         events(clock_w);
         events(net_w);
+        events(cog_w);
         if (pop_w) events(pop_w);
+        if (cog_skip && !over_cog()) cog_skip = 0;
+        draw_cog(0);
         act = IntuitionBase->ActiveWindow;
-        if (act && act != logo_w && act != clock_w && act != net_w && act != pop_w) last_other = act;
-        if (pop_w && ++pop_ticks > 20) pop_close();     /* the panel goes after 10 s */
+        if (act && act != logo_w && act != clock_w && act != net_w && act != pop_w && act != cog_w && act != menu_w) last_other = act;
         if (last_other && !is_window(last_other)) last_other = NULL;
+        if (waited < 500) continue;
+        waited = 0;                            /* every half second, as before */
+        if (pop_w && ++pop_ticks > 20) pop_close();     /* the panel goes after 10 s */
         logo_follow();
         draw_clock(0);
         if (++tick % 4 == 0) {                 /* every 2 s: the tray and OpenMenus' bar may have moved */
             int edge = read_bar_edge();
             WORD ox = cx, oy = cy, ow = cw, oh = ch;
-            if (edge != bar_edge && (clock_w || net_w)) { close_all(); if (!open_all()) break; }
+            if (edge != bar_edge && (clock_w || net_w || cog_w)) { close_all(); if (!open_all()) break; }
             else {
                 if (net_w) {
                     WORD px = nx, py = ny, pw = nw, ph = nh;
@@ -772,17 +1102,30 @@ int main(void)
                     place();
                     if (cx != ox || cy != oy || cw != ow || ch != oh) { ChangeWindowBox(clock_w, cx, cy, cw, ch); shown[0] = 0; }
                 }
+                if (cog_w && !menu_w) {
+                    WORD px = gx, py = gy, pw = gw, ph = gh;
+                    cog_place();
+                    if (gx != px || gy != py || gw != pw || gh != ph) {
+                        ChangeWindowBox(cog_w, gx, gy, gw, gh);
+                        tray("Cog", gw, COG_ORDER);
+                        cog_drawn = -1;
+                    }
+                }
             }
             keep_in_front(logo_w);
             keep_in_front(clock_w);
             keep_in_front(net_w);
+            keep_in_front(cog_w);
         }
-        Delay(TICKS_PER_SECOND / 2);
     }
     close_all();
     RemPort(port);
     DeleteMsgPort(port);
 out:
+    if (timer) CloseDevice((struct IORequest *)tr);
+    if (tr) DeleteIORequest((struct IORequest *)tr);
+    if (tport) DeleteMsgPort(tport);
+    if (WorkbenchBase) CloseLibrary(WorkbenchBase);
     if (SocketBase) CloseLibrary(SocketBase);
     if (UtilityBase) CloseLibrary(UtilityBase);
     if (LayersBase) CloseLibrary(LayersBase);
