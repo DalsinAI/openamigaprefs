@@ -4,6 +4,65 @@ OpenDock is a dock on the Workbench screen, and Dock is its prefs editor.
 The design comes from openamigaup DESIGN.md: a Mac-like dock that takes
 over the docks people already have. MIT, Copyright (c) 2026 Dalsin Limited.
 
+![OpenDock 0.3 on a graphics card: the light look, glass at 60 per cent](docs/screenshot.png)
+
+![OpenDock 0.3, the dark look](docs/screenshot-dark.png)
+
+## 0.3 (7 October 2026): the Mac's layout
+
+The dock now has the Mac dock's layout (not its icons): one shelf, a
+rounded rectangle tinted to the look, through which the desktop shows.
+
+- **The shelf** is a rounded rectangle whose corners are a quarter of its
+  height. It floats a few pixels off the screen's edge. Around and between
+  the icons is even room, a tenth of an icon. The icons are equally spaced
+  and centred across the shelf. A 1-pixel edge, a little lighter than the
+  shelf, goes round it (Edges turns it off).
+- **The tint follows the look.** It is dark for a dark look and light for a light
+  one, read from `ENV:OpenGadTools/Look` (its first line, `<theme>
+  light|dark|auto`; auto is dark from 19:00 to 07:00). Where the screen's
+  background pen fits the look, the tint is made from it. With no Look
+  settings, it is a neutral grey.
+- **Opacity** (`opacity 0` to `100`, 60 by default) says how much tint
+  covers the desktop: 0 shows only the edge, 100 is solid. `background`
+  says what kind of shelf:
+  - **glass** (the default): what is behind is frosted (blurred) and
+    tinted.
+  - **see-through** (Clear in the editor): tinted, not frosted.
+  - **solid**: the tint at 100, whatever the opacity.
+- **The running dot** is a small round dot between the icon and the screen's
+  edge, under the icon at the bottom, beside it at the left or right. It is
+  in the text's colour where that shows on the tint, otherwise near white
+  or near black.
+- **A separator** is a thin line, inset from the shelf's top and bottom as
+  the Mac's is, a step lighter than the shelf on a dark tint and darker on a
+  light one. The gap it leaves is a third of an icon, so a group (drawers,
+  the trash) stands apart.
+- **On a graphics card** (a screen deeper than 8 bits, through
+  cybergraphics.library), the tint is mixed with what is behind pixel by
+  pixel (`ReadPixelArray`, mixed, `WritePixelArray`). The corners and the
+  dot are smoothed by how much of each pixel they cover (16 samples a
+  pixel).
+- **On the native chipset and 8-bit screens**, the shelf is drawn with the
+  nearest pens (`ObtainBestPen`, released when the dock closes): the same
+  rounded corners and edge, without smoothing. Only **glass** is dithered.
+  The dither's density follows the opacity: a quarter below 35, a half
+  below 70, three quarters above. **See-through** draws the edge alone, and 100 (or
+  solid) fills.
+- **Speed.** The shelf is made once, into a bitmap of the dock's size, when
+  the dock opens. It is made again only when the dock opens anew: new
+  settings, a button added or removed, a new copy of what is behind. A
+  redraw, and each of a hop's 20 steps, is one blit of that bitmap and the
+  icons. Nothing is mixed again.
+- A solid shelf now copies what is behind too, so that its rounded corners
+  show the desktop.
+- **The Dock editor** has a **See-through** slider under Shelf, from clear
+  (left) to solid (right). It is greyed out while the shelf is Solid.
+- Settings written before 0.3 keep working. With no `opacity` line, the
+  opacity is 60, or 100 when `background solid`.
+
+![The Dock editor with the See-through slider](docs/editor.png)
+
 ## 0.1 (6 October 2026)
 
 ### OpenDock (`C:OpenDock`)
@@ -32,10 +91,8 @@ over the docks people already have. MIT, Copyright (c) 2026 Dalsin Limited.
   taking the pen in the middle of each square.
 - **Edges** (0.2) can be turned off, leaving the shelf without its lines.
 - It looks and behaves like the Mac's dock:
-  - **The shelf** has rounded corners and is **glass** (the default: a fine
-    dither of the shine pen over what is behind), **see-through** (the
-    icons stand on the backdrop, with only the shelf's outline) or
-    **solid** (the background pen, as before).
+  - **The shelf** has rounded corners and is **glass** (the default),
+    **see-through** or **solid**: see 0.3 above for how each is drawn.
   - **Names pop up** above the icon under the pointer, in a small box, as
     the Mac's do. The pointer is looked at ten times a second, only while
     the Workbench screen is in front.
@@ -52,8 +109,7 @@ over the docks people already have. MIT, Copyright (c) 2026 Dalsin Limited.
     it blinks once, briefly. Everything is drawn into a bitmap of the
     dock's size and copied in at once, so nothing flickers. Without the
     memory for that bitmap, the dock is solid and drawn straight in.
-- There is no magnification yet. It draws with the screen's
-  pens and the icons as they are, laid out for the screen
+- There is no magnification yet. It draws the icons as they are, laid out for the screen
   (`GetIconTags` with `ICONGETA_Screen`, which OS 3.5 colour and PNG icons
   need) and drawn with `DrawIconStateA`, so it costs a real
   68040 nothing on its native chipset or a graphics card. Magnification
@@ -78,6 +134,7 @@ skipped. Save writes `ENVARC:` too.
     labels on|off                      ; names under the icons
     running on|off                     ; the running marks
     background glass|see-through|solid ; the shelf (glass if not given)
+    opacity 60                         ; 0 (clear) to 100 (solid); 60 if not given, 100 with background solid (0.3)
     names-on-hover on|off              ; the name above the icon under the pointer (on)
     hop on|off                         ; a started program's icon hops (on)
     magnify off                        ; kept for later; never with Lite
@@ -122,7 +179,7 @@ puts a button at the dock's end for each program that's installed and not
 on the dock yet, and leaves the rest alone. OpenUp runs it on every
 install, so a dock someone already has gains OpenFiles and OpenView too.
 
-`tests/run.sh` runs 49 checks on the host's `cc`. They cover the format
+`tests/run.sh` runs 56 checks on the host's `cc`, the opacity line among them. They cover the format
 both ways, a ToolManager 2 file built to the format, an AmiDock file and
 an AmiStart file written in their layouts, ToolManager 3 and AmiDock 3.9
 refusals, entities and UTF-8, and a full dock. The ToolManager sample was
@@ -135,8 +192,8 @@ A GadTools prefs editor like the others: Save, Use, Test (15 seconds),
 Cancel, and Ctrl-F to the `OpenDock` port.
 
 - **Simple** view: the buttons in order (Up, Down, Remove, add a Line),
-  place, size, names under the icons, the shelf (Solid, See-through,
-  Glass), and taking over from ToolManager,
+  place, size, names under the icons, the shelf (Solid, Clear, Glass)
+  and how see-through it is (0.2), and taking over from ToolManager,
   AmiDock or AmiStart.
 - **Advanced** view (View > Advanced, Amiga-A, shared in
   `ENV:OpenAmiga/PrefsView`): the running marks, Pop-up names, Hop, and
@@ -176,7 +233,9 @@ saves the result.
   known (a copy of each from a real machine).
 - DOpus button banks.
 - Drag to reorder on the dock itself.
-- The theme's colours from OpenLook.
+- The theme's own colours from OpenLook's theme file (0.3 takes the mode
+  and the screen's background pen), and noticing a change of look without
+  Ctrl-F.
 - Magnification, off with Lite.
 - Hiding the dock until the pointer reaches the edge.
 - A see-through that follows a window while it is dragged, and what
