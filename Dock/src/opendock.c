@@ -444,6 +444,7 @@ static struct BitMap *behind, *back, *shelfbm;    /* the screen behind the dock;
 static struct RastPort brp;
 static int room, bx, by;                           /* hop room; where the first cell starts */
 static int big, pad, sepw, radius, gap;            /* an icon's square; the room around; a separator's; the corners'; off the edge */
+static int apad, dot_at, dot_big;                  /* the room across the shelf; the dot's centre from its edge; a 5-pixel dot */
 static int behind_w, behind_h;                     /* the size behind was copied at */
 static struct Window *bubble;
 static int bubble_for = -1;
@@ -468,15 +469,16 @@ static int hit(int x, int y)
 static void layout(int *w, int *h)
 {
     struct Rectangle r;
-    int label = dock.labels ? scr->RastPort.TxHeight + 2 : 0, thick;
+    int label = dock.labels ? scr->RastPort.TxHeight + 2 : 0, thick, most = 0, margin, rows;
     big = od_cell(dock.size);
     standing = dock.place == OD_LEFT || dock.place == OD_RIGHT;
     /* a cell fits the largest icon */
     for (int i = 0; i < dock.n; i++)
         if (icons[i] && GetIconRectangleA(&scr->RastPort, icons[i], NULL, &r, NULL)) {
-            int iw = r.MaxX - r.MinX + 1 + 8, ih = r.MaxY - r.MinY + 1 + 8;
+            int iw = r.MaxX - r.MinX + 1 + 8, ih = r.MaxY - r.MinY + 1 + 8, a = standing ? iw : ih;
             if (iw > big) big = iw;
             if (ih > big) big = ih;
+            if (a > most) most = a;                /* the largest across the shelf, with its 8 */
         }
     /* 25, 50 or 75 per cent: the cells shrink with the icons; the names stay readable */
     big = od_scaled(big, dock.scale);
@@ -488,15 +490,26 @@ static void layout(int *w, int *h)
     gap = pad / 2;                                 /* the shelf floats a little off the screen's edge */
     cellw = big;
     cellh = big + label;
-    thick = (standing ? cellw : cellh) + 2 * pad;
+    /* across the shelf a little tighter than along it, as long as the running
+     * dot keeps a clear row on both sides between the edge and what is nearest
+     * it (the largest icon, or the names under the icons) */
+    most = most ? od_scaled(most - 8, dock.scale) : big - 16;
+    margin = dock.labels && dock.place == OD_BOTTOM ? 2 : (big - most) / 2;
+    apad = pad - (big / 20 < 2 ? 2 : big / 20);
+    if (apad < 6 - margin) apad = 6 - margin;
+    if (apad < 2) apad = 2;
+    rows = apad - 1 + margin;                      /* between the shelf's edge line and the nearest icon */
+    dot_big = big >= 40 && rows >= 7;
+    dot_at = 1 + (rows - 1) / 2;
+    thick = (standing ? cellw : cellh) + 2 * apad;
     radius = thick / 4 > MAX_RADIUS ? MAX_RADIUS : thick / 4;
     room = dock.hop ? HOP_ROOM : 0;
     along = 2 * pad;
     for (int i = 0; i < dock.n; i++) along += item_size(i);
     if (along < 2 * pad + cellw) along = 2 * pad + cellw;
     /* the hop room is on the side away from the edge, the gap on the edge's side */
-    bx = pad + (dock.place == OD_RIGHT ? room : 0) + (dock.place == OD_LEFT ? gap : 0);
-    by = pad + (dock.place == OD_BOTTOM ? room : 0) + (dock.place == OD_TOP ? gap : 0);
+    bx = (standing ? apad : pad) + (dock.place == OD_RIGHT ? room : 0) + (dock.place == OD_LEFT ? gap : 0);
+    by = (standing ? pad : apad) + (dock.place == OD_BOTTOM ? room : 0) + (dock.place == OD_TOP ? gap : 0);
     if (standing) { *w = thick + room + gap; *h = along; }
     else { *w = along; *h = thick + room + gap; }
     if (*w > scr->Width) *w = scr->Width;
@@ -663,7 +676,7 @@ static void each_separator(int W, int H, void (*fn)(void *, int, int, int, int),
     /* inset from the shelf's top and bottom as the Mac's is */
     int inset;
     shelf(W, H, &x0, &y0, &x1, &y1);
-    inset = pad + (standing ? cellw : cellh) / 8;
+    inset = apad + (standing ? cellw : cellh) / 8;
     for (int i = 0; i < dock.n; i++) {
         int s = item_size(i);
         if (pos + s > (standing ? H : W) - pad) break;
@@ -839,7 +852,7 @@ static void make_shelf(struct RastPort *rp, int W, int H)
 /* The Mac's dot: a small round one in the dot's colour, smooth on a card. */
 static void dot(struct RastPort *rp, int cx, int cy)
 {
-    int r4 = big >= 40 ? 10 : 6;                   /* 2.5 or 1.5 pixels, in quarters */
+    int r4 = dot_big ? 10 : 6;                     /* 2.5 or 1.5 pixels, in quarters */
     if (card) {
         ULONG px[7 * 7];
         ReadPixelArray(px, 0, 0, 7 * 4, rp, cx - 3, cy - 3, 7, 7, RECTFMT_ARGB);
@@ -869,7 +882,7 @@ static void render(int lifted, int lift)
     UWORD *pens = dri ? dri->dri_Pens : NULL;
     int W = win->Width, H = win->Height, pos = standing ? by : bx, x0, y0, x1, y1;
     int shadow = pens ? pens[SHADOWPEN] : 1, text = dot_pen >= 0 ? dot_pen : pens ? pens[TEXTPEN] : 1;
-    int edge = (pad + 1) / 2 + 1;                  /* the dot's centre, from the shelf's edge */
+    int edge = dot_at;                             /* the dot's centre, from the shelf's edge */
     shelf(W, H, &x0, &y0, &x1, &y1);
     SetDrMd(rp, JAM1);
     /* the shelf, as made when the dock opened: one blit */

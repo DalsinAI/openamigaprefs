@@ -14,9 +14,13 @@ The dock now has the Mac dock's layout (not its icons): one shelf, a
 rounded rectangle tinted to the look, through which the desktop shows.
 
 - **The shelf** is a rounded rectangle whose corners are a quarter of its
-  height. It floats a few pixels off the screen's edge. Around and between
-  the icons is even room, a tenth of an icon. The icons are equally spaced
-  and centred across the shelf. A 1-pixel edge, a little lighter than the
+  height. It floats a few pixels off the screen's edge. Between the icons
+  and at the shelf's ends is even room, a tenth of an icon. Across the shelf
+  (above and below, or beside on a standing dock) the room is a twentieth of
+  an icon less (at least 2 pixels), so the surround is a little tighter. It
+  never gets so tight that the running dot can't keep a clear row between the
+  edge and the nearest icon (or the names). The icons are equally spaced and
+  centred across the shelf. A 1-pixel edge, a little lighter than the
   shelf, goes round it (Edges turns it off).
 - **The tint follows the look.** It is dark for a dark look and light for a light
   one, read from `ENV:OpenGadTools/Look` (its first line, `<theme>
