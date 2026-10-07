@@ -38,6 +38,7 @@ typedef struct od_dock {
     int magnify;                                          /* reserved: never with Lite */
     int scale;                                            /* the items' size: 25, 50, 75 or 100 per cent */
     int border;                                           /* the shelf's edge lines */
+    int opacity;                                          /* the shelf's tint: 0 (clear) to 100 (solid); 60 by default */
     char imported[96];                                    /* the file taken over, so the first start does it once */
     int n;
     od_button b[OD_MAX];
