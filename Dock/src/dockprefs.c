@@ -657,13 +657,15 @@ out:
     return rc;
 }
 
-int main(void)
+int main(int argc, char **argv)
 {
     LONG args[8] = { 0, 0, 0, 0, 0, 0, 0, 0 };
-    struct RDArgs *rd = ReadArgs((STRPTR)"FROM/K,TOOLMANAGER/K,AMIDOCK/K,AMISTART/K,USE/S,SAVE/S,ADVANCED/S,ADD/M", args, NULL);
+    /* from Workbench (argc 0) there are no arguments: ReadArgs would read them from
+     * libnix's console window, which opens empty and waits */
+    struct RDArgs *rd = argc > 0 ? ReadArgs((STRPTR)"FROM/K,TOOLMANAGER/K,AMIDOCK/K,AMISTART/K,USE/S,SAVE/S,ADVANCED/S,ADD/M", args, NULL) : NULL;
     char *text, err[120];
     int rc = RETURN_OK, first;
-    if (!rd) { PrintFault(IoErr(), (STRPTR)"Dock"); return RETURN_FAIL; }
+    if (!rd && argc > 0) { PrintFault(IoErr(), (STRPTR)"Dock"); return RETURN_FAIL; }
     IconBase = OpenLibrary((STRPTR)"icon.library", 37);
     /* orig is always what ENV: holds now; FROM only fills the window */
     text = read_file(PREFS_ENV, NULL);
@@ -733,7 +735,7 @@ int main(void)
     rc = gui();
     if (AslBase) CloseLibrary(AslBase);
 done:
-    FreeArgs(rd);
+    if (rd) FreeArgs(rd);
     if (IconBase) CloseLibrary(IconBase);
     return rc;
 }
