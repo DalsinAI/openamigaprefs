@@ -41,7 +41,7 @@ static const char version[] = "$VER: Windows 0.4 (8.10.2026) OpenPrefs, MIT, Cop
 #define VIEW_ENVARC "ENVARC:OpenAmiga/PrefsView"
 
 struct wprefs {
-    int snap, snap_dist, halves, switcher, wheel, places, places_wb, drawer_w, drawer_h, dblfront, edges;
+    int snap, snap_dist, halves, switcher, wheel, places, places_wb, drawer_w, drawer_h, dblfront, edges, edge_ptr;
     char key[48];
     char never[160];
 };
@@ -109,6 +109,7 @@ static void parse(struct wprefs *p, char *text)
         else if (!strcmp(line, "wheel")) p->wheel = !strncmp(v, "on", 2);
         else if (!strcmp(line, "doubleclick.front")) p->dblfront = !strncmp(v, "on", 2);
         else if (!strcmp(line, "edges")) p->edges = !strncmp(v, "on", 2);
+        else if (!strcmp(line, "edges.pointer")) p->edge_ptr = !strncmp(v, "on", 2);   /* no gadget: kept as written */
         else if (!strcmp(line, "places")) p->places = !strncmp(v, "on", 2);
         else if (!strcmp(line, "places.drawers")) p->places_wb = !strncmp(v, "on", 2);
         else if (!strcmp(line, "never")) {
@@ -125,10 +126,10 @@ static void make_text(const struct wprefs *p, char *out, int size)
     int len = snprintf(out, size,
         "; OpenPrefs Windows 0.4: what OpenWindows does\n"
         "snap %s %d\nsnap.halves %s\nswitcher %s\nswitcher.key %s\nwheel %s\nplaces %s\nplaces.drawers %s\ndrawer %d %d\n"
-        "doubleclick.front %s\nedges %s\n",
+        "doubleclick.front %s\nedges %s\nedges.pointer %s\n",
         p->snap ? "on" : "off", p->snap_dist, p->halves ? "on" : "off", p->switcher ? "on" : "off", p->key,
         p->wheel ? "on" : "off", p->places ? "on" : "off", p->places_wb ? "on" : "off", p->drawer_w, p->drawer_h,
-        p->dblfront ? "on" : "off", p->edges ? "on" : "off");
+        p->dblfront ? "on" : "off", p->edges ? "on" : "off", p->edge_ptr ? "on" : "off");
     strcpy(never, p->never);
     for (n = never; *n && len < size - 40; n = e) {
         while (*n == ' ' || *n == ',') n++;
