@@ -157,3 +157,36 @@ Open light theme) with Tata 0.1 (openamigatata):
 
 Not tested in 0.6: an icon at an OpenMenus bar on an edge, and a program
 that ends without `TSC_REMOVE`.
+
+## 0.6.1: the timer's signal (8 October 2026)
+
+**What went wrong.** OpenTitle waits for its timer, its port, the
+taskspace replies and its windows together. When something other than the
+timer woke it, it aborted the timer request and took the reply with
+`WaitIO()`. That reply had set the timer port's signal after `Wait()`
+returned, and `WaitIO()` leaves the signal set. So the next `Wait()`
+returned at once, the new request was aborted, and so on, without end.
+OpenTitle never waited again, and no task below priority 0 ran: OpenFTP's
+transfers process, at -1, never started, so OpenFTP's window never
+opened.
+
+**What set it off.** Any message while the timer was pending. Tata's
+taskspace icon sends the first one, so OpenUp 0.7.0 showed it whenever
+Tata was installed, even with Tata off. A click on the clock or the cog
+would do the same.
+
+**The fix.** Only a request that came back by itself counts as time
+waited, and the timer's signal is cleared after `WaitIO()`. The Look,
+Menus and Dock editors had the same pattern while their "Test" counts
+down, and clear it too.
+
+**Tested** on a lab copy of Instance-11 (amigachrome's
+`scripts/lab_instance.py`) with OpenUp 0.7.0's Tata, OpenFTP 0.1 and
+Tata's `TataLowPri` test:
+
+| OpenTitle | A priority -1 process | OpenFTP's window |
+| --- | --- | --- |
+| 0.6, Tata on | Never ran (OpenTitle went round about 11,000 times a second) | Didn't open |
+| 0.6, no Tata | Ran after 100 ms | Opened |
+| 0.6.1, Tata 0.4 on | Ran after 100 ms | Opened |
+| 0.6.1, Tata 0.4 off | Ran after 100 ms | Opened; Tata's shield showed its help, and a click opened Tata's window |
