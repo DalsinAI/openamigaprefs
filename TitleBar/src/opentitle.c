@@ -25,6 +25,12 @@
  *                     ENV:OpenPrefs/TitleBar again and quits when nothing
  *                     is left to show)
  *
+ * 0.6 (8 October 2026): the taskspace. Other programs put icons in the row
+ * beside the cog, the speaker and the network icons through OpenTitle's
+ * port (include/taskspace.h); OpenTitle draws them, lights them under the
+ * pointer, shows their help under them and tells the program of a click.
+ * Tata is the first.
+ *
  * MIT, Copyright (c) 2026 Dalsin Limited. */
 #include <exec/types.h>
 #include <exec/memory.h>
@@ -57,8 +63,9 @@
 #include "tb_prefs.h"
 #include "om_prefs.h"
 #include "logo.h"
+#include "taskspace.h"
 
-const char version[] __attribute__((used)) = "$VER: OpenTitle 0.5 (8.10.2026) OpenPrefs, Dalsin Limited";
+const char version[] __attribute__((used)) = "$VER: OpenTitle 0.6 (8.10.2026) OpenPrefs, Dalsin Limited";
 
 struct IntuitionBase *IntuitionBase;
 struct GfxBase *GfxBase;
@@ -649,6 +656,7 @@ static const struct { const char *label, *path, *needs; } cog_items[] = {
     { "Sound",        "SYS:Prefs/Sound",        "SYS:C/OpenSpeaker" },    /* OS 3.2's own until OpenUp's Sound replaces it */
     { "OpenTypes",    "SYS:Prefs/OpenTypes",    NULL },
     { "OpenUp Setup", "SYS:Prefs/OpenUp-Setup", NULL },
+    { "Tata",         "SYS:Prefs/Tata",         NULL },                   /* 0.6: Tata's window, when Tata is installed */
     { NULL,           NULL,                     NULL },                   /* a line */
     { "All Prefs...", "SYS:Prefs",              NULL },
 };
@@ -893,6 +901,273 @@ static void menu_events(void)
     }
 }
 
+/* ---- the taskspace: other programs' icons (include/taskspace.h) --------------------------- */
+
+struct ts_icon {
+    char name[16], help[48], port[24];
+    WORD order;
+    UWORD state, w, h, states;
+    UBYTE pixels[TS_STATES * TS_MAXW * TS_MAXH];
+    ULONG rgb[12];
+    struct Window *win;
+    WORD x, y, bw, bh;
+    int drawn;                                 /* what is drawn: state * 2 + lit, -1 nothing yet */
+};
+static struct ts_icon *ts[TS_ICONS];
+static struct MsgPort *ts_reply;               /* where the programs reply our events */
+static int ts_out;                             /* events not replied yet */
+static struct Window *help_w;                  /* the help under an icon */
+static int help_for = -1, hover_for = -1, hover_ticks;
+
+static int ts_find(const char *name)
+{
+    int i;
+    for (i = 0; i < TS_ICONS; i++) if (ts[i] && !strcmp(ts[i]->name, name)) return i;
+    return -1;
+}
+
+static void ts_place(struct ts_icon *t)
+{
+    WORD bh = scr->BarHeight + 1;
+    int n, off = tray_before(t->name, t->order, &n);
+    t->bw = t->w + 10;
+    switch (bar_edge) {
+    case OM_BAR_BOTTOM: t->bh = bh; t->x = scr->Width - t->bw - off; t->y = scr->Height - bh; break;
+    case OM_BAR_LEFT:   t->bh = bh; t->x = 0; t->y = scr->Height - bh * (n + 1); break;
+    case OM_BAR_RIGHT:  t->bh = bh; t->x = scr->Width - t->bw; t->y = scr->Height - bh * (n + 1); break;
+    case OM_BAR_TOP:    t->bh = bh; t->x = scr->Width - 2 * scr->BarHeight - t->bw - off; t->y = 0; break;
+    default:            t->bh = scr->BarHeight; t->x = scr->Width - 2 * scr->BarHeight - t->bw - off; t->y = 0; break;
+    }
+}
+
+static int ts_over(const struct ts_icon *t)
+{
+    WORD x = scr->MouseX, y = scr->MouseY;
+    return t->win && IntuitionBase->FirstScreen == scr && x >= t->x && x < t->x + t->bw && y >= t->y && y < t->y + t->bh;
+}
+
+/* the picture in the bar's pens and the program's colours; raised under the pointer, as the cog is */
+static void ts_draw(struct ts_icon *t, int force)
+{
+    struct RastPort *rp;
+    int lit, key, x, y;
+    WORD h, ox, oy;
+    const UBYTE *px;
+    if (!t->win) return;
+    lit = ts_over(t);
+    key = t->state * 2 + lit;
+    if (!force && key == t->drawn) return;
+    t->drawn = key;
+    rp = t->win->RPort;
+    h = t->bh - (bar_edge == OM_BAR_TITLE ? 1 : 0);
+    SetAPen(rp, dri->dri_Pens[BARBLOCKPEN]);
+    RectFill(rp, 0, 0, t->bw - 1, t->bh - 1);
+    if (lit) {
+        SetAPen(rp, dri->dri_Pens[SHINEPEN]);
+        Move(rp, 1, h - 1); Draw(rp, 1, 0); Draw(rp, t->bw - 2, 0);
+        SetAPen(rp, dri->dri_Pens[SHADOWPEN]);
+        Draw(rp, t->bw - 2, h - 1); Draw(rp, 2, h - 1);
+    }
+    ox = (t->bw - t->w) / 2;
+    oy = (h - t->h) / 2;
+    if (oy < 0) oy = 0;
+    px = t->pixels + (ULONG)t->state * t->w * t->h;
+    for (y = 0; y < t->h && oy + y < t->bh; y++)
+        for (x = 0; x < t->w; ) {
+            UBYTE c = px[y * t->w + x];
+            int run;
+            LONG pen;
+            if (!c) { x++; continue; }
+            for (run = x; run < t->w && px[y * t->w + run] == c; run++) ;
+            pen = c == 1 ? dri->dri_Pens[BARDETAILPEN] : c == 2 ? dri->dri_Pens[SHINEPEN] : c == 3 ? dri->dri_Pens[SHADOWPEN]
+                : pen_for(t->rgb[(c - 4) & 15]);
+            SetAPen(rp, pen);
+            RectFill(rp, ox + x, oy + y, ox + run - 1, oy + y);
+            x = run;
+        }
+}
+
+static void ts_open_one(struct ts_icon *t)
+{
+    if (!scr || t->win) return;
+    ts_place(t);
+    if ((t->win = net_window(t->x, t->y, t->bw, t->bh))) {
+        t->drawn = -1;
+        ts_draw(t, 1);
+        tray(t->name, t->bw, t->order);
+    }
+}
+
+static void help_close(void)
+{
+    if (help_w) { CloseWindow(help_w); help_w = NULL; }
+    help_for = -1;
+}
+
+static void ts_close_one(struct ts_icon *t, int forget_place)
+{
+    int i;
+    for (i = 0; i < TS_ICONS; i++) if (ts[i] == t && help_for == i) help_close();
+    if (t->win) { CloseWindow(t->win); t->win = NULL; }
+    if (forget_place) tray(t->name, 0, t->order);
+}
+
+static void ts_drop(int i)
+{
+    if (!ts[i]) return;
+    ts_close_one(ts[i], 1);
+    FreeVec(ts[i]);
+    ts[i] = NULL;
+    if (hover_for == i) hover_for = -1;
+}
+
+/* the help under an icon, after the pointer has rested on it a moment */
+static void help_open(int i)
+{
+    struct ts_icon *t = ts[i];
+    struct RastPort trp;
+    WORD w, h, x, y;
+    if (!t || !t->win || !t->help[0] || help_w) return;
+    InitRastPort(&trp);
+    SetFont(&trp, dri->dri_Font);
+    w = TextLength(&trp, (STRPTR)t->help, strlen(t->help)) + 12;
+    h = dri->dri_Font->tf_YSize + 6;
+    x = t->x + t->bw - w;
+    if (x < 0) x = 0;
+    y = bar_edge == OM_BAR_BOTTOM ? t->y - h : t->y + t->bh + (bar_edge == OM_BAR_TITLE ? 1 : 0);
+    if (y + h > scr->Height) y = scr->Height - h;
+    if (!(help_w = OpenWindowTags(NULL, WA_CustomScreen, (ULONG)scr, WA_Left, x, WA_Top, y, WA_Width, w, WA_Height, h,
+                                  WA_Borderless, TRUE, WA_Activate, FALSE, WA_RMBTrap, TRUE, WA_SmartRefresh, TRUE, TAG_DONE)))
+        return;
+    help_for = i;
+    SetFont(help_w->RPort, dri->dri_Font);
+    SetAPen(help_w->RPort, dri->dri_Pens[BARBLOCKPEN]);
+    RectFill(help_w->RPort, 1, 1, w - 2, h - 2);
+    SetAPen(help_w->RPort, dri->dri_Pens[SHADOWPEN]);
+    Move(help_w->RPort, 0, 0); Draw(help_w->RPort, w - 1, 0); Draw(help_w->RPort, w - 1, h - 1); Draw(help_w->RPort, 0, h - 1); Draw(help_w->RPort, 0, 0);
+    SetAPen(help_w->RPort, dri->dri_Pens[BARDETAILPEN]);
+    SetDrMd(help_w->RPort, JAM1);
+    Move(help_w->RPort, 6, 3 + help_w->RPort->TxBaseline);
+    Text(help_w->RPort, (STRPTR)t->help, strlen(t->help));
+}
+
+/* every tenth of a second while the pointer is on the bar: the light and the help */
+static void ts_hover(void)
+{
+    int i, over = -1;
+    for (i = 0; i < TS_ICONS; i++) if (ts[i]) { ts_draw(ts[i], 0); if (ts_over(ts[i])) over = i; }
+    if (over != hover_for) { hover_for = over; hover_ticks = 0; if (help_w) help_close(); }
+    else if (over >= 0 && ++hover_ticks == 6) help_open(over);
+}
+
+/* tells the program; 0 when its port is gone (it ended without TSC_REMOVE) */
+static int ts_tell(struct ts_icon *t, UWORD kind)
+{
+    struct TaskspaceEvent *e;
+    struct MsgPort *p;
+    if (!t->port[0]) return 1;
+    if (!ts_reply || !(e = AllocVec(sizeof *e, MEMF_PUBLIC | MEMF_CLEAR))) return 1;
+    e->tse_Message.mn_ReplyPort = ts_reply;
+    e->tse_Message.mn_Length = sizeof *e;
+    e->tse_Magic = TASKSPACE_MAGIC;
+    e->tse_Kind = kind;
+    strcpy(e->tse_Name, t->name);
+    e->tse_Left = t->x; e->tse_Top = t->y; e->tse_Width = t->bw; e->tse_Height = t->bh;
+    Forbid();
+    if ((p = FindPort((STRPTR)t->port))) { PutMsg(p, &e->tse_Message); ts_out++; }
+    Permit();
+    if (!p) FreeVec(e);
+    return p != NULL;
+}
+
+static void ts_replies(void)
+{
+    struct Message *m;
+    while (ts_reply && (m = GetMsg(ts_reply))) { FreeVec(m); ts_out--; }
+}
+
+/* a program's message on OpenTitle's port */
+static void ts_command(struct TaskspaceMsg *m)
+{
+    int i;
+    if (m->tsm_Message.mn_Length < sizeof *m || m->tsm_Magic != TASKSPACE_MAGIC || m->tsm_Version < 1) { m->tsm_Result = TSR_BADMSG; return; }
+    m->tsm_Name[sizeof m->tsm_Name - 1] = 0;
+    i = ts_find(m->tsm_Name);
+    m->tsm_Result = TSR_OK;
+    switch (m->tsm_Command) {
+    case TSC_ADD: {
+        struct ts_icon *t;
+        ULONG n = (ULONG)m->tsm_Width * m->tsm_Height;
+        if (!m->tsm_Name[0] || !m->tsm_Pixels || !m->tsm_Width || !m->tsm_Height || m->tsm_Width > TS_MAXW || m->tsm_Height > TS_MAXH
+            || !m->tsm_States || m->tsm_States > TS_STATES) { m->tsm_Result = TSR_BADMSG; return; }
+        if (i < 0) for (i = 0; i < TS_ICONS && ts[i]; i++) ;
+        if (i == TS_ICONS) { m->tsm_Result = TSR_FULL; return; }
+        if (ts[i]) ts_close_one(ts[i], 0);
+        else if (!(ts[i] = AllocVec(sizeof *t, MEMF_ANY | MEMF_CLEAR))) { m->tsm_Result = TSR_NOMEM; return; }
+        t = ts[i];
+        memset(t, 0, sizeof *t);
+        strcpy(t->name, m->tsm_Name);
+        strncpy(t->help, m->tsm_Help, sizeof t->help - 1);
+        strncpy(t->port, m->tsm_Port, sizeof t->port - 1);
+        t->order = m->tsm_Order;
+        t->w = m->tsm_Width; t->h = m->tsm_Height; t->states = m->tsm_States;
+        t->state = m->tsm_State < t->states ? m->tsm_State : 0;
+        memcpy(t->pixels, m->tsm_Pixels, n * t->states);
+        memcpy(t->rgb, m->tsm_RGB, sizeof t->rgb);
+        ts_open_one(t);
+        break;
+    }
+    case TSC_SET:
+        if (i < 0) { m->tsm_Result = TSR_UNKNOWN; return; }
+        if (m->tsm_State < ts[i]->states) ts[i]->state = m->tsm_State;
+        m->tsm_Help[sizeof m->tsm_Help - 1] = 0;
+        if (m->tsm_Help[0] && strcmp(m->tsm_Help, ts[i]->help)) {
+            strcpy(ts[i]->help, m->tsm_Help);
+            if (help_for == i) help_close();
+        }
+        ts_draw(ts[i], 0);
+        break;
+    case TSC_REMOVE:
+        if (i < 0) { m->tsm_Result = TSR_UNKNOWN; return; }
+        ts_drop(i);
+        break;
+    default:
+        m->tsm_Result = TSR_BADMSG;
+    }
+}
+
+static void port_events(struct MsgPort *port)
+{
+    struct Message *m;
+    while ((m = GetMsg(port))) {
+        ts_command((struct TaskspaceMsg *)m);
+        ReplyMsg(m);
+    }
+}
+
+/* OpenTitle is ending: each program hears its icon has gone, and has two seconds to reply */
+static void ts_end(void)
+{
+    int i, n;
+    for (i = 0; i < TS_ICONS; i++) if (ts[i]) { ts_tell(ts[i], TSE_GONE); ts_drop(i); }
+    for (n = 0; n < 40 && ts_out > 0; n++) { Delay(TICKS_PER_SECOND / 20); ts_replies(); }
+}
+
+static int ts_count(void)
+{
+    int i, n = 0;
+    for (i = 0; i < TS_ICONS; i++) if (ts[i]) n++;
+    return n;
+}
+
+static int ts_is(struct Window *w)
+{
+    int i;
+    if (w && w == help_w) return 1;
+    for (i = 0; i < TS_ICONS; i++) if (ts[i] && ts[i]->win == w && w) return 1;
+    return 0;
+}
+
 static void close_all(void)
 {
     if (clock_w) { CloseWindow(clock_w); clock_w = NULL; tray("Clock", 0, CLOCK_ORDER); }
@@ -901,6 +1176,11 @@ static void close_all(void)
     if (menu_w) { CloseWindow(menu_w); menu_w = NULL; }
     if (cog_w) { CloseWindow(cog_w); cog_w = NULL; tray("Cog", 0, COG_ORDER); }
     if (logo_w) { CloseWindow(logo_w); logo_w = NULL; }
+    {
+        int i;
+        help_close();
+        for (i = 0; i < TS_ICONS; i++) if (ts[i]) ts_close_one(ts[i], 1);
+    }
     if (border_set) { prefs.border_black = 0; apply_border(); }
     free_pens();
     if (dri) { FreeScreenDrawInfo(scr, dri); dri = NULL; }
@@ -923,6 +1203,10 @@ static int open_all(void)
     }
     if (prefs.network) net_open();
     if (prefs.cog) cog_open();
+    {
+        int i;
+        for (i = 0; i < TS_ICONS; i++) if (ts[i]) ts_open_one(ts[i]);
+    }
     apply_border();
     return 1;
 }
@@ -954,8 +1238,11 @@ static void events(struct Window *w)
         WORD my = m->MouseY;
         ReplyMsg((struct Message *)m);
         if (cls == IDCMP_REFRESHWINDOW) {
+            int i;
             BeginRefresh(w);
-            if (w == logo_w) draw_logo(); else if (w == net_w) draw_net(1); else if (w == pop_w) draw_pop();
+            for (i = 0; i < TS_ICONS; i++) if (ts[i] && ts[i]->win == w) break;
+            if (i < TS_ICONS) ts_draw(ts[i], 1);
+            else if (w == logo_w) draw_logo(); else if (w == net_w) draw_net(1); else if (w == pop_w) draw_pop();
             else if (w == cog_w) draw_cog(1); else draw_clock(1);
             EndRefresh(w, TRUE);
         }
@@ -967,6 +1254,15 @@ static void events(struct Window *w)
                 else if (cog_skip) cog_skip = 0;        /* the click closed the list */
                 else menu_open();
                 return;
+            }
+            {   /* a program's icon: tell it; drop the icon when the program is gone */
+                int i;
+                for (i = 0; i < TS_ICONS; i++)
+                    if (ts[i] && ts[i]->win == w) {
+                        help_close();
+                        if (!ts_tell(ts[i], TSE_CLICK)) ts_drop(i);
+                        return;
+                    }
             }
         }
         /* a click on ours: the window before stays the active one (the panel keeps it while open) */
@@ -980,7 +1276,7 @@ static int wb_title_shown(void)
 {
     struct Window *a = IntuitionBase->ActiveWindow;
     const char *t;
-    if (!a || a->WScreen != scr || a == logo_w || a == clock_w || a == net_w || a == pop_w || a == cog_w || a == menu_w) a = last_other;
+    if (!a || a->WScreen != scr || a == logo_w || a == clock_w || a == net_w || a == pop_w || a == cog_w || a == menu_w || ts_is(a)) a = last_other;
     t = (const char *)(a && a->WScreen == scr && a->ScreenTitle ? a->ScreenTitle : scr->Title);
     return t && !strncmp(t, LOGO_PAD, strlen(LOGO_PAD));
 }
@@ -1012,6 +1308,7 @@ static ULONG window_sigs(void)
     ULONG m = 0;
     int i;
     for (i = 0; i < 6; i++) if (ws[i]) m |= 1UL << ws[i]->UserPort->mp_SigBit;
+    for (i = 0; i < TS_ICONS; i++) if (ts[i] && ts[i]->win) m |= 1UL << ts[i]->win->UserPort->mp_SigBit;
     return m;
 }
 
@@ -1035,6 +1332,7 @@ int main(void)
     port->mp_Node.ln_Name = (char *)TB_PORT;
     port->mp_Node.ln_Pri = 0;
     AddPort(port);
+    ts_reply = CreateMsgPort();
     if ((tport = CreateMsgPort()) && (tr = (struct timerequest *)CreateIORequest(tport, sizeof *tr)))
         timer = !OpenDevice((STRPTR)TIMERNAME, UNIT_VBLANK, (struct IORequest *)tr, 0);
 
@@ -1045,11 +1343,12 @@ int main(void)
         ULONG sig, ms;
         struct Window *act;
         /* a tenth of a second while the pointer is on the bar or the list is open (the cog lights up), else half */
-        ms = menu_w || cog_drawn > 0 || (scr && IntuitionBase->FirstScreen == scr && scr->MouseY <= scr->BarHeight) ? 100 : 500;
+        ms = menu_w || cog_drawn > 0 || hover_for >= 0 || (scr && IntuitionBase->FirstScreen == scr && scr->MouseY <= scr->BarHeight) ? 100 : 500;
         if (timer) {
             tr->tr_node.io_Command = TR_ADDREQUEST; tr->tr_time.tv_secs = 0; tr->tr_time.tv_micro = ms * 1000;
             SendIO((struct IORequest *)tr);
-            sig = Wait(SIGBREAKF_CTRL_C | SIGBREAKF_CTRL_F | (1UL << tport->mp_SigBit) | window_sigs());
+            sig = Wait(SIGBREAKF_CTRL_C | SIGBREAKF_CTRL_F | (1UL << tport->mp_SigBit) | (1UL << port->mp_SigBit)
+                       | (ts_reply ? 1UL << ts_reply->mp_SigBit : 0) | window_sigs());
             if (!CheckIO((struct IORequest *)tr)) AbortIO((struct IORequest *)tr);
             WaitIO((struct IORequest *)tr);
             if (sig & (1UL << tport->mp_SigBit)) waited += ms;
@@ -1063,19 +1362,26 @@ int main(void)
             close_all();
             read_prefs();
             apply_title();
-            if (!prefs.logo && !prefs.memory && !prefs.clock && !prefs.network && !prefs.cog && !prefs.border_black) break;
+            if (!prefs.logo && !prefs.memory && !prefs.clock && !prefs.network && !prefs.cog && !prefs.border_black && !ts_count()) break;
             if (!open_all()) break;
         }
+        port_events(port);
+        ts_replies();
         menu_events();
         events(logo_w);
         events(clock_w);
         events(net_w);
         events(cog_w);
         if (pop_w) events(pop_w);
+        {
+            int i;
+            for (i = 0; i < TS_ICONS; i++) if (ts[i] && ts[i]->win) events(ts[i]->win);
+        }
+        if (scr) ts_hover();
         if (cog_skip && !over_cog()) cog_skip = 0;
         draw_cog(0);
         act = IntuitionBase->ActiveWindow;
-        if (act && act != logo_w && act != clock_w && act != net_w && act != pop_w && act != cog_w && act != menu_w) last_other = act;
+        if (act && act != logo_w && act != clock_w && act != net_w && act != pop_w && act != cog_w && act != menu_w && !ts_is(act)) last_other = act;
         if (last_other && !is_window(last_other)) last_other = NULL;
         if (waited < 500) continue;
         waited = 0;                            /* every half second, as before */
@@ -1085,7 +1391,7 @@ int main(void)
         if (++tick % 4 == 0) {                 /* every 2 s: the tray and OpenMenus' bar may have moved */
             int edge = read_bar_edge();
             WORD ox = cx, oy = cy, ow = cw, oh = ch;
-            if (edge != bar_edge && (clock_w || net_w || cog_w)) { close_all(); if (!open_all()) break; }
+            if (edge != bar_edge && (clock_w || net_w || cog_w || ts_count())) { close_all(); if (!open_all()) break; }
             else {
                 if (net_w) {
                     WORD px = nx, py = ny, pw = nw, ph = nh;
@@ -1102,6 +1408,22 @@ int main(void)
                     place();
                     if (cx != ox || cy != oy || cw != ow || ch != oh) { ChangeWindowBox(clock_w, cx, cy, cw, ch); shown[0] = 0; }
                 }
+                {
+                    int i;
+                    for (i = 0; i < TS_ICONS; i++) {
+                        struct ts_icon *t = ts[i];
+                        WORD px, py, pw, ph;
+                        if (!t || !t->win) continue;
+                        px = t->x; py = t->y; pw = t->bw; ph = t->bh;
+                        ts_place(t);
+                        if (t->x != px || t->y != py || t->bw != pw || t->bh != ph) {
+                            if (help_for == i) help_close();
+                            ChangeWindowBox(t->win, t->x, t->y, t->bw, t->bh);
+                            tray(t->name, t->bw, t->order);
+                            t->drawn = -1;
+                        }
+                    }
+                }
                 if (cog_w && !menu_w) {
                     WORD px = gx, py = gy, pw = gw, ph = gh;
                     cog_place();
@@ -1116,11 +1438,18 @@ int main(void)
             keep_in_front(clock_w);
             keep_in_front(net_w);
             keep_in_front(cog_w);
+            {
+                int i;
+                for (i = 0; i < TS_ICONS; i++) if (ts[i]) keep_in_front(ts[i]->win);
+            }
         }
     }
+    RemPort(port);                             /* no new icons from here on */
+    port_events(port);
+    ts_end();
     close_all();
-    RemPort(port);
     DeleteMsgPort(port);
+    if (ts_reply && !ts_out) DeleteMsgPort(ts_reply);   /* a program that never replied keeps it: better a leak than a crash */
 out:
     if (timer) CloseDevice((struct IORequest *)tr);
     if (tr) DeleteIORequest((struct IORequest *)tr);
