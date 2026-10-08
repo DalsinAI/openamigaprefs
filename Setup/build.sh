@@ -8,5 +8,5 @@ STOVE=${STOVE:-$HOME/AmigaChrome/stoves/os32}
 CC=${CC:-"$STOVE/prefix/bin/m68k-amigaos-gcc"}
 OUT=${1:-$HERE/build/os3}
 mkdir -p "$OUT"
-"$CC" -noixemul -m68020 -std=gnu99 -Wall -Werror -O2 -fno-common -o "$OUT/OpenUp-Setup" "$HERE/src/setup.c"
+"$CC" -noixemul -m68020 -std=gnu99 -Wall -Werror -O2 -fno-delete-null-pointer-checks -fno-common -o "$OUT/OpenUp-Setup" "$HERE/src/setup.c"
 echo "$OUT/OpenUp-Setup ($(wc -c < "$OUT/OpenUp-Setup") bytes)"

@@ -8,5 +8,5 @@ STOVE=${STOVE:-$HOME/AmigaChrome/stoves/os32}
 CC="$STOVE/prefix/bin/m68k-amigaos-gcc"
 OUT=${1:-$HERE/build/os3}
 mkdir -p "$OUT"
-"$CC" -noixemul -m68020 -std=gnu99 -Wall -Werror -O2 -fno-common -o "$OUT/OpenBlanker" "$HERE/src/openblanker.c"
+"$CC" -noixemul -m68020 -std=gnu99 -Wall -Werror -O2 -fno-delete-null-pointer-checks -fno-common -o "$OUT/OpenBlanker" "$HERE/src/openblanker.c"
 echo "$OUT/OpenBlanker ($(wc -c < "$OUT/OpenBlanker") bytes)"
