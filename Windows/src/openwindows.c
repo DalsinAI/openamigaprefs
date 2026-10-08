@@ -16,6 +16,10 @@
  *   edges         a resizable window is resized by dragging any edge but
  *                 its title bar: the sides, the bottom and the bottom
  *                 corners, from a few pixels outside the frame (0.5)
+ *   edges.pointer while one is, the pointer shows the edge held. Off unless
+ *                 asked for: a window's own pointer (WA_Pointer, a busy
+ *                 pointer) can't be read back, so it would come back as the
+ *                 default one
  *
  * Settings: ENV:OpenPrefs/Windows (OpenPrefs Windows writes it, then sends
  * Ctrl-F to the task of the public port "OpenWindows" to read it again). Places: ENV:OpenPrefs/WindowPlaces,
@@ -65,7 +69,7 @@ struct GfxBase *GfxBase;
 /* ---- settings ------------------------------------------------------------ */
 
 static struct {
-    int snap, snap_dist, halves, switcher, wheel, places, places_wb, drawer_w, drawer_h, dblfront, edges;
+    int snap, snap_dist, halves, switcher, wheel, places, places_wb, drawer_w, drawer_h, dblfront, edges, edge_ptr;
     char key[48];
     char never[MAX_NEVER][32];
     int nnever;
@@ -94,7 +98,7 @@ static void read_prefs(void)
 {
     char *text = read_file(PREFS_ENV), *p, *line;
     memset(&cfg, 0, sizeof cfg);
-    cfg.snap = 1; cfg.snap_dist = 12; cfg.halves = 0; cfg.switcher = 1; cfg.wheel = 1; cfg.places = 1; cfg.dblfront = 1; cfg.edges = 1;
+    cfg.snap = 1; cfg.snap_dist = 12; cfg.halves = 0; cfg.switcher = 1; cfg.wheel = 1; cfg.places = 1; cfg.dblfront = 1; cfg.edges = 1; cfg.edge_ptr = 0;
     strcpy(cfg.key, "lcommand tab");
     if (!text) return;
     for (p = text; *p; ) {
@@ -112,6 +116,7 @@ static void read_prefs(void)
         else if (!strcmp(line, "wheel")) cfg.wheel = on_off(v);
         else if (!strcmp(line, "doubleclick.front")) cfg.dblfront = on_off(v);
         else if (!strcmp(line, "edges")) cfg.edges = on_off(v);
+        else if (!strcmp(line, "edges.pointer")) cfg.edge_ptr = on_off(v);
         else if (!strcmp(line, "places")) cfg.places = on_off(v);
         else if (!strcmp(line, "places.drawers")) cfg.places_wb = on_off(v);
         else if (!strcmp(line, "never") && cfg.nnever < MAX_NEVER) strncpy(cfg.never[cfg.nnever++], v, 31);
@@ -151,22 +156,34 @@ static struct Window *volatile grab_win;        /* the window being resized, set
 static volatile int grab_edges, grab_on, grab_end;
 static volatile WORD grab_x0, grab_y0;          /* the pointer at the press, screen relative */
 
-/* The window whose edge (x, y) is on, and which edges, or NULL. Read from the
- * screen's layers front to back with no lock, as over_active does (the input
- * handler can't wait): the first window whose frame holds the point is the
- * one under the pointer, and only its own edge counts; a point just outside
- * every frame in front of a window belongs to that window's edge. The title
- * bar's height never resizes (it moves the window), nor does a window that
- * can't be resized, a backdrop or a borderless one. */
+/* The window whose edge (x, y) is on, and which edges, or NULL. The screen's
+ * layers are read front to back under their lock, so none goes while we look;
+ * the input handler can't wait for it, so when another task holds it the
+ * press is left to Intuition (AttemptSemaphore). The first window whose frame
+ * holds the point is the one under the pointer, and only its own edge counts;
+ * a point just outside every frame in front of a window belongs to that
+ * window's edge. The frame is the window's own box, not its layer's: a
+ * GimmeZeroZero window's inner layer and a requester's are inside it. The
+ * title bar's height never resizes (it moves the window), nor does a window
+ * that can't be resized, a backdrop or a borderless one. */
 static struct Window *edge_at(struct Screen *s, WORD x, WORD y, int *edges)
 {
     struct Layer *l;
+    struct Window *found = NULL;
+    if (!AttemptSemaphore(&s->LayerInfo.Lock))
+        return NULL;
     for (l = s->LayerInfo.top_layer; l; l = l->back) {
         struct Window *w = (struct Window *)l->Window;
-        WORD L = l->bounds.MinX, T = l->bounds.MinY, R = l->bounds.MaxX, B = l->bounds.MaxY;
-        int in = x >= L && x <= R && y >= T && y <= B, e = 0;
-        if (!w || l == s->BarLayer || (w->Flags & (WFLG_BACKDROP | WFLG_BORDERLESS)) || !(w->Flags & WFLG_SIZEGADGET)) {
-            if (in) return NULL;                /* the screen's title bar, a menu, a window that keeps its size */
+        WORD L, T, R, B;
+        int in, e = 0;
+        if (!w || l == s->BarLayer) {           /* the screen's title bar, a menu */
+            if (x >= l->bounds.MinX && x <= l->bounds.MaxX && y >= l->bounds.MinY && y <= l->bounds.MaxY) break;
+            continue;
+        }
+        L = w->LeftEdge; T = w->TopEdge; R = L + w->Width - 1; B = T + w->Height - 1;
+        in = x >= L && x <= R && y >= T && y <= B;
+        if ((w->Flags & (WFLG_BACKDROP | WFLG_BORDERLESS)) || !(w->Flags & WFLG_SIZEGADGET)) {
+            if (in) break;                      /* a window that keeps its size */
             continue;
         }
         if (x >= L - ZONE_OUT && x <= R + ZONE_OUT && y >= T + w->BorderTop && y <= B + ZONE_OUT) {
@@ -174,10 +191,11 @@ static struct Window *edge_at(struct Screen *s, WORD x, WORD y, int *edges)
             if (x >= R - ZONE_IN + 1) e |= EDGE_R;
             if (y >= B - ZONE_IN + 1) e |= EDGE_B;
         }
-        if (e) { *edges = e; return w; }
-        if (in) return NULL;                    /* inside it, off its edges: an ordinary press */
+        if (e) { *edges = e; found = w; break; }
+        if (in) break;                          /* inside it, off its edges: an ordinary press */
     }
-    return NULL;
+    ReleaseSemaphore(&s->LayerInfo.Lock);
+    return found;
 }
 
 static int over_active(void)
@@ -535,7 +553,9 @@ static void resize(void)
         if (w != IntuitionBase->ActiveWindow) ActivateWindow(w);
         {
             int k = !(rs_edges & EDGE_B) ? PTR_H : (rs_edges & EDGE_R) ? PTR_D1 : (rs_edges & EDGE_L) ? PTR_D2 : PTR_V;
-            if (ptr_obj[k]) { SetWindowPointer(w, WA_Pointer, (ULONG)ptr_obj[k], TAG_DONE); rs_ptr = 1; }
+            /* only when asked for: the window's own pointer can't be read, so
+             * the end of the drag gives it the default one */
+            if (cfg.edge_ptr && ptr_obj[k]) { SetWindowPointer(w, WA_Pointer, (ULONG)ptr_obj[k], TAG_DONE); rs_ptr = 1; }
         }
     }
     if (!(w = rs_win)) return;
