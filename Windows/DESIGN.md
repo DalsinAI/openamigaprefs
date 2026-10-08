@@ -84,12 +84,21 @@ Intuition:
 - **The main task resizes** with `ChangeWindowBox` each time the pointer
   moves, from the box the window had at the press: the edge or corner held
   follows the pointer, the others stay. The window keeps to its own limits
-  (`MinWidth` to `MaxWidth`) and to the screen. The window is made active,
-  and shows a resize pointer (left-right, up-down, or the corner's diagonal,
-  `pointerclass` images of OpenWindows' own) until the button comes up.
-- **Not yet:** a pointer that changes as it passes over an edge before the
-  press, and the edge lit in the accent (the mock-up's hover): that needs
-  OpenLook to draw the frame and comes with openworkbench.library.
+  (`MinWidth` to `MaxWidth`) and to the screen. The window is made active.
+- **The press is tested under the screen's layer lock.** The input handler
+  can't wait, so it takes the lock with `AttemptSemaphore`; while another
+  task holds it, the press goes to Intuition as before 0.5. The edges are the
+  window's own box (`LeftEdge`, `TopEdge`, `Width`, `Height`), not a layer's,
+  so a GimmeZeroZero window's inner layer and a requester never make an edge.
+- **The resize pointer is off by default** (`edges.pointer on` asks for it):
+  left-right, up-down, or the corner's diagonal, `pointerclass` images of
+  OpenWindows' own, until the button comes up. A window's own pointer (one
+  set with `WA_Pointer`, or a busy pointer) can't be read back, so after the
+  drag the window would have the default one. The editor keeps the line as
+  written; it has no switch for it.
+- **Not yet:** the edge lit in the accent as the pointer passes over it (the
+  mock-up's hover), which is the cue instead of a pointer: OpenLook draws the
+  frame, so it comes with openworkbench.library.
 - `edges on` (the default) in `ENV:OpenPrefs/Windows`; the editor's switch,
   in both views: "Resize a window from any edge but its title bar".
 
