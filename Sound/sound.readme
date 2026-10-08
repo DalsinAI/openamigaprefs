@@ -11,9 +11,9 @@ place of Sound and AHI prefs, and OpenSpeaker puts a speaker on the menu bar
 that shows and turns the volume.
 
 - The volume, Paula's level, AHI's level and mute. On AmigaChrome they move
-  the sound as you drag them, and the PC's mixer page shows the same levels.
+  the sound as you drag them, and Cradle's mixer page shows the same levels.
   On other Amigas the volume is AHI's.
-- Who mixes AHI's sound on AmigaChrome: the PC, or the Amiga.
+- Who mixes AHI's sound on AmigaChrome: the x86 or ARM64 cores, or the Amiga.
 - The beep: a sound, a flash, both or nothing, with a sound file and Test.
 - Advanced: AHI's units, modes, rates and channels, Clip, Anti-click and
   CPU limit.
