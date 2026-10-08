@@ -819,10 +819,10 @@ out:
     return rc;
 }
 
-int main(void)
+int main(int argc, char **argv)
 {
     LONG a[10] = { 0 };
-    struct RDArgs *rda;
+    struct RDArgs *rda = NULL;
     int rc = RETURN_FAIL;
     IconBase = OpenLibrary((STRPTR)"icon.library", 44);
     DataTypesBase = OpenLibrary((STRPTR)"datatypes.library", 39);
@@ -833,7 +833,9 @@ int main(void)
         goto out;
     }
     load_types();
-    if (!(rda = ReadArgs((STRPTR)"LIST/S,SET/K,TO/K,SAVE/S,SCAN/K,IN/K,APPLY/S,TYPE/K,UNDO/S,SWITCH/K", a, NULL))) {
+    /* from Workbench (argc 0) there are no arguments: ReadArgs would read them from
+     * libnix's console window, which opens empty and waits */
+    if (argc > 0 && !(rda = ReadArgs((STRPTR)"LIST/S,SET/K,TO/K,SAVE/S,SCAN/K,IN/K,APPLY/S,TYPE/K,UNDO/S,SWITCH/K", a, NULL))) {
         PrintFault(IoErr(), (STRPTR)"OpenTypes");
         goto out;
     }
@@ -843,7 +845,7 @@ int main(void)
         rc = a[4] && a[6] ? shell_apply(a) : shell(a);
     else
         rc = gui();
-    FreeArgs(rda);
+    if (rda) FreeArgs(rda);
 out:
     if (found) FreeVec(found);
     if (GadToolsBase) CloseLibrary(GadToolsBase);

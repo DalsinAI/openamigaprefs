@@ -7,6 +7,9 @@
  *                 screen's left or right edge, it fills that half (option)
  *   Amiga+Tab     brings the window at the back to the front and activates
  *                 it; with Shift, sends the front window to the back
+ *   double-click  a double-click in a window's title bar (its drag bar)
+ *                 brings it to the front, as ClickToFront does for a
+ *                 double-click anywhere; one already in front stays
  *   wheel         the mouse wheel goes to the window under the pointer
  *   places        a program's window opens where it was last left
  *   drawers       Workbench drawer windows open at least this big
@@ -38,7 +41,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-static const char version[] = "$VER: OpenWindows 0.3 (6.10.2026) MIT, Copyright (c) 2026 Dalsin Limited";
+static const char version[] = "$VER: OpenWindows 0.4 (8.10.2026) MIT, Copyright (c) 2026 Dalsin Limited";
 
 #define PREFS_ENV "ENV:OpenPrefs/Windows"
 #define PLACES_ENV "ENV:OpenPrefs/WindowPlaces"
@@ -54,7 +57,7 @@ struct IntuitionBase *IntuitionBase;
 /* ---- settings ------------------------------------------------------------ */
 
 static struct {
-    int snap, snap_dist, halves, switcher, wheel, places, places_wb, drawer_w, drawer_h;
+    int snap, snap_dist, halves, switcher, wheel, places, places_wb, drawer_w, drawer_h, dblfront;
     char key[48];
     char never[MAX_NEVER][32];
     int nnever;
@@ -83,7 +86,7 @@ static void read_prefs(void)
 {
     char *text = read_file(PREFS_ENV), *p, *line;
     memset(&cfg, 0, sizeof cfg);
-    cfg.snap = 1; cfg.snap_dist = 12; cfg.halves = 0; cfg.switcher = 1; cfg.wheel = 1; cfg.places = 1;
+    cfg.snap = 1; cfg.snap_dist = 12; cfg.halves = 0; cfg.switcher = 1; cfg.wheel = 1; cfg.places = 1; cfg.dblfront = 1;
     strcpy(cfg.key, "lcommand tab");
     if (!text) return;
     for (p = text; *p; ) {
@@ -99,6 +102,7 @@ static void read_prefs(void)
         else if (!strcmp(line, "switcher")) cfg.switcher = on_off(v);
         else if (!strcmp(line, "switcher.key")) { strncpy(cfg.key, v, sizeof cfg.key - 1); }
         else if (!strcmp(line, "wheel")) cfg.wheel = on_off(v);
+        else if (!strcmp(line, "doubleclick.front")) cfg.dblfront = on_off(v);
         else if (!strcmp(line, "places")) cfg.places = on_off(v);
         else if (!strcmp(line, "places.drawers")) cfg.places_wb = on_off(v);
         else if (!strcmp(line, "never") && cfg.nnever < MAX_NEVER) strncpy(cfg.never[cfg.nnever++], v, 31);
@@ -120,6 +124,10 @@ static struct InputEvent wheel_ring[WHEEL_RING];
 static volatile int wheel_in, wheel_out;
 static volatile int pass_wheel;                 /* events we put back: let them through */
 static volatile int on = 1;
+/* left button presses for the double-click: when and where, from input.device's task */
+#define CLICK_RING 8
+static struct click { ULONG secs, micro; WORD x, y; struct Screen *s; } click_ring[CLICK_RING];
+static volatile int click_in, click_out;
 
 static int over_active(void)
 {
@@ -142,6 +150,12 @@ static void custom(CxMsg *msg, CxObj *co)
             struct Screen *s = IntuitionBase->FirstScreen;
             if (ie->ie_Code == IECODE_LBUTTON) {
                 ev_down = 1; down_x = s ? s->MouseX : 0; down_y = s ? s->MouseY : 0;
+                if (cfg.dblfront && s && ((click_in + 1) & (CLICK_RING - 1)) != click_out) {
+                    struct click *c = &click_ring[click_in];
+                    c->secs = ie->ie_TimeStamp.tv_secs; c->micro = ie->ie_TimeStamp.tv_micro;
+                    c->x = s->MouseX; c->y = s->MouseY; c->s = s;
+                    click_in = (click_in + 1) & (CLICK_RING - 1);
+                }
                 Signal(me, sig_button);
             } else if (ie->ie_Code == (IECODE_LBUTTON | IECODE_UP_PREFIX)) {
                 ev_up = 1; up_x = s ? s->MouseX : 0; up_y = s ? s->MouseY : 0;
@@ -253,6 +267,81 @@ static void halves(struct Window *w, WORD px)
 
 static struct Window *drag_win;
 static WORD drag_l, drag_t, drag_w, drag_h;
+
+/* ---- double-click in a title bar --------------------------------------------------------------- */
+
+/* A gadget's box in the window, with its GFLG_REL* flags worked out. */
+static int in_gadget(struct Window *w, struct Gadget *g, WORD x, WORD y)
+{
+    WORD l = g->LeftEdge + ((g->Flags & GFLG_RELRIGHT) ? w->Width - 1 : 0);
+    WORD t = g->TopEdge + ((g->Flags & GFLG_RELBOTTOM) ? w->Height - 1 : 0);
+    WORD wd = g->Width + ((g->Flags & GFLG_RELWIDTH) ? w->Width : 0);
+    WORD ht = g->Height + ((g->Flags & GFLG_RELHEIGHT) ? w->Height : 0);
+    return x >= l && x < l + wd && y >= t && y < t + ht;
+}
+
+/* 1 when (x, y), screen relative, is on w's drag bar: in its title bar, on the
+ * drag gadget, and on no other gadget (close, depth, zoom, a program's own) */
+static int on_drag_bar(struct Window *w, WORD x, WORD y)
+{
+    struct Gadget *g;
+    int drag = 0, other = 0;
+    ULONG lock;
+    x -= w->LeftEdge; y -= w->TopEdge;
+    if (!(w->Flags & WFLG_DRAGBAR) || x < 0 || x >= w->Width || y < 0 || y >= w->BorderTop) return 0;
+    lock = LockIBase(0);
+    for (g = w->FirstGadget; g; g = g->NextGadget) {
+        if (!in_gadget(w, g, x, y)) continue;
+        if ((g->GadgetType & GTYP_SYSTYPEMASK) == GTYP_WDRAGGING && (g->GadgetType & GTYP_SYSGADGET)) drag = 1;
+        else other = 1;
+    }
+    UnlockIBase(lock);
+    return drag && !other;
+}
+
+/* 1 when no other window's layer in front of w overlaps it */
+static int in_front(struct Window *w)
+{
+    struct Layer *l;
+    int covered = 0;
+    LockLayerInfo(&w->WScreen->LayerInfo);
+    for (l = w->WLayer->front; l && !covered; l = l->front) {
+        struct Window *o = (struct Window *)l->Window;
+        if (o && (o->Flags & WFLG_BORDERLESS) && o->Height <= w->WScreen->BarHeight + 1) continue;  /* the title bar's tray */
+        covered = l->bounds.MinX <= w->WLayer->bounds.MaxX && l->bounds.MaxX >= w->WLayer->bounds.MinX &&
+                  l->bounds.MinY <= w->WLayer->bounds.MaxY && l->bounds.MaxY >= w->WLayer->bounds.MinY;
+    }
+    UnlockLayerInfo(&w->WScreen->LayerInfo);
+    return !covered;
+}
+
+static struct click last_click;
+static struct Window *last_click_win;
+
+/* The presses the handler saw: two on the same window's drag bar, close in place and within
+ * the double-click time of Input prefs, bring it to the front. The presses go on to Intuition
+ * as they are (a drag, the window made active); this only acts after them. */
+static void clicks(void)
+{
+    while (click_out != click_in) {
+        struct click c = click_ring[click_out];
+        struct Window *w;
+        click_out = (click_out + 1) & (CLICK_RING - 1);
+        if (!on || !cfg.dblfront) { last_click_win = NULL; continue; }
+        w = c.s == IntuitionBase->FirstScreen ? window_at(c.s, c.x, c.y) : NULL;
+        if (w && !is_window(w)) w = NULL;
+        if (w && ((w->Flags & WFLG_BACKDROP) || !on_drag_bar(w, c.x, c.y))) w = NULL;
+        if (w && w == last_click_win && c.s == last_click.s &&
+            c.x - last_click.x <= 4 && last_click.x - c.x <= 4 && c.y - last_click.y <= 4 && last_click.y - c.y <= 4 &&
+            DoubleClick(last_click.secs, last_click.micro, c.secs, c.micro)) {
+            if (!in_front(w)) WindowToFront(w);
+            last_click_win = NULL;                 /* a third click starts again */
+            continue;
+        }
+        last_click = c;
+        last_click_win = w;
+    }
+}
 
 static void buttons(void)
 {
@@ -585,7 +674,7 @@ int main(void)
         if (got & SIGBREAKF_CTRL_C) quit = 1;
         if (got & SIGBREAKF_CTRL_F) { read_prefs(); hotkeys(port); }
         if (got & sig_wheel) wheel();
-        if (got & sig_button) buttons();
+        if (got & sig_button) { clicks(); buttons(); }
         while ((m = (CxMsg *)GetMsg(port))) {
             ULONG type = CxMsgType(m), id = CxMsgID(m);
             ReplyMsg((struct Message *)m);

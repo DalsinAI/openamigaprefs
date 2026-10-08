@@ -408,12 +408,14 @@ static int gui(void)
     return r;
 }
 
-int main(void)
+int main(int argc, char **argv)
 {
     LONG args[4] = { 0, 0, 0, 0 };
-    struct RDArgs *rd = ReadArgs((STRPTR)"FROM,USE/S,SAVE/S,ADVANCED/S", args, NULL);
+    /* from Workbench (argc 0) there are no arguments: ReadArgs would read them from
+     * libnix's console window, which opens empty and waits */
+    struct RDArgs *rd = argc > 0 ? ReadArgs((STRPTR)"FROM,USE/S,SAVE/S,ADVANCED/S", args, NULL) : NULL;
     int rc;
-    if (!rd) { PrintFault(IoErr(), (STRPTR)"Sound"); return RETURN_FAIL; }
+    if (!rd && argc > 0) { PrintFault(IoErr(), (STRPTR)"Sound"); return RETURN_FAIL; }
     board = sp_board();
     if (board) seen_seq = sp_board_seq(board);
     sp_load(&cur, args[0] ? (const char *)args[0] : NULL);
@@ -424,12 +426,12 @@ int main(void)
             cur.volume = saved.volume; cur.paula = saved.paula; cur.ahi = saved.ahi; cur.muted = saved.muted;
         }
         put_in_place(args[2] != 0);
-        FreeArgs(rd);
+        if (rd) FreeArgs(rd);
         return RETURN_OK;
     }
     orig = cur;
     advanced = args[3] ? 1 : read_view();
-    FreeArgs(rd);
+    if (rd) FreeArgs(rd);
     if (!(nmodes = sp_ahi_modes(mode_ids, mode_names, MAX_MODES))) {   /* no AHI: our own modes still have names */
         static const ULONG ids[3] = { SP_MODE_HOSTMIX, SP_MODE_HIFI, SP_MODE_16BIT };
         static const char *names[3] = { "AmigaChrome: Host mix 16 bit stereo++", "AmigaChrome: HiFi 32 bit stereo++", "AmigaChrome: 16 bit stereo++" };

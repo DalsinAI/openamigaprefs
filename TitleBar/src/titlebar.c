@@ -1,6 +1,6 @@
-/* OpenPrefs Title bar: the editor for OpenTitle (the logo, free memory and
- * clock on the Workbench screen's title bar, and the black border around
- * the screen).
+/* OpenPrefs Title bar: the editor for OpenTitle (the logo, free memory,
+ * clock, network icons and the cog with the settings editors on the
+ * Workbench screen's title bar, and the black border around the screen).
  *
  *   TitleBar [FROM file] [USE] [SAVE]
  *
@@ -27,7 +27,7 @@
 
 #include "tb_prefs.h"
 
-static const char version[] = "$VER: TitleBar 0.1 (6.10.2026) OpenPrefs, MIT, Copyright (c) 2026 Dalsin Limited";
+static const char version[] = "$VER: TitleBar 0.2 (8.10.2026) OpenPrefs, MIT, Copyright (c) 2026 Dalsin Limited";
 
 static tb_prefs cur;
 
@@ -80,7 +80,7 @@ static void tell(void)
     Forbid();
     if ((p = FindPort((STRPTR)TB_PORT)) && p->mp_SigTask) Signal((struct Task *)p->mp_SigTask, SIGBREAKF_CTRL_F);
     Permit();
-    if (!p && (cur.logo || cur.memory || cur.clock || cur.network || cur.border_black)) {
+    if (!p && (cur.logo || cur.memory || cur.clock || cur.network || cur.cog || cur.border_black)) {
         BPTR in = Open((STRPTR)"NIL:", MODE_OLDFILE), out = Open((STRPTR)"NIL:", MODE_NEWFILE);
         /* asynchronous: both handles are the new process's, closed when it ends */
         if (!in || !out || SystemTags((STRPTR)TB_TOOL, SYS_Input, in, SYS_Output, out, SYS_Asynch, TRUE, SYS_UserShell, TRUE,
@@ -104,7 +104,7 @@ static int put_in_place(int save)
 
 /* ---- the window ---------------------------------------------------------------------- */
 
-enum { G_LOGO, G_MEMORY, G_CLOCK, G_DATE, G_NET, G_BORDER, G_STATUS, G_SAVE, G_USE, G_CANCEL, G_COUNT };
+enum { G_LOGO, G_MEMORY, G_CLOCK, G_DATE, G_NET, G_COG, G_BORDER, G_STATUS, G_SAVE, G_USE, G_CANCEL, G_COUNT };
 static struct Gadget *gad[G_COUNT];
 static struct Window *win;
 static char status_text[120];
@@ -127,6 +127,7 @@ static void show(void)
     SET(G_CLOCK, GTCB_Checked, cur.clock);
     SET(G_DATE, GTCB_Checked, cur.date, GA_Disabled, !cur.clock);
     SET(G_NET, GTCB_Checked, cur.network);
+    SET(G_COG, GTCB_Checked, cur.cog);
     SET(G_BORDER, GTCB_Checked, cur.border_black);
 }
 
@@ -157,7 +158,8 @@ static int gui(void)
     G(CHECKBOX_KIND, G_MEMORY, X, row, 26, lh, "Free chip and fast memory", PLACETEXT_LEFT, GTCB_Scaled, TRUE); row += lh + 4;
     G(CHECKBOX_KIND, G_CLOCK, X, row, 26, lh, "Clock at the right", PLACETEXT_LEFT, GTCB_Scaled, TRUE); row += lh + 4;
     G(CHECKBOX_KIND, G_DATE, X, row, 26, lh, "Day and date with the clock", PLACETEXT_LEFT, GTCB_Scaled, TRUE); row += lh + 4;
-    G(CHECKBOX_KIND, G_NET, X, row, 26, lh, "Network icons (LAN, Wi-Fi)", PLACETEXT_LEFT, GTCB_Scaled, TRUE); row += lh + 10;
+    G(CHECKBOX_KIND, G_NET, X, row, 26, lh, "Network icons (LAN, Wi-Fi)", PLACETEXT_LEFT, GTCB_Scaled, TRUE); row += lh + 4;
+    G(CHECKBOX_KIND, G_COG, X, row, 26, lh, "Settings cog at the right end", PLACETEXT_LEFT, GTCB_Scaled, TRUE); row += lh + 10;
     G(CHECKBOX_KIND, G_BORDER, X, row, 26, lh, "Black border around the screen", PLACETEXT_LEFT, GTCB_Scaled, TRUE); row += lh + 10;
     G(TEXT_KIND, G_STATUS, 10, row, W - 20, lh, NULL, 0, GTTX_Text, (ULONG)status_text, GTTX_Border, TRUE); row += lh + 6;
     {
@@ -168,7 +170,7 @@ static int gui(void)
         row += lh + 8;
     }
     if (!g) { rc = RETURN_FAIL; goto out; }
-    win = OpenWindowTags(NULL, WA_Title, (ULONG)"Title bar", WA_ScreenTitle, (ULONG)"OpenPrefs Title bar 0.1", WA_PubScreen, (ULONG)scr,
+    win = OpenWindowTags(NULL, WA_Title, (ULONG)"Title bar", WA_ScreenTitle, (ULONG)"OpenPrefs Title bar 0.2", WA_PubScreen, (ULONG)scr,
                          WA_Left, 60, WA_Top, scr->BarHeight + 20, WA_InnerWidth, W, WA_InnerHeight, row - scr->WBorTop - fh - 1,
                          WA_Gadgets, (ULONG)glist, WA_DragBar, TRUE, WA_DepthGadget, TRUE, WA_CloseGadget, TRUE, WA_Activate, TRUE,
                          WA_SmartRefresh, TRUE, WA_NewLookMenus, TRUE,
@@ -209,6 +211,7 @@ static int gui(void)
                 case G_CLOCK: cur.clock = sel; show(); break;
                 case G_DATE: cur.date = sel; break;
                 case G_NET: cur.network = sel; break;
+                case G_COG: cur.cog = sel; break;
                 case G_BORDER: cur.border_black = sel; break;
                 case G_USE: put_in_place(0); quit = 1; break;
                 case G_SAVE: put_in_place(1); quit = 1; break;
@@ -226,23 +229,25 @@ out:
     return rc;
 }
 
-int main(void)
+int main(int argc, char **argv)
 {
     LONG args[3] = { 0, 0, 0 };
-    struct RDArgs *rd = ReadArgs((STRPTR)"FROM,USE/S,SAVE/S", args, NULL);
+    /* from Workbench (argc 0) there are no arguments: ReadArgs would read them from
+     * libnix's console window, which opens empty and waits */
+    struct RDArgs *rd = argc > 0 ? ReadArgs((STRPTR)"FROM,USE/S,SAVE/S", args, NULL) : NULL;
     char *text;
     int rc;
     (void)version;
-    if (!rd) { PrintFault(IoErr(), (STRPTR)"TitleBar"); return RETURN_FAIL; }
+    if (!rd && argc > 0) { PrintFault(IoErr(), (STRPTR)"TitleBar"); return RETURN_FAIL; }
     text = read_file(args[0] ? (const char *)args[0] : TB_ENV);
     if (!text && !args[0]) text = read_file(TB_ENVARC);
     tb_parse(&cur, text);
     if (text) FreeVec(text);
     if (args[1] || args[2]) {                /* from the Shell: no window */
         rc = put_in_place(args[2] != 0) ? RETURN_OK : RETURN_ERROR;
-        FreeArgs(rd);
+        if (rd) FreeArgs(rd);
         return rc;
     }
-    FreeArgs(rd);
+    if (rd) FreeArgs(rd);
     return gui();
 }

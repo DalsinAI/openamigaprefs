@@ -4,11 +4,15 @@ Preferences editors for AmigaOS 3.x, as part of the Open family: GadTools
 windows with Use, Save, Test and Cancel, that keep the OS's own settings
 files wherever the OS already has one.
 
+![The Workbench screen with the Windows editor open, and the title bar's settings cog listing the editors](docs/screenshot.png)
+
 | Editor | What it sets | State |
 | --- | --- | --- |
 | [OpenTypes](OpenTypes/DESIGN.md) | Which program opens each kind of file: the default icons, the icons files already have, and Open with... in Workbench's Tools menu | 0.1 built 5 Oct 2026: the window, the Shell commands, finding and changing icons, Undo (phases 1 and 2); Open with... next |
 | [Look](Look/DESIGN.md) | OpenLook (the OpenGadTools look): theme, light/dark/by the clock, accent, Lite, which screens and programs are themed, icon labels, desktop profiles, and focus (ClickToFront, AutoPoint) | 0.1 built 6 Oct 2026, with OpenLook 0.4; Windows next |
 | [Menus](Menus/DESIGN.md) | OpenMenus, our own menus: how they open and work, delays, submenus, border, shadow, background, colours from the theme, keyboard control; takes over MagicMenu's settings | 0.1 written 6 Oct 2026; the OpenMenus engine is next |
+| [Windows](Windows/DESIGN.md) | OpenWindows, how windows behave: snapping to edges, Amiga+Tab, the wheel under the pointer, remembered places, drawer sizes, and a double-click in a title bar bringing the window to the front | 0.3, with OpenWindows 0.4 (double-click to front, 8 Oct 2026) |
+| [Title bar](TitleBar/DESIGN.md) | OpenTitle, the Workbench screen's title bar: the logo, free memory, clock, network icons, and a cog at the right end that lists the settings editors | 0.2, with OpenTitle 0.5 (the cog, 8 Oct 2026) |
 | [Dock](Dock/DESIGN.md) | OpenDock, a dock on the Workbench screen: its place, size, buttons and see-through shelf; takes over ToolManager's, AmiDock's (AmigaOS 4) or AmiStart's | OpenDock 0.3 built 7 Oct 2026, with the Mac dock's layout (screenshots in its design) |
 | [OpenUp Setup](Setup/DESIGN.md) | The first-start wizard: a desktop profile, the editors, screen, printer and network, and switches for what starts with the machine | 0.1 written 6 Oct 2026 |
 | [Sound](Sound/DESIGN.md) | All of the Amiga's sound in one editor, in place of Sound and AHI prefs: the volume, Paula's and AHI's levels and mute (on AmigaChrome, live through the ACAHI board and shared with the PC's mixer), who mixes AHI, the beep, AHI's units; and OpenSpeaker, the speaker on the menu bar | 0.1 built 6 Oct 2026, with OpenSpeaker 0.1; testing on an instance next |

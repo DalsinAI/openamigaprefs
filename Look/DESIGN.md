@@ -39,6 +39,23 @@ and the profiles. View > Advanced (Amiga-A, or `ADVANCED` from the Shell)
 shows every setting. The choice is shared by all OpenPrefs editors as
 `simple` or `advanced` in `ENV:OpenAmiga/PrefsView` (and `ENVARC:`).
 
+**Started from Workbench (8 October 2026).** A double-click on Look's
+icon, or Tools > Preferences > Look, opened an empty console window first,
+and Look's own window only once that console was closed. The cause: Look
+is built with libnix, which gives a program started from Workbench a
+console (`CON://///AUTO/CLOSE/WAIT`) as its input and output, and Look
+called `ReadArgs()` at every start; with no command line, `ReadArgs()`
+reads the arguments from the input, which opened the console and waited
+on it. Now the arguments are read only from the Shell (`argc` above 0),
+as OpenUp Setup already did, and the commands Look runs itself (copying
+ClickToFront or AutoPoint into `WBStartup`, starting them) get `NIL:` for
+their input and output. The same `ReadArgs()` fix went into Title bar,
+Windows, Sound, Menus and OpenTypes, which had the same console. Tested on
+a scratch OS 3.2.3: Look opened from its icon, from OpenTitle's cog and
+from Menus' Look... button, each with no console.
+
+![Look opened from its icon in the Prefs drawer, with no console window](docs/from-workbench.png)
+
 ## Next
 
 Windows (snapping, Amiga+Tab, wheel under the pointer, remembered window
