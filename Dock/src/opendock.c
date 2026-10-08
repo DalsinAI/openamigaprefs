@@ -50,7 +50,7 @@
 
 #include "od_dock.h"
 
-const char version[] __attribute__((used)) = "$VER: OpenDock 0.3 (7.10.2026) OpenPrefs, Dalsin Limited";
+const char version[] __attribute__((used)) = "$VER: OpenDock 0.4 (8.10.2026) OpenPrefs, Dalsin Limited";
 
 #define PREFS_ENV "ENV:OpenDock/Dock"
 #define PREFS_ENVARC "ENVARC:OpenDock/Dock"
@@ -103,12 +103,25 @@ static int write_file(const char *path, const char *data, LONG len)
     return 1;
 }
 
+/* Is the program there? No "Please insert" requester while we look. */
+static int exists(const char *path)
+{
+    struct Process *me = (struct Process *)FindTask(NULL);
+    APTR old = me->pr_WindowPtr;
+    BPTR l;
+    me->pr_WindowPtr = (APTR)-1;
+    l = Lock((STRPTR)path, ACCESS_READ);
+    me->pr_WindowPtr = old;
+    if (l) UnLock(l);
+    return l != 0;
+}
+
 static void load(void)
 {
     char *text = read_file(PREFS_ENV);
     if (!text) text = read_file(PREFS_ENVARC);
     if (text) { od_parse(&dock, text); FreeVec(text); }
-    else { od_defaults(&dock); od_starter(&dock); }
+    else { od_defaults(&dock); od_starter(&dock); od_drop_missing(&dock, exists); }   /* as the editor does */
 }
 
 /* A change made on the dock itself (an icon dropped, one removed) is kept, as AmiDock does. */
@@ -444,6 +457,7 @@ static struct BitMap *behind, *back, *shelfbm;    /* the screen behind the dock;
 static struct RastPort brp;
 static int room, bx, by;                           /* hop room; where the first cell starts */
 static int big, pad, sepw, radius, gap;            /* an icon's square; the room around; a separator's; the corners'; off the edge */
+static int endpad;                                 /* the room at the shelf's ends (0.4: a third of an icon) */
 static int apad, dot_at, dot_big;                  /* the room across the shelf; the dot's centre from its edge; a 5-pixel dot */
 static int behind_w, behind_h;                     /* the size behind was copied at */
 static struct Window *bubble;
@@ -459,7 +473,7 @@ static int hit(int x, int y)
     if (across < 0 || across >= (standing ? cellw : cellh)) return -1;
     for (int i = 0; i < dock.n; i++) {
         int s = item_size(i);
-        if (win && pos + s > (standing ? win->Height : win->Width) - pad) break;   /* past the edge: not drawn */
+        if (win && pos + s > (standing ? win->Height : win->Width) - endpad) break;   /* past the edge: not drawn */
         if (at >= pos && at < pos + s) return dock.b[i].kind == OD_SEPARATOR ? -1 : i;
         pos += s;
     }
@@ -486,6 +500,10 @@ static void layout(int *w, int *h)
     /* the Mac's proportions: a tenth of an icon around and between them, a
      * quarter of the shelf's height for its corners, a third for a group's gap */
     pad = big / 10 < 4 ? 4 : big / 10;
+    /* 0.4 (the look of 8 October 2026): more room at the shelf's ends, a third
+     * of an icon from the shelf's end to the first icon's edge (each cell
+     * already holds four pixels round its icon) */
+    endpad = big / 3 - 4 < pad ? pad : big / 3 - 4;
     sepw = big / 3 < 8 ? 8 : big / 3;
     gap = pad / 2;                                 /* the shelf floats a little off the screen's edge */
     cellw = big;
@@ -504,12 +522,12 @@ static void layout(int *w, int *h)
     thick = (standing ? cellw : cellh) + 2 * apad;
     radius = thick / 4 > MAX_RADIUS ? MAX_RADIUS : thick / 4;
     room = dock.hop ? HOP_ROOM : 0;
-    along = 2 * pad;
+    along = 2 * endpad;
     for (int i = 0; i < dock.n; i++) along += item_size(i);
-    if (along < 2 * pad + cellw) along = 2 * pad + cellw;
+    if (along < 2 * endpad + cellw) along = 2 * endpad + cellw;
     /* the hop room is on the side away from the edge, the gap on the edge's side */
-    bx = (standing ? apad : pad) + (dock.place == OD_RIGHT ? room : 0) + (dock.place == OD_LEFT ? gap : 0);
-    by = (standing ? pad : apad) + (dock.place == OD_BOTTOM ? room : 0) + (dock.place == OD_TOP ? gap : 0);
+    bx = (standing ? apad : endpad) + (dock.place == OD_RIGHT ? room : 0) + (dock.place == OD_LEFT ? gap : 0);
+    by = (standing ? endpad : apad) + (dock.place == OD_BOTTOM ? room : 0) + (dock.place == OD_TOP ? gap : 0);
     if (standing) { *w = thick + room + gap; *h = along; }
     else { *w = along; *h = thick + room + gap; }
     if (*w > scr->Width) *w = scr->Width;
@@ -679,7 +697,7 @@ static void each_separator(int W, int H, void (*fn)(void *, int, int, int, int),
     inset = apad + (standing ? cellw : cellh) / 8;
     for (int i = 0; i < dock.n; i++) {
         int s = item_size(i);
-        if (pos + s > (standing ? H : W) - pad) break;
+        if (pos + s > (standing ? H : W) - endpad) break;
         if (dock.b[i].kind == OD_SEPARATOR) {
             if (standing) fn(ctx, x0 + inset, pos + s / 2, x1 - inset, pos + s / 2);
             else fn(ctx, pos + s / 2, y0 + inset, pos + s / 2, y1 - inset);
@@ -757,7 +775,7 @@ static int make_shelf_card(struct RastPort *rp, int W, int H)
         InitRastPort(&brp2);
         brp2.BitMap = behind;
         ReadPixelArray(px, 0, 0, W * 4, &brp2, 0, 0, W, H, RECTFMT_ARGB);
-        if (dock.background == OD_BG_GLASS && a < 255) frost(px, W, x0, y0, x1, y1, big / 16 < 2 ? 2 : big / 16);
+        if (dock.background == OD_BG_GLASS && a < 255) frost(px, W, x0, y0, x1, y1, big / 24 < 2 ? 2 : big / 24);   /* 0.4: a lighter frost */
     } else {
         /* nothing seen through: the screen's background */
         ULONG c = 0xff000000UL | (ULONG)bg_c.r << 16 | (ULONG)bg_c.g << 8 | (ULONG)bg_c.b;
@@ -808,7 +826,7 @@ static void make_shelf_pens(struct RastPort *rp, int W, int H)
     }
     /* solid at 100 (or with nothing to see through); dithered for glass, by how solid; see-through: the edge alone */
     fill = op >= 100 || !behind || (dock.background == OD_BG_GLASS && op > 0);
-    if (behind && op < 100) pattern = op < 35 ? quarter : op < 70 ? half : three;
+    if (behind && op < 100) pattern = op <= 35 ? quarter : op < 70 ? half : three;   /* the default 35 is a quarter */
     if (fill && tint_pen >= 0) {
         SetAPen(rp, tint_pen);
         if (pattern) SetAfPt(rp, pattern, 1);
@@ -892,7 +910,7 @@ static void render(int lifted, int lift)
         int s = item_size(i), x = standing ? bx : pos, y = standing ? pos : by;
         od_button *b = &dock.b[i];
         /* the drawing has no layer to clip it: a dock longer than the screen stops at its edge */
-        if (pos + s > (standing ? H : W) - pad) break;
+        if (pos + s > (standing ? H : W) - endpad) break;
         if (b->kind != OD_SEPARATOR) {
             struct Rectangle r = { 0, 0, 0, 0 };
             int iw = 0, ih = 0, dx = 0, dy = 0;
