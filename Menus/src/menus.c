@@ -680,6 +680,7 @@ static int gui(void)
         if (timer && test_until) {
             if (!CheckIO((struct IORequest *)tr)) AbortIO((struct IORequest *)tr);
             WaitIO((struct IORequest *)tr);
+            SetSignal(0, tsig);                /* an aborted request's reply leaves it set: Wait() would return at once */
             if (now_seconds() >= test_until) {
                 go_back();
                 test_until = 0;

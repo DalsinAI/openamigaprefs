@@ -65,7 +65,7 @@
 #include "logo.h"
 #include "taskspace.h"
 
-const char version[] __attribute__((used)) = "$VER: OpenTitle 0.6 (8.10.2026) OpenPrefs, Dalsin Limited";
+const char version[] __attribute__((used)) = "$VER: OpenTitle 0.6.1 (8.10.2026) OpenPrefs, Dalsin Limited";
 
 struct IntuitionBase *IntuitionBase;
 struct GfxBase *GfxBase;
@@ -1349,9 +1349,20 @@ int main(void)
             SendIO((struct IORequest *)tr);
             sig = Wait(SIGBREAKF_CTRL_C | SIGBREAKF_CTRL_F | (1UL << tport->mp_SigBit) | (1UL << port->mp_SigBit)
                        | (ts_reply ? 1UL << ts_reply->mp_SigBit : 0) | window_sigs());
-            if (!CheckIO((struct IORequest *)tr)) AbortIO((struct IORequest *)tr);
-            WaitIO((struct IORequest *)tr);
-            if (sig & (1UL << tport->mp_SigBit)) waited += ms;
+            /* Only a request that came back by itself counts as time waited. An
+             * aborted one comes back too, and its reply sets the timer port's
+             * signal after Wait() has returned; WaitIO() takes the reply but leaves
+             * the signal. Left set, the next Wait() returned at once, its request
+             * was aborted again, and OpenTitle went round without stopping: any
+             * message woke it into that, a taskspace icon's first of all, and no
+             * task below priority 0 ran again (OpenFTP's transfers, 8 Oct 2026). */
+            {
+                int done = CheckIO((struct IORequest *)tr) != NULL;
+                if (!done) AbortIO((struct IORequest *)tr);
+                WaitIO((struct IORequest *)tr);
+                SetSignal(0, 1UL << tport->mp_SigBit);
+                if (done) waited += ms;
+            }
         } else {
             Delay(TICKS_PER_SECOND / 2);
             sig = SetSignal(0, SIGBREAKF_CTRL_C | SIGBREAKF_CTRL_F);
