@@ -30,7 +30,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-static const char version[] = "$VER: Windows 0.3 (8.10.2026) OpenPrefs, MIT, Copyright (c) 2026 Dalsin Limited";
+static const char version[] = "$VER: Windows 0.4 (8.10.2026) OpenPrefs, MIT, Copyright (c) 2026 Dalsin Limited";
 
 #define PREFS_ENV "ENV:OpenPrefs/Windows"
 #define PREFS_ENVARC "ENVARC:OpenPrefs/Windows"
@@ -41,7 +41,7 @@ static const char version[] = "$VER: Windows 0.3 (8.10.2026) OpenPrefs, MIT, Cop
 #define VIEW_ENVARC "ENVARC:OpenAmiga/PrefsView"
 
 struct wprefs {
-    int snap, snap_dist, halves, switcher, wheel, places, places_wb, drawer_w, drawer_h, dblfront;
+    int snap, snap_dist, halves, switcher, wheel, places, places_wb, drawer_w, drawer_h, dblfront, edges, edge_ptr;
     char key[48];
     char never[160];
 };
@@ -86,7 +86,7 @@ static int write_file(const char *path, const char *text)
 static void defaults(struct wprefs *p)
 {
     memset(p, 0, sizeof *p);
-    p->snap = 1; p->snap_dist = 12; p->switcher = 1; p->wheel = 1; p->places = 1; p->dblfront = 1;
+    p->snap = 1; p->snap_dist = 12; p->switcher = 1; p->wheel = 1; p->places = 1; p->dblfront = 1; p->edges = 1;
     strcpy(p->key, "lcommand tab");
 }
 
@@ -108,6 +108,8 @@ static void parse(struct wprefs *p, char *text)
         else if (!strcmp(line, "switcher.key")) strncpy(p->key, v, sizeof p->key - 1);
         else if (!strcmp(line, "wheel")) p->wheel = !strncmp(v, "on", 2);
         else if (!strcmp(line, "doubleclick.front")) p->dblfront = !strncmp(v, "on", 2);
+        else if (!strcmp(line, "edges")) p->edges = !strncmp(v, "on", 2);
+        else if (!strcmp(line, "edges.pointer")) p->edge_ptr = !strncmp(v, "on", 2);   /* no gadget: kept as written */
         else if (!strcmp(line, "places")) p->places = !strncmp(v, "on", 2);
         else if (!strcmp(line, "places.drawers")) p->places_wb = !strncmp(v, "on", 2);
         else if (!strcmp(line, "never")) {
@@ -122,12 +124,12 @@ static void make_text(const struct wprefs *p, char *out, int size)
 {
     char never[160], *n, *e;
     int len = snprintf(out, size,
-        "; OpenPrefs Windows 0.3: what OpenWindows does\n"
+        "; OpenPrefs Windows 0.4: what OpenWindows does\n"
         "snap %s %d\nsnap.halves %s\nswitcher %s\nswitcher.key %s\nwheel %s\nplaces %s\nplaces.drawers %s\ndrawer %d %d\n"
-        "doubleclick.front %s\n",
+        "doubleclick.front %s\nedges %s\nedges.pointer %s\n",
         p->snap ? "on" : "off", p->snap_dist, p->halves ? "on" : "off", p->switcher ? "on" : "off", p->key,
         p->wheel ? "on" : "off", p->places ? "on" : "off", p->places_wb ? "on" : "off", p->drawer_w, p->drawer_h,
-        p->dblfront ? "on" : "off");
+        p->dblfront ? "on" : "off", p->edges ? "on" : "off", p->edge_ptr ? "on" : "off");
     strcpy(never, p->never);
     for (n = never; *n && len < size - 40; n = e) {
         while (*n == ' ' || *n == ',') n++;
@@ -153,7 +155,7 @@ static void tell(void)
     Forbid();
     if ((p = FindPort((STRPTR)"OpenWindows")) && p->mp_SigTask) Signal((struct Task *)p->mp_SigTask, SIGBREAKF_CTRL_F);
     Permit();
-    if (!p && (cur.snap || cur.switcher || cur.wheel || cur.places || cur.drawer_w || cur.dblfront)) {
+    if (!p && (cur.snap || cur.switcher || cur.wheel || cur.places || cur.drawer_w || cur.dblfront || cur.edges)) {
         BPTR in = Open((STRPTR)"NIL:", MODE_OLDFILE), out = Open((STRPTR)"NIL:", MODE_NEWFILE);
         /* asynchronous: both handles are the new process's, closed when it ends */
         if (!in || !out || SystemTags((STRPTR)TOOL, SYS_Input, in, SYS_Output, out, SYS_Asynch, TRUE, SYS_UserShell, TRUE,
@@ -177,7 +179,7 @@ static int put_in_place(int save)
 
 /* ---- the window ---------------------------------------------------------------------- */
 
-enum { G_SNAP, G_DIST, G_HALVES, G_SWITCH, G_KEY, G_WHEEL, G_DBLFRONT, G_PLACES, G_DRAWERS, G_NEVER, G_FORGET, G_DRAWW, G_DRAWH,
+enum { G_SNAP, G_DIST, G_HALVES, G_SWITCH, G_KEY, G_WHEEL, G_DBLFRONT, G_EDGES, G_PLACES, G_DRAWERS, G_NEVER, G_FORGET, G_DRAWW, G_DRAWH,
        G_STATUS, G_SAVE, G_USE, G_CANCEL, G_COUNT };
 static struct Gadget *gad[G_COUNT];
 static struct Window *win;
@@ -226,6 +228,7 @@ static void show(void)
     SET(G_KEY, GTST_String, (ULONG)cur.key, GA_Disabled, !cur.switcher);
     SET(G_WHEEL, GTCB_Checked, cur.wheel);
     SET(G_DBLFRONT, GTCB_Checked, cur.dblfront);
+    SET(G_EDGES, GTCB_Checked, cur.edges);
     SET(G_PLACES, GTCB_Checked, cur.places);
     SET(G_NEVER, GTST_String, (ULONG)cur.never, GA_Disabled, !cur.places);
     SET(G_DRAWERS, GTCB_Checked, cur.places_wb, GA_Disabled, !cur.places);
@@ -290,6 +293,9 @@ static int gui_once(void)
     /* a long label: the box in the column with its words after it */
     G(CHECKBOX_KIND, G_DBLFRONT, X, row, 26, lh, "Double-click a title bar to bring the window to the front", PLACETEXT_RIGHT,
       GTCB_Scaled, TRUE);
+    row += lh + 4;
+    G(CHECKBOX_KIND, G_EDGES, X, row, 26, lh, "Resize a window from any edge but its title bar", PLACETEXT_RIGHT,
+      GTCB_Scaled, TRUE);
     row += lh + (advanced ? 10 : 4);
     G(CHECKBOX_KIND, G_PLACES, X, row, 26, lh, "Remember places", PLACETEXT_LEFT, GTCB_Scaled, TRUE);
     if (advanced) G(BUTTON_KIND, G_FORGET, X + 120, row, 140, lh, "Forget all", 0, GA_Disabled, FALSE);
@@ -312,7 +318,7 @@ static int gui_once(void)
     }
     if (!g) { rc = -1; goto out; }
     menus[6].nm_Flags = CHECKIT | MENUTOGGLE | (advanced ? CHECKED : 0);
-    win = OpenWindowTags(NULL, WA_Title, (ULONG)"Windows", WA_ScreenTitle, (ULONG)"OpenPrefs Windows 0.3", WA_PubScreen, (ULONG)scr,
+    win = OpenWindowTags(NULL, WA_Title, (ULONG)"Windows", WA_ScreenTitle, (ULONG)"OpenPrefs Windows 0.4", WA_PubScreen, (ULONG)scr,
                          WA_Left, 60, WA_Top, scr->BarHeight + 20, WA_InnerWidth, W, WA_InnerHeight, row - scr->WBorTop - fh - 1,
                          WA_Gadgets, (ULONG)glist, WA_DragBar, TRUE, WA_DepthGadget, TRUE, WA_CloseGadget, TRUE, WA_Activate, TRUE,
                          WA_SmartRefresh, TRUE,
@@ -362,6 +368,7 @@ static int gui_once(void)
                     break;
                 case G_WHEEL: cur.wheel = sel; break;
                 case G_DBLFRONT: cur.dblfront = sel; break;
+                case G_EDGES: cur.edges = sel; break;
                 case G_PLACES: cur.places = sel; show(); break;
                 case G_DRAWERS: cur.places_wb = sel; break;
                 case G_NEVER: strncpy(cur.never, str, sizeof cur.never - 1); break;
