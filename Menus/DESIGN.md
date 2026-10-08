@@ -179,7 +179,7 @@ pointer:
 
 - **Icon:** Open, Open with (OpenView, MultiView, Choose a program), Information,
   Rename, Copy, Snapshot, Leave out (Put away on the desktop), then Extract here and
-  Open in OpenCompress for archives, Send to PC, then Delete. A disk gets Format
+  Open in OpenCompress for archives, Send Out, then Delete. A disk gets Format
   and Eject, and the Trashcan gets Empty trash. Several selected icons get the
   entries that make sense for several, under "N icons".
 - **Background:** for the desktop, Execute command, Shell, Arrange icons, Show,

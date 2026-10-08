@@ -1556,7 +1556,7 @@ static int rc_build(int hit)
                 ITEM("Extract here", A_EXTRACT, NULL);
                 ITEM("Open in OpenCompress", A_RUNFILES, "SYS:Utilities/OpenCompress");
             }
-            if (exists_file("C:ACDrop") && ic->kind != K_GARBAGE) { if (!any) SEP(); ITEM("Send to PC", A_SEND, NULL); }
+            if (exists_file("C:ACDrop") && ic->kind != K_GARBAGE) { if (!any) SEP(); ITEM("Send Out", A_SEND, NULL); }
         }
         SEP();
         if (ic->kind == K_DISK) { ITEM("Format disk...", A_WB, "ICONS.FORMATDISK"); ITEM("Eject", A_WB, "ICONS.EJECTDISK"); }
