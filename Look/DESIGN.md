@@ -56,6 +56,20 @@ from Menus' Look... button, each with no console.
 
 ![Look opened from its icon in the Prefs drawer, with no console window](docs/from-workbench.png)
 
+## 0.3 (8 October 2026): the approved look
+
+- **Windows**, three switches in the Simple view, for OpenLook 0.5:
+  "Scroll bars when needed" (`scrollers auto`), "No size gadget"
+  (`sizegadget off`; OpenWindows 0.5 resizes from the edges) and "No zoom
+  gadget" (`zoom off`; a double-click on a title bar brings a window to the
+  front). The lines are written with the others, and kept when Look saves.
+- **The Modern and Lite 68040 profiles** turn all three on: that is the look
+  approved on the canvas. Classic 3.2 leaves them off.
+- **The Open theme is now flat** (opengadtools: OpenLook 0.5), so the
+  default accent is its blue, `#2f6fb3`; the old glassy Open is Glass.
+
+Not yet built on the os32 stove.
+
 ## Next
 
 Windows (snapping, Amiga+Tab, wheel under the pointer, remembered window
