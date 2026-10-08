@@ -19,6 +19,7 @@ Limited.
 | Places | A program's window opens where it was last left, and at the same size when it can be resized | `places on`, `never <program>` lines |
 | Drawers too (0.3) | Workbench's drawer windows are remembered the same way, with no Snapshot needed | `places.drawers on` |
 | Double-click to front (0.4) | A double-click in a window's title bar brings it to the front. On by default | `doubleclick.front on` |
+| Edges (0.5) | A resizable window is resized by dragging any edge but its title bar. On by default | `edges on` |
 | Drawers | Workbench drawer windows open at least this big | `drawer 400 250` (0 0 leaves them) |
 
 The settings are in `ENV:OpenPrefs/Windows`. Save writes `ENV:` and
@@ -62,6 +63,39 @@ window to the front".
 
 ![A single click (top) makes Shell B active behind Shell A; a double-click in its title bar (bottom) brings it to the front](docs/double-click.png)
 
+**Resize from any edge (OpenWindows 0.5, 8 October 2026).** The look
+approved that day has no size gadget: a resizable window is resized by
+dragging any edge but its title bar, the sides, the bottom and the bottom
+corners, as on today's desktops. OpenWindows does it without patching
+Intuition:
+
+- **The grab zone** is 4 pixels outside the frame and 2 inside it (the
+  frame's own line and one more), down both sides and along the bottom,
+  below the title bar. The title bar's height only ever moves a window.
+- **The input handler decides at the press.** It reads the screen's layers
+  front to back with no lock (it runs on input.device's task and can't wait,
+  as the wheel's test already does): the first window whose frame holds the
+  pointer is the one under it, and only its own edge counts; a point just
+  outside every frame in front of a window belongs to that window's edge. A
+  press there is kept from Intuition (it becomes a plain move) and the main
+  task is told. A backdrop, a borderless window and one without
+  `WFLG_SIZEGADGET` are never grabbed, and a press with Shift, Ctrl, Alt or
+  Amiga held is left to Intuition.
+- **The main task resizes** with `ChangeWindowBox` each time the pointer
+  moves, from the box the window had at the press: the edge or corner held
+  follows the pointer, the others stay. The window keeps to its own limits
+  (`MinWidth` to `MaxWidth`) and to the screen. The window is made active,
+  and shows a resize pointer (left-right, up-down, or the corner's diagonal,
+  `pointerclass` images of OpenWindows' own) until the button comes up.
+- **Not yet:** a pointer that changes as it passes over an edge before the
+  press, and the edge lit in the accent (the mock-up's hover): that needs
+  OpenLook to draw the frame and comes with openworkbench.library.
+- `edges on` (the default) in `ENV:OpenPrefs/Windows`; the editor's switch,
+  in both views: "Resize a window from any edge but its title bar".
+
+The size gadget itself is OpenLook 0.5's (`sizegadget off` draws it as the
+window); it still works where it is.
+
 **Views.** The editor opens in Simple, which shows the on and off switches. View >
 Advanced (Amiga-A, or `ADVANCED` from the Shell) shows every setting. The
 view is shared by all OpenPrefs editors as `simple` or `advanced` in
@@ -93,7 +127,7 @@ of its own.
 ## For the OpenUp part
 
 ```python
-ow = Part(top, "OpenWindows", "0.4", "OpenWindows: snapping, Amiga+Tab, the wheel under the pointer, window places, double-click to front")
+ow = Part(top, "OpenWindows", "0.5", "OpenWindows: snapping, resizing from any edge, Amiga+Tab, the wheel under the pointer, window places, double-click to front")
 ow.add("Prefs/Windows", (a.openamigaprefs / "Windows/build/os3/Windows").read_bytes(), "SYS:Prefs/Windows")
 ow.add("Prefs/Windows.info", icons.icon(icons.WBTOOL, "page", stack=16384), "SYS:Prefs/Windows.info")
 ow.add("Tools/Commodities/OpenWindows", (a.openamigaprefs / "Windows/build/os3/OpenWindows").read_bytes(), "SYS:Tools/Commodities/OpenWindows")
