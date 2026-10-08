@@ -4,7 +4,11 @@ The game controllers editor, built on OpenInput (`openinput.library`,
 DalsinAI/openamigainput; its design's section 8 is this page). Pad mapping
 moves here from OpenUSB Prefs. MIT, Copyright (c) 2026 Dalsin Limited.
 
-![The Gamepads editor with a CD32 pad in the joystick port](docs/window.png)
+![The Gamepads editor with a modern pad on AmigaChrome, seen by older games as a CD32 pad on port 2](docs/window.png)
+
+| A CD32 pad in the joystick port | The Advanced view |
+| --- | --- |
+| ![A CD32 pad in the joystick port, with Reverse, the face buttons and the d-pad lit](docs/cd32.png) | ![The Advanced view: the raw state, the mapping line, which pad feeds the port, and the mouse port setting](docs/advanced.png) |
 
 ## 0.1 (8 October 2026)
 
@@ -36,7 +40,9 @@ moves here from OpenUSB Prefs. MIT, Copyright (c) 2026 Dalsin Limited.
   see a modern pad there as a CD32 pad or a joystick. **Port** (the joystick
   port, 2, or the mouse port, 1) and **As a** (CD32 pad, joystick) say how;
   the switch's words follow them. The Advanced view adds **Which pad**: any
-  modern pad (the first one there), or one pad by its GUID. Games that read
+  modern pad (the first one there), or one pad by its GUID; and **A joystick
+  is in the mouse port (1), not the mouse** (`lowlevel.library` reads a
+  mouse there as a stick too, so only the user can say which it is). Games that read
   the chips themselves can't be reached this way on a real Amiga; on
   AmigaChrome every game already sees the pads, through Cradle's Game pads.
 
@@ -53,6 +59,7 @@ patch in when it is switched on; nothing else does.
 | --- | --- |
 | `ENV:OpenInput/LowLevelPatch` | `1`: the `ReadJoyPort` patch is on. No file, or anything else: off |
 | `ENV:OpenInput/ports.prefs` | Which pad feeds which port through the patch, a line per port: `port 1 cd32 any`, `port 0 none`, or a GUID (32 hex digits) in place of `any`. openinput.library reads the same lines, once a second |
+| `ENV:OpenInput/MousePort` | `joystick`: a joystick is in the mouse port, and OpenInput lists it. Anything else: the mouse |
 | `ENV:OpenInput/mappings.txt` | The user's own mappings, SDL's format; written by openinput.library (`OIN_SetMapping`) |
 | `ENV:OpenAmiga/PrefsView` | Simple or Advanced, shared by every OpenPrefs editor |
 

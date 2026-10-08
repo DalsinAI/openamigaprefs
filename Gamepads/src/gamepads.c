@@ -57,6 +57,8 @@ struct Library *OpenInputBase;
 #define PATCH_ENVARC "ENVARC:" OPENINPUT_LOWLEVELPATCH
 #define PORTS_ENV "ENV:" OPENINPUT_PORTS
 #define PORTS_ENVARC "ENVARC:" OPENINPUT_PORTS
+#define MOUSEPORT_ENV "ENV:OpenInput/MousePort"
+#define MOUSEPORT_ENVARC "ENVARC:OpenInput/MousePort"
 #define MAPS_ENV "ENV:" OPENINPUT_MAPPINGS
 #define MAPS_ENVARC "ENVARC:" OPENINPUT_MAPPINGS
 #define MAXPADS 16
@@ -104,7 +106,7 @@ enum {
     G_LIST, G_KIND, G_MAKER, G_FROM, G_MAPPED, G_FEEDS,
     G_RUMBLE, G_RAW, G_OTHER,
     G_MAPCHOICE, G_MAP, G_SKIP, G_MAPLINE, G_MAPTEXT,
-    G_PATCH, G_PATCHTEXT, G_PORT, G_AS, G_WHICH, G_PATCHNOTE,
+    G_PATCH, G_PATCHTEXT, G_PORT, G_AS, G_WHICH, G_PATCHNOTE, G_MOUSESTICK,
     G_STATUS, G_SAVE, G_USE, G_TEST, G_CANCEL, G_COUNT
 };
 
@@ -169,6 +171,7 @@ static void load_settings(gp_settings *s)
     gp_defaults(s);
     if (read_file(PATCH_ENV, t, sizeof t) > 0) s->patch = gp_patch_from_text(t);
     if (read_file(PORTS_ENV, t, sizeof t) > 0) gp_ports_from_text(s, t);
+    s->mouse_stick = read_file(MOUSEPORT_ENV, t, sizeof t) > 0 && t[0] == 'j';
 }
 
 static void store_settings(const gp_settings *s, int save)
@@ -178,7 +181,9 @@ static void store_settings(const gp_settings *s, int save)
     /* the ports first: the library reads both within a second, and should find the port before the switch */
     write_file(PORTS_ENV, "ENV:" OPENINPUT_ENVDIR, t, n);
     write_file(PATCH_ENV, "ENV:" OPENINPUT_ENVDIR, s->patch ? "1\n" : "0\n", 2);
+    write_file(MOUSEPORT_ENV, "ENV:" OPENINPUT_ENVDIR, s->mouse_stick ? "joystick\n" : "mouse\n", s->mouse_stick ? 9 : 6);
     if (save) {
+        write_file(MOUSEPORT_ENVARC, "ENVARC:" OPENINPUT_ENVDIR, s->mouse_stick ? "joystick\n" : "mouse\n", s->mouse_stick ? 9 : 6);
         write_file(PORTS_ENVARC, "ENVARC:" OPENINPUT_ENVDIR, t, n);
         write_file(PATCH_ENVARC, "ENVARC:" OPENINPUT_ENVDIR, s->patch ? "1\n" : "0\n", 2);
     }
@@ -507,8 +512,13 @@ static void draw_test(void)
     /* the shoulders and triggers */
     row1 = y0 + 3;
     bar(rp, x0 + 6, row1, 60, fh + 4, (sel_id && !sel_gone) ? st.ois_Axes[OIAXIS_TRIGGERLEFT] : 0, "LT");
-    box(rp, x0 + 72, row1, bw, fh + 4, b & OIBF(OIB_LEFTSHOULDER), label_of(OIB_LEFTSHOULDER));
-    box(rp, x0 + w - 72 - bw, row1, bw, fh + 4, b & OIBF(OIB_RIGHTSHOULDER), label_of(OIB_RIGHTSHOULDER));
+    {   /* the pad's own names ("Reverse"), or LB and RB where "Left shoulder" won't fit */
+        const char *ls = label_of(OIB_LEFTSHOULDER), *rs = label_of(OIB_RIGHTSHOULDER);
+        if (TextLength(rp, (STRPTR)ls, strlen(ls)) > bw - 4) ls = "LB";
+        if (TextLength(rp, (STRPTR)rs, strlen(rs)) > bw - 4) rs = "RB";
+        box(rp, x0 + 72, row1, bw, fh + 4, b & OIBF(OIB_LEFTSHOULDER), ls);
+        box(rp, x0 + w - 72 - bw, row1, bw, fh + 4, b & OIBF(OIB_RIGHTSHOULDER), rs);
+    }
     bar(rp, x0 + w - 66, row1, 60, fh + 4, (sel_id && !sel_gone) ? st.ois_Axes[OIAXIS_TRIGGERRIGHT] : 0, "RT");
     /* the d-pad */
     row2 = row1 + fh + 10;
@@ -808,6 +818,8 @@ static int gui_once(void)
     if (advanced) {
         list_which();
         G(CYCLE_KIND, G_WHICH, X, row, W - X - 10, lh, "Which pad", PLACETEXT_LEFT, GTCY_Labels, (ULONG)which_labels); row += lh + 2;
+        G(CHECKBOX_KIND, G_MOUSESTICK, L, row + 4, 26, lh - 2, "A joystick is in the mouse port (1), not the mouse", PLACETEXT_RIGHT,
+          GTCB_Scaled, TRUE, GTCB_Checked, cur.mouse_stick); row += lh + 4;
     }
     row += 6;
 
@@ -930,6 +942,10 @@ static int gui_once(void)
                     show_patch();
                     break;
                 }
+                case G_MOUSESTICK:
+                    cur.mouse_stick = (gg->Flags & GFLG_SELECTED) != 0;
+                    status(cur.mouse_stick ? "The mouse port is listed as a joystick (Test or Use)." : "The mouse port is the mouse.");
+                    break;
                 case G_TEST:
                     store_settings(&cur, 0); tested = 1;
                     switch (wait_for_patch(cur.patch)) {
@@ -984,7 +1000,7 @@ int main(int argc, char **argv)
             int i, ac = 0;
             list_pads();
             for (i = 0; i < npads; i++) if (pads[i].oci_Source == OISRC_AMIGACHROME) ac = 1;
-            strcpy(status_text, ac ? "On AmigaChrome every game already sees the pads (Cradle's Game pads)."
+            strcpy(status_text, ac ? "On AmigaChrome, Cradle's Game pads can give every game the pads."
                                    : "Pick a controller to test it.");
         }
         while ((rc = gui_once()) == 99) ;

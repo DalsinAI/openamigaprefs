@@ -10,6 +10,9 @@
  *                                that patch: "port N none|joystick|cd32
  *                                any|GUID" a line per port (openinput.library
  *                                reads the same lines)
+ *   ENV:OpenInput/MousePort      "joystick": a joystick is in the mouse port
+ *                                (lowlevel.library reads a mouse there as a
+ *                                stick too); anything else: the mouse
  *   ENV:OpenInput/mappings.txt   the user's own mappings, in SDL's
  *                                GameControllerDB format; written by
  *                                openinput.library (OIN_SetMapping)
@@ -31,6 +34,7 @@ typedef struct gp_port {
 
 typedef struct gp_settings {
     int patch;                   /* LowLevelPatch is "1" */
+    int mouse_stick;             /* MousePort is "joystick": a stick is in the mouse port (lowlevel.library can't tell it from the mouse) */
     gp_port port[2];             /* 0 the mouse port ("port 1" on the case), 1 the joystick port ("port 2") */
 } gp_settings;
 
