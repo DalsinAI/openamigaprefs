@@ -50,7 +50,7 @@
 
 #include "ogt_theme.h"
 
-const char version[] __attribute__((used)) = "$VER: Look 0.2 (5.10.2026) OpenPrefs, Dalsin Limited";
+const char version[] __attribute__((used)) = "$VER: Look 0.3 (8.10.2026) OpenPrefs, Dalsin Limited";
 
 #define PREFS_ENV "ENV:OpenGadTools/Look"
 #define PREFS_ENVARC "ENVARC:OpenGadTools/Look"
@@ -82,6 +82,7 @@ struct look {
     char never[160];              /* program names, comma between */
     int profile_auto;
     char desktop[112];            /* kept as read: the editor has no gadget for it yet */
+    int no_zoom, no_size, auto_scrollers;   /* OpenLook 0.5: zoom off, sizegadget off, scrollers auto */
 };
 
 static struct look cur, orig;
@@ -140,7 +141,7 @@ static void defaults(struct look *l)
     memset(l, 0, sizeof *l);
     strcpy(l->theme, "Open");
     l->dark_from = 19; l->dark_to = 7;
-    strcpy(l->accent, "#365fa3");
+    strcpy(l->accent, "#2f6fb3");               /* the Open theme's accent (8 October 2026) */
     l->lite_shadows = l->lite_rounding = l->lite_gradients = 1;
     l->wb_themed = l->pub_themed = 1;
 }
@@ -184,6 +185,9 @@ static void parse_look(struct look *l, const char *text)
                     if (l->never[0]) strncat(l->never, ", ", sizeof l->never - strlen(l->never) - 1);
                     strncat(l->never, v, sizeof l->never - strlen(l->never) - 1);
                 } else if (!strcmp(w, "profile") && word(&p, v, sizeof v)) l->profile_auto = !strcmp(v, "auto");
+                else if (!strcmp(w, "zoom") && word(&p, v, sizeof v)) l->no_zoom = !strcmp(v, "off");
+                else if (!strcmp(w, "sizegadget") && word(&p, v, sizeof v)) l->no_size = !strcmp(v, "off");
+                else if (!strcmp(w, "scrollers") && word(&p, v, sizeof v)) l->auto_scrollers = !strcmp(v, "auto");
             }
         }
         if (!next) break;
@@ -197,7 +201,7 @@ static void make_look_text(const struct look *l, char *out, int size)
     static const char *modes[3] = { "light", "dark", "auto" };
     char *o = out;
     int n;
-    n = snprintf(o, size, "%s %s\n; OpenPrefs Look 0.1 wrote the lines below; OpenLook 0.4 reads them\n", l->theme, modes[l->mode]);
+    n = snprintf(o, size, "%s %s\n; OpenPrefs Look 0.3 wrote the lines below; OpenLook 0.5 reads them\n", l->theme, modes[l->mode]);
     o += n; size -= n;
     if (l->mode == 2) { n = snprintf(o, size, "mode auto %d %d\n", l->dark_from, l->dark_to); o += n; size -= n; }
     if (l->own_accent) { n = snprintf(o, size, "accent %s\n", l->accent); o += n; size -= n; }
@@ -221,6 +225,9 @@ static void make_look_text(const struct look *l, char *out, int size)
             if (k) { n = snprintf(o, size, "never \"%s\"\n", name); o += n; size -= n; }
         }
     }
+    n = snprintf(o, size, "zoom %s\nsizegadget %s\nscrollers %s\n",
+                 l->no_zoom ? "off" : "on", l->no_size ? "off" : "on", l->auto_scrollers ? "auto" : "always");
+    o += n; size -= n;
     if (l->profile_auto) snprintf(o, size, "profile auto\n");
 }
 
@@ -507,7 +514,8 @@ static void draw_preview(struct Window *win, int x, int y, int w, int h, const s
 enum {
     G_THEMES, G_MODE, G_FROM, G_TO, G_OWNACCENT, G_ACCENT, G_LITE, G_LSHADOW, G_LROUND, G_LGRAD,
     G_WB, G_PUB, G_CUSTOM, G_NEVER, G_LABELS, G_PROFILE, G_APPLYPROFILE, G_PROFILEAUTO,
-    G_CTF, G_CTFQUAL, G_AP, G_STATUS, G_SAVE, G_USE, G_TEST, G_CANCEL, G_COUNT
+    G_CTF, G_CTFQUAL, G_AP, G_STATUS, G_SAVE, G_USE, G_TEST, G_CANCEL,
+    G_SCROLL, G_NOSIZE, G_NOZOOM, G_COUNT
 };
 
 static const char *mode_labels[] = { "Light", "Dark", "By the clock", NULL };
@@ -587,6 +595,9 @@ static void show(const struct look *l)
     SET(G_CUSTOM, GTCY_Active, !l->custom_themed);
     SET(G_NEVER, GTST_String, (ULONG)l->never);
     SET(G_PROFILEAUTO, GTCB_Checked, l->profile_auto);
+    SET(G_SCROLL, GTCB_Checked, l->auto_scrollers);
+    SET(G_NOSIZE, GTCB_Checked, l->no_size);
+    SET(G_NOZOOM, GTCB_Checked, l->no_zoom);
     load_preview(l);
     draw_preview(win, px, py, pw, ph, l);
 }
@@ -687,6 +698,10 @@ static int gui_once(void)
     G(CYCLE_KIND, G_MODE, R + 110, row, 200, lh, "Mode", PLACETEXT_LEFT, GTCY_Labels, (ULONG)mode_labels); row += lh + 4;
     G(INTEGER_KIND, G_FROM, R + 110, row, 50, lh, "Dark from", PLACETEXT_LEFT, GTIN_MaxChars, 2);
     G(INTEGER_KIND, G_TO, R + 220, row, 50, lh, "to", PLACETEXT_LEFT, GTIN_MaxChars, 2); row += lh + 8;
+    /* how windows look and behave (OpenLook 0.5): the approved look has all three */
+    G(CHECKBOX_KIND, G_SCROLL, R + 110, row, 26, lh, "Scroll bars when needed", PLACETEXT_RIGHT, GTCB_Scaled, TRUE); row += lh + 2;
+    G(CHECKBOX_KIND, G_NOSIZE, R + 110, row, 26, lh, "No size gadget", PLACETEXT_RIGHT, GTCB_Scaled, TRUE); row += lh + 2;
+    G(CHECKBOX_KIND, G_NOZOOM, R + 110, row, 26, lh, "No zoom gadget", PLACETEXT_RIGHT, GTCB_Scaled, TRUE); row += lh + 8;
     if (advanced) {
     G(CHECKBOX_KIND, G_OWNACCENT, R + 110, row, 26, lh, "Own accent", PLACETEXT_LEFT, GTCB_Scaled, TRUE);
     G(STRING_KIND, G_ACCENT, R + 150, row, 90, lh, NULL, 0, GTST_MaxChars, 7); row += lh + 8;
@@ -720,7 +735,7 @@ static int gui_once(void)
     }
     if (!g) { rc = RETURN_FAIL; goto out; }
     menus[6].nm_Flags = CHECKIT | MENUTOGGLE | (advanced ? CHECKED : 0);
-    win = OpenWindowTags(NULL, WA_Title, (ULONG)"Look", WA_ScreenTitle, (ULONG)"OpenPrefs Look 0.2", WA_PubScreen, (ULONG)scr,
+    win = OpenWindowTags(NULL, WA_Title, (ULONG)"Look", WA_ScreenTitle, (ULONG)"OpenPrefs Look 0.3", WA_PubScreen, (ULONG)scr,
                          WA_Left, 40, WA_Top, scr->BarHeight + 10, WA_InnerWidth, W, WA_InnerHeight, row - scr->WBorTop - fh - 1,
                          WA_Gadgets, (ULONG)glist, WA_DragBar, TRUE, WA_DepthGadget, TRUE, WA_CloseGadget, TRUE, WA_Activate, TRUE,
                          WA_SmartRefresh, TRUE, WA_NewLookMenus, TRUE,
@@ -812,6 +827,9 @@ static int gui_once(void)
                     break;
                 }
                 case G_PROFILEAUTO: cur.profile_auto = (gg->Flags & GFLG_SELECTED) != 0; redraw = 0; break;
+                case G_SCROLL: cur.auto_scrollers = (gg->Flags & GFLG_SELECTED) != 0; redraw = 0; break;
+                case G_NOSIZE: cur.no_size = (gg->Flags & GFLG_SELECTED) != 0; redraw = 0; break;
+                case G_NOZOOM: cur.no_zoom = (gg->Flags & GFLG_SELECTED) != 0; redraw = 0; break;
                 case G_CTF: ctf_on = (gg->Flags & GFLG_SELECTED) != 0; redraw = 0; break;
                 case G_CTFQUAL: ctf_qual = code; redraw = 0; break;
                 case G_AP: ap_on = (gg->Flags & GFLG_SELECTED) != 0; redraw = 0; break;
