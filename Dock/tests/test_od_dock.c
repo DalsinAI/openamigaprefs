@@ -25,6 +25,23 @@ static char *slurp(const char *path, long *len)
 static od_dock d, e;
 static char buf[32768];
 
+/* a machine without Clock, Calculator or the trashcan */
+static int fake_exists(const char *path)
+{
+    return strcmp(path, "SYS:Utilities/Clock") && strcmp(path, "SYS:Tools/Calculator") && strcmp(path, "SYS:Trashcan");
+}
+
+static void test_drop_missing(void)
+{
+    od_defaults(&d);
+    od_starter(&d);
+    /* three programs go, then the separator that was left at the end */
+    CHECK(od_drop_missing(&d, fake_exists) == 3);
+    CHECK(d.n == 5 && d.b[0].kind == OD_CLI && !strcmp(d.b[2].label, "OpenView") && !strcmp(d.b[3].label, "Prefs"));
+    CHECK(d.b[d.n - 1].kind != OD_SEPARATOR && !strcmp(d.b[4].label, "Look"));
+    CHECK(od_drop_missing(&d, fake_exists) == 0 && d.n == 5);
+}
+
 static void test_own_format(void)
 {
     od_defaults(&d);
@@ -156,6 +173,7 @@ static void test_full(void)
 int main(int argc, char **argv)
 {
     const char *dir = argc > 1 ? argv[1] : ".";
+    test_drop_missing();
     test_own_format();
     test_toolmanager(dir);
     test_amidock(dir);

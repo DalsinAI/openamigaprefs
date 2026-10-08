@@ -103,12 +103,25 @@ static int write_file(const char *path, const char *data, LONG len)
     return 1;
 }
 
+/* Is the program there? No "Please insert" requester while we look. */
+static int exists(const char *path)
+{
+    struct Process *me = (struct Process *)FindTask(NULL);
+    APTR old = me->pr_WindowPtr;
+    BPTR l;
+    me->pr_WindowPtr = (APTR)-1;
+    l = Lock((STRPTR)path, ACCESS_READ);
+    me->pr_WindowPtr = old;
+    if (l) UnLock(l);
+    return l != 0;
+}
+
 static void load(void)
 {
     char *text = read_file(PREFS_ENV);
     if (!text) text = read_file(PREFS_ENVARC);
     if (text) { od_parse(&dock, text); FreeVec(text); }
-    else { od_defaults(&dock); od_starter(&dock); }
+    else { od_defaults(&dock); od_starter(&dock); od_drop_missing(&dock, exists); }   /* as the editor does */
 }
 
 /* A change made on the dock itself (an icon dropped, one removed) is kept, as AmiDock does. */
@@ -813,7 +826,7 @@ static void make_shelf_pens(struct RastPort *rp, int W, int H)
     }
     /* solid at 100 (or with nothing to see through); dithered for glass, by how solid; see-through: the edge alone */
     fill = op >= 100 || !behind || (dock.background == OD_BG_GLASS && op > 0);
-    if (behind && op < 100) pattern = op < 35 ? quarter : op < 70 ? half : three;
+    if (behind && op < 100) pattern = op <= 35 ? quarter : op < 70 ? half : three;   /* the default 35 is a quarter */
     if (fill && tint_pen >= 0) {
         SetAPen(rp, tint_pen);
         if (pattern) SetAfPt(rp, pattern, 1);
