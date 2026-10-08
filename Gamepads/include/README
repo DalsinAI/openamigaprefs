@@ -1,0 +1,4 @@
+openinput.library's headers, copied from DalsinAI/openamigainput at efc932c
+(frozen for 0.1: they change only by adding), so OpenPrefs builds on its own.
+Copy them again when openamigainput adds to them. MIT, Copyright (c) 2026
+Dalsin Limited.
