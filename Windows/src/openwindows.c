@@ -13,6 +13,9 @@
  *   wheel         the mouse wheel goes to the window under the pointer
  *   places        a program's window opens where it was last left
  *   drawers       Workbench drawer windows open at least this big
+ *   edges         a resizable window is resized by dragging any edge but
+ *                 its title bar: the sides, the bottom and the bottom
+ *                 corners, from a few pixels outside the frame (0.5)
  *
  * Settings: ENV:OpenPrefs/Windows (OpenPrefs Windows writes it, then sends
  * Ctrl-F to the task of the public port "OpenWindows" to read it again). Places: ENV:OpenPrefs/WindowPlaces,
@@ -27,6 +30,9 @@
 #include <devices/timer.h>
 #include <intuition/intuition.h>
 #include <intuition/intuitionbase.h>
+#include <intuition/classusr.h>
+#include <intuition/pointerclass.h>
+#include <graphics/gfx.h>
 #include <graphics/layers.h>
 #include <graphics/clip.h>
 #include <libraries/commodities.h>
@@ -35,13 +41,14 @@
 #include <proto/dos.h>
 #include <proto/intuition.h>
 #include <proto/layers.h>
+#include <proto/graphics.h>
 #include <proto/commodities.h>
 
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
 
-static const char version[] = "$VER: OpenWindows 0.4 (8.10.2026) MIT, Copyright (c) 2026 Dalsin Limited";
+static const char version[] = "$VER: OpenWindows 0.5 (8.10.2026) MIT, Copyright (c) 2026 Dalsin Limited";
 
 #define PREFS_ENV "ENV:OpenPrefs/Windows"
 #define PLACES_ENV "ENV:OpenPrefs/WindowPlaces"
@@ -53,11 +60,12 @@ static const char version[] = "$VER: OpenWindows 0.4 (8.10.2026) MIT, Copyright 
 
 struct Library *CxBase, *LayersBase;
 struct IntuitionBase *IntuitionBase;
+struct GfxBase *GfxBase;
 
 /* ---- settings ------------------------------------------------------------ */
 
 static struct {
-    int snap, snap_dist, halves, switcher, wheel, places, places_wb, drawer_w, drawer_h, dblfront;
+    int snap, snap_dist, halves, switcher, wheel, places, places_wb, drawer_w, drawer_h, dblfront, edges;
     char key[48];
     char never[MAX_NEVER][32];
     int nnever;
@@ -86,7 +94,7 @@ static void read_prefs(void)
 {
     char *text = read_file(PREFS_ENV), *p, *line;
     memset(&cfg, 0, sizeof cfg);
-    cfg.snap = 1; cfg.snap_dist = 12; cfg.halves = 0; cfg.switcher = 1; cfg.wheel = 1; cfg.places = 1; cfg.dblfront = 1;
+    cfg.snap = 1; cfg.snap_dist = 12; cfg.halves = 0; cfg.switcher = 1; cfg.wheel = 1; cfg.places = 1; cfg.dblfront = 1; cfg.edges = 1;
     strcpy(cfg.key, "lcommand tab");
     if (!text) return;
     for (p = text; *p; ) {
@@ -103,6 +111,7 @@ static void read_prefs(void)
         else if (!strcmp(line, "switcher.key")) { strncpy(cfg.key, v, sizeof cfg.key - 1); }
         else if (!strcmp(line, "wheel")) cfg.wheel = on_off(v);
         else if (!strcmp(line, "doubleclick.front")) cfg.dblfront = on_off(v);
+        else if (!strcmp(line, "edges")) cfg.edges = on_off(v);
         else if (!strcmp(line, "places")) cfg.places = on_off(v);
         else if (!strcmp(line, "places.drawers")) cfg.places_wb = on_off(v);
         else if (!strcmp(line, "never") && cfg.nnever < MAX_NEVER) strncpy(cfg.never[cfg.nnever++], v, 31);
@@ -129,6 +138,48 @@ static volatile int on = 1;
 static struct click { ULONG secs, micro; WORD x, y; struct Screen *s; } click_ring[CLICK_RING];
 static volatile int click_in, click_out;
 
+/* Resizing from an edge (0.5): the handler sees a press on an edge, keeps it
+ * from Intuition and tells the main task, which resizes the window with
+ * ChangeWindowBox as the pointer moves, until the button comes up. */
+#define EDGE_L 1
+#define EDGE_R 2
+#define EDGE_B 4
+#define ZONE_OUT 4                              /* pixels outside the frame that grab it */
+#define ZONE_IN 2                               /* and inside it, the frame's own line among them */
+static ULONG sig_grab;
+static struct Window *volatile grab_win;        /* the window being resized, set by the handler */
+static volatile int grab_edges, grab_on, grab_end;
+static volatile WORD grab_x0, grab_y0;          /* the pointer at the press, screen relative */
+
+/* The window whose edge (x, y) is on, and which edges, or NULL. Read from the
+ * screen's layers front to back with no lock, as over_active does (the input
+ * handler can't wait): the first window whose frame holds the point is the
+ * one under the pointer, and only its own edge counts; a point just outside
+ * every frame in front of a window belongs to that window's edge. The title
+ * bar's height never resizes (it moves the window), nor does a window that
+ * can't be resized, a backdrop or a borderless one. */
+static struct Window *edge_at(struct Screen *s, WORD x, WORD y, int *edges)
+{
+    struct Layer *l;
+    for (l = s->LayerInfo.top_layer; l; l = l->back) {
+        struct Window *w = (struct Window *)l->Window;
+        WORD L = l->bounds.MinX, T = l->bounds.MinY, R = l->bounds.MaxX, B = l->bounds.MaxY;
+        int in = x >= L && x <= R && y >= T && y <= B, e = 0;
+        if (!w || l == s->BarLayer || (w->Flags & (WFLG_BACKDROP | WFLG_BORDERLESS)) || !(w->Flags & WFLG_SIZEGADGET)) {
+            if (in) return NULL;                /* the screen's title bar, a menu, a window that keeps its size */
+            continue;
+        }
+        if (x >= L - ZONE_OUT && x <= R + ZONE_OUT && y >= T + w->BorderTop && y <= B + ZONE_OUT) {
+            if (x <= L + ZONE_IN - 1) e |= EDGE_L;
+            if (x >= R - ZONE_IN + 1) e |= EDGE_R;
+            if (y >= B - ZONE_IN + 1) e |= EDGE_B;
+        }
+        if (e) { *edges = e; return w; }
+        if (in) return NULL;                    /* inside it, off its edges: an ordinary press */
+    }
+    return NULL;
+}
+
 static int over_active(void)
 {
     struct Window *w = IntuitionBase->ActiveWindow;
@@ -148,6 +199,26 @@ static void custom(CxMsg *msg, CxObj *co)
     for (; ie; ie = ie->ie_NextEvent) {
         if (ie->ie_Class == IECLASS_RAWMOUSE) {
             struct Screen *s = IntuitionBase->FirstScreen;
+            if (grab_on) {                         /* resizing from an edge: the button coming up ends it */
+                if (ie->ie_Code == (IECODE_LBUTTON | IECODE_UP_PREFIX)) {
+                    grab_on = 0; grab_end = 1;
+                    ie->ie_Code = IECODE_NOBUTTON;     /* the pointer's last move still goes on */
+                }
+                Signal(me, sig_grab);              /* the main task reads where the pointer is */
+                continue;
+            }
+            if (ie->ie_Code == IECODE_LBUTTON && cfg.edges && s && !(ie->ie_Qualifier & (IEQUALIFIER_LSHIFT | IEQUALIFIER_RSHIFT |
+                IEQUALIFIER_CONTROL | IEQUALIFIER_LALT | IEQUALIFIER_RALT | IEQUALIFIER_LCOMMAND | IEQUALIFIER_RCOMMAND))) {
+                int edges = 0;
+                struct Window *gw = edge_at(s, s->MouseX, s->MouseY, &edges);
+                if (gw) {
+                    grab_win = gw; grab_edges = edges; grab_x0 = s->MouseX; grab_y0 = s->MouseY;
+                    grab_end = 0; grab_on = 1;
+                    ie->ie_Code = IECODE_NOBUTTON;     /* Intuition sees a move, not the press */
+                    Signal(me, sig_grab);
+                    continue;
+                }
+            }
             if (ie->ie_Code == IECODE_LBUTTON) {
                 ev_down = 1; down_x = s ? s->MouseX : 0; down_y = s ? s->MouseY : 0;
                 if (cfg.dblfront && s && ((click_in + 1) & (CLICK_RING - 1)) != click_out) {
@@ -362,6 +433,136 @@ static void buttons(void)
         if (w->LeftEdge == drag_l && w->TopEdge == drag_t) return;            /* not moved */
         if (cfg.halves && (up_x <= 1 || up_x >= w->WScreen->Width - 2)) halves(w, up_x);
         else snap(w);
+    }
+}
+
+/* ---- resizing from an edge (0.5) ------------------------------------------------------------- */
+
+/* The pointers shown while a window is resized: 16 x 16, the hot spot at the
+ * middle (7, 7). '.' is clear, 'X' the outline (the pointer's second colour)
+ * and 'o' the fill (its third). */
+static const char *const shape_h[16] = {
+    "................", "................", "................", "..XXX.....XXX...",
+    ".XXoX.....XoXX..", "XXooX.....XooXX.", "XoooXXXXXXXoooXX", "oooooooooooooooX",
+    "XoooXXXXXXXoooXX", "XXooX.....XooXX.", ".XXoX.....XoXX..", "..XXX.....XXX...",
+    "................", "................", "................", "................",
+};
+static const char *const shape_v[16] = {
+    ".....XXoXX......", "....XXoooXX.....", "...XXoooooXX....", "...XoooooooX....",
+    "...XXXXoXXXX....", "......XoX.......", "......XoX.......", "......XoX.......",
+    "......XoX.......", "......XoX.......", "...XXXXoXXXX....", "...XoooooooX....",
+    "...XXoooooXX....", "....XXoooXX.....", ".....XXoXX......", "......XXX.......",
+};
+static const char *const shape_d1[16] = {                  /* the bottom right corner */
+    "................", ".XXXXXXX........", ".XoooooX........", ".XooooXX........",
+    ".XooooXX........", ".XoooooXX.......", ".XoXXoooXX......", ".XXXXXoooXXXXX..",
+    ".....XXoooXXoX..", "......XXoooooX..", ".......XXooooX..", ".......XXooooX..",
+    ".......XoooooX..", ".......XXXXXXX..", "................", "................",
+};
+static const char *const shape_d2[16] = {                  /* the bottom left corner */
+    "................", ".......XXXXXXX..", ".......XoooooX..", ".......XXooooX..",
+    ".......XXooooX..", "......XXoooooX..", ".....XXoooXXoX..", ".XXXXXoooXXXXX..",
+    ".XoXXoooXX......", ".XoooooXX.......", ".XooooXX........", ".XooooXX........",
+    ".XoooooX........", ".XXXXXXX........", "................", "................",
+};
+enum { PTR_H, PTR_V, PTR_D1, PTR_D2, PTR_COUNT };
+static struct BitMap *ptr_bm[PTR_COUNT];
+static Object *ptr_obj[PTR_COUNT];
+
+static void make_pointer(int i, const char *const rows[16])
+{
+    struct BitMap *bm = AllocBitMap(16, 16, 2, BMF_CLEAR, NULL);
+    int x, y;
+    if (!bm) return;
+    for (y = 0; y < 16; y++) {
+        UWORD p0 = 0, p1 = 0;
+        for (x = 0; x < 16; x++) {
+            UWORD bit = (UWORD)(0x8000 >> x);
+            if (rows[y][x] == 'X') p1 |= bit;                       /* the second colour: plane 1 only */
+            else if (rows[y][x] == 'o') { p0 |= bit; p1 |= bit; }   /* the third: both planes */
+        }
+        *(UWORD *)(bm->Planes[0] + y * bm->BytesPerRow) = p0;
+        *(UWORD *)(bm->Planes[1] + y * bm->BytesPerRow) = p1;
+    }
+    ptr_bm[i] = bm;
+    ptr_obj[i] = NewObject(NULL, (STRPTR)"pointerclass", POINTERA_BitMap, (ULONG)bm, POINTERA_XOffset, -7, POINTERA_YOffset, -7,
+                           POINTERA_WordWidth, 1, POINTERA_XResolution, POINTERXRESN_SCREENRES,
+                           POINTERA_YResolution, POINTERYRESN_SCREENRESASPECT, TAG_DONE);
+}
+
+static void pointers_on(void)
+{
+    make_pointer(PTR_H, shape_h);
+    make_pointer(PTR_V, shape_v);
+    make_pointer(PTR_D1, shape_d1);
+    make_pointer(PTR_D2, shape_d2);
+}
+
+static void pointers_off(void)
+{
+    int i;
+    for (i = 0; i < PTR_COUNT; i++) {
+        if (ptr_obj[i]) DisposeObject(ptr_obj[i]);
+        if (ptr_bm[i]) FreeBitMap(ptr_bm[i]);
+        ptr_obj[i] = NULL; ptr_bm[i] = NULL;
+    }
+}
+
+static struct Window *rs_win;                   /* the window the main task is resizing */
+static int rs_edges, rs_ptr;
+static WORD rs_l, rs_t, rs_w, rs_h, rs_x0, rs_y0;
+
+static void resize_end(void)
+{
+    if (rs_win && rs_ptr && is_window(rs_win)) SetWindowPointer(rs_win, WA_Pointer, (ULONG)NULL, TAG_DONE);
+    rs_win = NULL;
+    rs_ptr = 0;
+}
+
+/* The pointer has moved, or the button has come up: the window follows. The
+ * edge or corner held follows the pointer, the others stay; the window keeps
+ * to its own limits and to the screen. */
+static void resize(void)
+{
+    struct Window *w;
+    struct Screen *s;
+    WORD dx, dy, l, t, wd, ht, maxw, maxh;
+    if (!rs_win && grab_win) {                  /* a new press on an edge */
+        w = grab_win;
+        if (!is_window(w)) { grab_win = NULL; grab_on = 0; grab_end = 0; return; }
+        rs_win = w; rs_edges = grab_edges; rs_x0 = grab_x0; rs_y0 = grab_y0;
+        rs_l = w->LeftEdge; rs_t = w->TopEdge; rs_w = w->Width; rs_h = w->Height;
+        if (w != IntuitionBase->ActiveWindow) ActivateWindow(w);
+        {
+            int k = !(rs_edges & EDGE_B) ? PTR_H : (rs_edges & EDGE_R) ? PTR_D1 : (rs_edges & EDGE_L) ? PTR_D2 : PTR_V;
+            if (ptr_obj[k]) { SetWindowPointer(w, WA_Pointer, (ULONG)ptr_obj[k], TAG_DONE); rs_ptr = 1; }
+        }
+    }
+    if (!(w = rs_win)) return;
+    if (!is_window(w)) { rs_win = NULL; rs_ptr = 0; grab_win = NULL; grab_on = 0; grab_end = 0; return; }
+    s = w->WScreen;
+    dx = s->MouseX - rs_x0;
+    dy = s->MouseY - rs_y0;
+    l = rs_l; t = rs_t; wd = rs_w; ht = rs_h;
+    maxw = w->MaxWidth == 0 || w->MaxWidth > (UWORD)s->Width ? s->Width : (WORD)w->MaxWidth;
+    maxh = w->MaxHeight == 0 || w->MaxHeight > (UWORD)s->Height ? s->Height : (WORD)w->MaxHeight;
+    if (rs_edges & EDGE_R) wd += dx;
+    if (rs_edges & EDGE_L) wd -= dx;
+    if (rs_edges & EDGE_B) ht += dy;
+    if (wd < w->MinWidth) wd = w->MinWidth;
+    if (wd > maxw) wd = maxw;
+    if (ht < w->MinHeight) ht = w->MinHeight;
+    if (ht > maxh) ht = maxh;
+    if (rs_edges & EDGE_L) l = rs_l + rs_w - wd;          /* the right edge stays where it was */
+    if (l < 0) { wd += l; l = 0; }
+    if (l + wd > s->Width) wd = s->Width - l;
+    if (t + ht > s->Height) ht = s->Height - t;
+    if (wd >= w->MinWidth && ht >= w->MinHeight && (wd != w->Width || ht != w->Height || l != w->LeftEdge))
+        ChangeWindowBox(w, l, t, wd, ht);
+    if (grab_end) {
+        grab_end = 0;
+        grab_win = NULL;
+        resize_end();
     }
 }
 
@@ -601,7 +802,7 @@ static void watch(void)
 /* ---- the commodity --------------------------------------------------------------------------- */
 
 static struct NewBroker nb = {
-    NB_VERSION, (STRPTR)"OpenWindows", (STRPTR)"OpenWindows 0.1", (STRPTR)"Snapping, Amiga+Tab, wheel and window places",
+    NB_VERSION, (STRPTR)"OpenWindows", (STRPTR)"OpenWindows 0.5", (STRPTR)"Snapping, edges, Amiga+Tab, wheel and window places",
     NBU_UNIQUE | NBU_NOTIFY, 0, 0, NULL, 0
 };
 static CxObj *broker, *hot_fwd, *hot_back;
@@ -640,16 +841,18 @@ int main(void)
     struct MsgPort *port = NULL, *tport = NULL;
     struct timerequest *tr = NULL;
     CxObj *cust;
-    LONG bsig = -1, wsig = -1;
+    LONG bsig = -1, wsig = -1, gsig = -1;
     int quit = 0, timer = 0;
     (void)version;
     IntuitionBase = (struct IntuitionBase *)OpenLibrary((STRPTR)"intuition.library", 39);
     LayersBase = OpenLibrary((STRPTR)"layers.library", 39);
     CxBase = OpenLibrary((STRPTR)"commodities.library", 39);
-    if (!IntuitionBase || !LayersBase || !CxBase) goto out;
+    GfxBase = (struct GfxBase *)OpenLibrary((STRPTR)"graphics.library", 39);
+    if (!IntuitionBase || !LayersBase || !CxBase || !GfxBase) goto out;
     me = FindTask(NULL);
-    if ((bsig = AllocSignal(-1)) < 0 || (wsig = AllocSignal(-1)) < 0) goto out;
-    sig_button = 1UL << bsig; sig_wheel = 1UL << wsig;
+    if ((bsig = AllocSignal(-1)) < 0 || (wsig = AllocSignal(-1)) < 0 || (gsig = AllocSignal(-1)) < 0) goto out;
+    sig_button = 1UL << bsig; sig_wheel = 1UL << wsig; sig_grab = 1UL << gsig;
+    pointers_on();
     if (!(port = CreateMsgPort())) goto out;
     nb.nb_Port = port;
     if (!(broker = CxBroker(&nb, NULL))) goto out;    /* already running: NBU_UNIQUE */
@@ -668,12 +871,13 @@ int main(void)
     if (timer) { tr->tr_node.io_Command = TR_ADDREQUEST; tr->tr_time.tv_secs = 1; tr->tr_time.tv_micro = 0; SendIO((struct IORequest *)tr); }
 
     while (!quit) {
-        ULONG got = Wait((1UL << port->mp_SigBit) | sig_button | sig_wheel | SIGBREAKF_CTRL_C | SIGBREAKF_CTRL_F |
+        ULONG got = Wait((1UL << port->mp_SigBit) | sig_button | sig_wheel | sig_grab | SIGBREAKF_CTRL_C | SIGBREAKF_CTRL_F |
                          (timer ? 1UL << tport->mp_SigBit : 0));
         CxMsg *m;
         if (got & SIGBREAKF_CTRL_C) quit = 1;
         if (got & SIGBREAKF_CTRL_F) { read_prefs(); hotkeys(port); }
         if (got & sig_wheel) wheel();
+        if (got & sig_grab) resize();
         if (got & sig_button) { clicks(); buttons(); }
         while ((m = (CxMsg *)GetMsg(port))) {
             ULONG type = CxMsgType(m), id = CxMsgID(m);
@@ -698,6 +902,9 @@ int main(void)
     }
     if (places_dirty) { write_places(PLACES_ENV); write_places(PLACES_ENVARC); }
 out:
+    if (broker) ActivateCxObj(broker, 0);           /* no new presses on an edge */
+    grab_on = 0;
+    resize_end();
     if (timer) { AbortIO((struct IORequest *)tr); WaitIO((struct IORequest *)tr); CloseDevice((struct IORequest *)tr); }
     if (tr) DeleteIORequest((struct IORequest *)tr);
     if (tport) DeleteMsgPort(tport);
@@ -708,10 +915,13 @@ out:
         while ((m = GetMsg(port))) ReplyMsg(m);
         DeleteMsgPort(port);
     }
+    pointers_off();
+    if (gsig >= 0) FreeSignal(gsig);
     if (wsig >= 0) FreeSignal(wsig);
     if (bsig >= 0) FreeSignal(bsig);
     if (CxBase) CloseLibrary(CxBase);
     if (LayersBase) CloseLibrary(LayersBase);
+    if (GfxBase) CloseLibrary((struct Library *)GfxBase);
     if (IntuitionBase) CloseLibrary((struct Library *)IntuitionBase);
     return 0;
 }
