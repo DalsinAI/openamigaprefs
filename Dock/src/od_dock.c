@@ -152,6 +152,28 @@ void od_starter(od_dock *d)
     add_program(d, NULL, OD_WB, "Trashcan", "SYS:Trashcan");
 }
 
+/* Workbench buttons whose program isn't on this machine go: a dock of
+ * empty buttons helps no one. exists() says whether a path is there. Then no
+ * separator is left at an end, or beside another. The number taken out. */
+int od_drop_missing(od_dock *d, int (*exists)(const char *path))
+{
+    int gone = 0;
+    for (int i = 0; i < d->n; ) {
+        if (d->b[i].kind == OD_WB && !exists(d->b[i].command)) {
+            memmove(&d->b[i], &d->b[i + 1], (d->n - i - 1) * sizeof d->b[0]);
+            d->n--;
+            gone++;
+        } else i++;
+    }
+    for (int i = 0; i < d->n; ) {
+        if (d->b[i].kind == OD_SEPARATOR && (i == 0 || i == d->n - 1 || d->b[i + 1].kind == OD_SEPARATOR)) {
+            memmove(&d->b[i], &d->b[i + 1], (d->n - i - 1) * sizeof d->b[0]);
+            d->n--;
+        } else i++;
+    }
+    return gone;
+}
+
 /* AmigaDOS names: the same letters in either case are the same name. */
 static int same_name(const char *a, const char *b)
 {

@@ -71,7 +71,7 @@ rounded rectangle tinted to the look, through which the desktop shows.
 - **On the native chipset and 8-bit screens**, the shelf is drawn with the
   nearest pens (`ObtainBestPen`, released when the dock closes): the same
   rounded corners and edge, without smoothing. Only **glass** is dithered.
-  The dither's density follows the opacity: a quarter below 35, a half
+  The dither's density follows the opacity: a quarter up to 35 (the default), a half
   below 70, three quarters above. **See-through** draws the edge alone, and 100 (or
   solid) fills.
 - **Speed.** The shelf is made once, into a bitmap of the dock's size, when

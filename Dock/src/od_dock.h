@@ -55,6 +55,9 @@ int od_scaled(int px, int scale);                         /* px at scale per cen
 
 void od_defaults(od_dock *d);                             /* the place and size; no buttons */
 void od_starter(od_dock *d);                              /* the buttons a new dock starts with */
+/* Workbench buttons whose program exists() says isn't there are taken out,
+ * and any separator left at an end or beside another. The number taken out. */
+int od_drop_missing(od_dock *d, int (*exists)(const char *path));
 /* A Workbench button for command at the dock's end, unless one is there
  * already: 1 added, 0 already there, -1 the dock is full. */
 int od_ensure(od_dock *d, const char *command);
