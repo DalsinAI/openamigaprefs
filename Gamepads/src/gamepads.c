@@ -688,7 +688,9 @@ static void put_back_mappings(void)
     }
 }
 
-/* the library reads the settings once a second: wait until the patch is as set, up to 3 s */
+/* the library reads the settings once a second: wait until the patch is
+ * as set, up to 3 s. 1: it is; 2: AmigaChrome's cores feed that port at
+ * the chips (they answer for it first); 0: not yet. */
 static int wait_for_patch(int on)
 {
     int i, p = gp_fed_port(&cur);
@@ -696,7 +698,10 @@ static int wait_for_patch(int on)
     if (!have_lib || p < 0) return 1;
     for (i = 0; i < 15; i++) {
         memset(&lp, 0, sizeof lp);
-        if (OIN_GetLegacyPort(p, &lp, sizeof lp) == OIERR_OK && (lp.olp_Where == OILPW_LOWLEVEL) == (on != 0)) return 1;
+        if (OIN_GetLegacyPort(p, &lp, sizeof lp) == OIERR_OK) {
+            if (lp.olp_Where == OILPW_CORE) return 2;
+            if ((lp.olp_Where == OILPW_LOWLEVEL) == (on != 0)) return 1;
+        }
         Delay(10);
     }
     return 0;
@@ -927,8 +932,11 @@ static int gui_once(void)
                 }
                 case G_TEST:
                     store_settings(&cur, 0); tested = 1;
-                    status(wait_for_patch(cur.patch) ? (cur.patch ? "Testing: older games see the pad now." : "Testing: the patch is out.")
-                                                     : "OpenInput hasn't changed the patch yet (is the library 1.2?).");
+                    switch (wait_for_patch(cur.patch)) {
+                    case 1: status(cur.patch ? "Testing: older games see the pad now." : "Testing: the patch is out."); break;
+                    case 2: status("AmigaChrome feeds this port already, for every game (Cradle's Game pads)."); break;
+                    default: status("OpenInput hasn't changed the patch yet (is the library 1.2?)."); break;
+                    }
                     show_list();
                     break;
                 case G_USE: put_in_place(0); quit = 1; break;
