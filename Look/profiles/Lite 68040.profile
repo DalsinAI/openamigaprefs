@@ -10,3 +10,7 @@ lite.gradients on
 screen workbench themed
 screen public themed
 screen custom classic
+; the approved look (OpenLook 0.5): no zoom or size gadget, scroll bars only when needed
+zoom off
+sizegadget off
+scrollers auto
