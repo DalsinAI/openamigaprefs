@@ -367,6 +367,14 @@ static struct MenuItem *live_item(struct Window *w, struct Menu *strip, int mi, 
     return it;
 }
 
+/* The first item of an item's submenu in the window's strip as it is now;
+ * NULL when the program changed its menus meanwhile. */
+static struct MenuItem *live_subs(struct Window *w, struct Menu *strip, int mi, int ii)
+{
+    struct MenuItem *it = live_item(w, strip, mi, ii, -1);
+    return it ? it->SubItem : NULL;
+}
+
 /* ---- drawing ------------------------------------------------------------------------------ */
 
 struct panel {
@@ -830,7 +838,7 @@ static UWORD mark(struct Window *w, int mi, int ii, int si)
             else it->Flags |= CHECKED;
             if (it->MutualExclude) {
                 /* the items of the same menu (or submenu) the exclusion names lose theirs */
-                struct MenuItem *o = si >= 0 ? live_item(w, target_strip, mi, ii, -1)->SubItem : live_item(w, target_strip, mi, 0, -1);
+                struct MenuItem *o = si >= 0 ? live_subs(w, target_strip, mi, ii) : live_item(w, target_strip, mi, 0, -1);
                 for (int n = 0; o && n < 32; o = o->NextItem, n++)
                     if (o != it && (it->MutualExclude & (1UL << n))) o->Flags &= ~CHECKED;
             }
@@ -938,7 +946,7 @@ static void kbd_stay(const omk_pos *p)
     if (code == MENUNULL) return;
     if (nchain < 16) chain[nchain++] = code;
     /* the copies take the marks the strip has now (mutual exclusion clears others) */
-    live = p->sub >= 0 ? live_item(target, target_strip, p->menu, p->item, -1)->SubItem : live_item(target, target_strip, p->menu, 0, -1);
+    live = p->sub >= 0 ? live_subs(target, target_strip, p->menu, p->item) : live_item(target, target_strip, p->menu, 0, -1);
     list = p->sub >= 0 ? cmenus[p->menu].items[p->item].subs : cmenus[p->menu].items;
     n = p->sub >= 0 ? cmenus[p->menu].items[p->item].nsubs : cmenus[p->menu].nitems;
     for (int i = 0; live && i < n; live = live->NextItem, i++) list[i].flags = (list[i].flags & ~CHECKED) | (live->Flags & CHECKED);

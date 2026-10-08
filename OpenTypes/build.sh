@@ -8,5 +8,5 @@ STOVE=${STOVE:-$HOME/AmigaChrome/stoves/os32}
 CC="$STOVE/prefix/bin/m68k-amigaos-gcc"
 OUT=${1:-$HERE/build/os3}
 mkdir -p "$OUT"
-"$CC" -noixemul -m68020 -std=gnu99 -Wall -Werror -O2 -fno-common -o "$OUT/OpenTypes" "$HERE/src/opentypes.c"
+"$CC" -noixemul -m68020 -std=gnu99 -Wall -Werror -O2 -fno-delete-null-pointer-checks -fno-common -o "$OUT/OpenTypes" "$HERE/src/opentypes.c"
 echo "$OUT/OpenTypes ($(wc -c < "$OUT/OpenTypes") bytes)"

@@ -10,5 +10,5 @@ CC="$STOVE/prefix/bin/m68k-amigaos-gcc"
 OGT=${OGT:-$HERE/../../opengadtools}
 OUT=${1:-$HERE/build/os3}
 mkdir -p "$OUT"
-"$CC" -noixemul -m68020 -std=gnu99 -Wall -Werror -O2 -fno-common -I"$OGT/lib" -o "$OUT/Look" "$HERE/src/look.c" "$OGT/lib/ogt_theme.c"
+"$CC" -noixemul -m68020 -std=gnu99 -Wall -Werror -O2 -fno-delete-null-pointer-checks -fno-common -I"$OGT/lib" -o "$OUT/Look" "$HERE/src/look.c" "$OGT/lib/ogt_theme.c"
 echo "$OUT/Look ($(wc -c < "$OUT/Look") bytes)"
