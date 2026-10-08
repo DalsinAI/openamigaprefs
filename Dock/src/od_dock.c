@@ -26,7 +26,7 @@ void od_defaults(od_dock *d)
     d->background = OD_BG_GLASS;
     d->scale = 100;
     d->border = 1;
-    d->opacity = 60;
+    d->opacity = 35;                /* 0.4: more see-through (60 before) */
 }
 
 /* ---- small helpers ------------------------------------------------------------------- */
@@ -144,8 +144,12 @@ void od_starter(od_dock *d)
     add_program(d, NULL, OD_CLI, "Shell", "NewShell");      /* the Shell's icon moves between OS releases; NewShell doesn't */
     add_program(d, NULL, OD_WB, "OpenFiles", "SYS:Utilities/OpenFiles");
     add_program(d, NULL, OD_WB, "OpenView", "SYS:Utilities/OpenPrint/OpenView");
+    add_program(d, NULL, OD_WB, "Clock", "SYS:Utilities/Clock");
+    add_program(d, NULL, OD_WB, "Calculator", "SYS:Tools/Calculator");
     add_program(d, NULL, OD_WB, "Prefs", "SYS:Prefs");
     add_program(d, NULL, OD_WB, "Look", "SYS:Prefs/Look");
+    add_separator(d);                                        /* 0.4: the trashcan stands apart, as on the Mac */
+    add_program(d, NULL, OD_WB, "Trashcan", "SYS:Trashcan");
 }
 
 /* AmigaDOS names: the same letters in either case are the same name. */
