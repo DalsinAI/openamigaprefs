@@ -46,7 +46,7 @@ typedef struct om_prefs {
     int keep_running;                       /* programs go on while a menu is open */
     char imported[64];                      /* the MagicMenu file taken over, so it happens once */
     int rightclick;                         /* the right button on Workbench's icons and desktop: their menu */
-    int rightclick_extras;                  /* the Open family's entries too (Open with, Extract, Send to PC) */
+    int rightclick_extras;                  /* the Open family's entries too (Open with, Extract, Send Out) */
     int rightclick_selection;               /* on a selected icon: the whole selection (else that icon only) */
     int rightclick_name;                    /* the icon's name at the top of its menu */
     int bar;                                /* OM_BAR_*: the screen's title bar, or our own bar at an edge */
