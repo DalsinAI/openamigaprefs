@@ -45,7 +45,7 @@
 
 #include "od_dock.h"
 
-const char version[] __attribute__((used)) = "$VER: Dock 0.3 (8.10.2026) OpenPrefs, Dalsin Limited";
+const char version[] __attribute__((used)) = "$VER: Dock 0.4 (8.10.2026) OpenPrefs, Dalsin Limited";
 
 #define PREFS_ENV "ENV:OpenDock/Dock"
 #define PREFS_ENVARC "ENVARC:OpenDock/Dock"
@@ -204,27 +204,7 @@ static int find_source(int src, char *file, int fsize, char *base, int bsize)
     return find_amistart(file, fsize, base, bsize);
 }
 
-/* Workbench buttons whose program isn't on this machine go: a dock of
- * empty buttons helps no one. The number taken out. */
-static int drop_missing(od_dock *d)
-{
-    int gone = 0;
-    for (int i = 0; i < d->n; ) {
-        if (d->b[i].kind == OD_WB && !exists(d->b[i].command)) {
-            memmove(&d->b[i], &d->b[i + 1], (d->n - i - 1) * sizeof d->b[0]);
-            d->n--;
-            gone++;
-        } else i++;
-    }
-    /* no separator left at an end, or beside another */
-    for (int i = 0; i < d->n; ) {
-        if (d->b[i].kind == OD_SEPARATOR && (i == 0 || i == d->n - 1 || d->b[i + 1].kind == OD_SEPARATOR)) {
-            memmove(&d->b[i], &d->b[i + 1], (d->n - i - 1) * sizeof d->b[0]);
-            d->n--;
-        } else i++;
-    }
-    return gone;
-}
+static int drop_missing(od_dock *d) { return od_drop_missing(d, exists); }
 
 /* A file's buttons after d's own. 1, or 0 with the reason in err. */
 static int take_over(od_dock *d, const char *file, const char *base, od_report *r, char *err, int errlen)
