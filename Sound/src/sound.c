@@ -69,7 +69,7 @@ enum {
     G_STATUS, G_SAVE, G_USE, G_CANCEL, G_COUNT
 };
 
-static const char *mix_labels[] = { "The PC: frees the Amiga's CPU (recommended)", "The Amiga: for programs that use AHI's echo", NULL };
+static const char *mix_labels[] = { "Cradle: frees the Amiga's CPU (recommended)", "The Amiga: for programs that use AHI's echo", NULL };
 static const char *beep_labels[] = { "Play a sound", "Flash the screen", "Both", "Nothing", NULL };
 static const char *beepsnd_labels[] = { "Beep", "A sound file", NULL };
 static const char *freq_labels[] = { "8000", "11025", "16000", "22050", "32000", "44100", "48000", NULL };

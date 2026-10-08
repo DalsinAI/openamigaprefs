@@ -375,7 +375,7 @@ static void pop_open(void)
     if (board) {
         PSLIDER(P_PAULA, row, "Paula"); row += lh + 2;
         PSLIDER(P_AHI, row, "AHI"); row += lh + 4;
-        PG(TEXT_KIND, P_NOTE, L, row, W - 2 * L, lh - 2, NULL, 0, GTTX_Text, (ULONG)"Plays on: PC speakers, through AmigaChrome");
+        PG(TEXT_KIND, P_NOTE, L, row, W - 2 * L, lh - 2, NULL, 0, GTTX_Text, (ULONG)"Plays on: your speakers");
     } else {
         row += 2;
         PG(TEXT_KIND, P_NOTE, L, row, W - 2 * L, lh - 2, NULL, 0, GTTX_Text, (ULONG)"Amiga sound (Paula): your speakers' knob");
