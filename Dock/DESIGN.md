@@ -4,9 +4,30 @@ OpenDock is a dock on the Workbench screen, and Dock is its prefs editor.
 The design comes from openamigaup DESIGN.md: a Mac-like dock that takes
 over the docks people already have. MIT, Copyright (c) 2026 Dalsin Limited.
 
-![OpenDock 0.3 on a graphics card: the light look, glass at 60 per cent](docs/screenshot.png)
+![OpenDock 0.3 on a graphics card: the light look, glass at 60 per cent (0.4 starts at 35)](docs/screenshot.png)
 
 ![OpenDock 0.3, the dark look](docs/screenshot-dark.png)
+
+## 0.4 (8 October 2026): the look approved on the canvas
+
+The dock of the OpenLook mock-ups ("OpenLook default theme candidates"),
+tuned there with the user:
+
+- **More room at the ends.** From the shelf's end to the first icon's edge
+  is a third of an icon (`endpad`, at least the old tenth), about 18 pixels
+  at the medium size. Between the icons and across the shelf nothing
+  changes: each cell keeps four pixels round its icon, and across the shelf
+  the room above the icons and the running dot's row below them stay as 0.3
+  made them, close to the mock-up's 7 pixels.
+- **More see-through.** A new dock's opacity is 35 (60 before), and the
+  glass is frosted less (a box of `big / 24` pixels, 2 at the medium size).
+  The settings line is unchanged; a file that gives `opacity` keeps it.
+- **The starter buttons** (a first start with no dock to take over): Shell,
+  OpenFiles, OpenView, Clock, Calculator, Prefs and Look, a separator, and
+  the Trashcan (`SYS:Trashcan`, opened as a drawer).
+
+Tested on the host: 58 checks (`tests/run.sh`), the starter set and the new
+opacity among them. Not yet built on the os32 stove or seen on an instance.
 
 ## 0.3 (7 October 2026): the Mac's layout
 
@@ -138,7 +159,7 @@ skipped. Save writes `ENVARC:` too.
     labels on|off                      ; names under the icons
     running on|off                     ; the running marks
     background glass|see-through|solid ; the shelf (glass if not given)
-    opacity 60                         ; 0 (clear) to 100 (solid); 60 if not given, 100 with background solid (0.3)
+    opacity 35                         ; 0 (clear) to 100 (solid); 35 if not given (60 before 0.4), 100 with background solid
     names-on-hover on|off              ; the name above the icon under the pointer (on)
     hop on|off                         ; a started program's icon hops (on)
     magnify off                        ; kept for later; never with Lite
@@ -170,8 +191,9 @@ program that wrote the file.
 
 On the first start, when there is no `ENVARC:OpenDock/Dock`, Dock takes
 over the first of these it finds, once. Otherwise it starts with Shell
-(`NewShell`), OpenFiles, OpenView, Prefs and Look (OpenView took
-MultiView's place on 6 October 2026). Workbench buttons whose program
+(`NewShell`), OpenFiles, OpenView, Clock, Calculator, Prefs and Look, a
+separator and the Trashcan (0.4; OpenView took MultiView's place on 6
+October 2026). Workbench buttons whose program
 isn't on the machine are left out, both from the starter set and from a
 take-over. **Take over its buttons** does it on request:
 the buttons are added after the dock's own, and when the file isn't where
