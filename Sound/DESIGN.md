@@ -90,7 +90,9 @@ that sit there, the first being the clock (Workbench's title with free memory, a
 date and time at the right). Each keeps a file in `ENV:OpenMenus/Tray/`,
 named for it, holding `width order`: its width in pixels, and its place,
 where a lower order is nearer the bar's end. The speaker is order 0, at
-the very end (Dale's title mockup 2); the clock is order 10, just left of it. Each program
+the very end (Dale's title mockup 2), until OpenTitle 0.5's settings cog
+(order -5) took the end on 8 October 2026; the clock is order 10, just left
+of it, and the network icons order 5 (TitleBar/DESIGN.md has the table). Each program
 places itself after the widths of those with a lower order (on a side bar,
 one row above each), looks again every two seconds, and deletes its file
 when it quits. OpenSpeaker writes `Speaker` and sends OpenMenus Ctrl-F.
