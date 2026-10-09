@@ -107,13 +107,14 @@ static int load_types(void)
         return 0;
     ap->ap_Strlen = 256;
     for (err = MatchFirst((STRPTR)"ENVARC:Sys/def_#?.info", ap); !err && ntypes < MAXTYPES; err = MatchNext(ap)) {
-        char path[300], name[64];
+        char path[300], name[sizeof ap->ap_Info.fib_FileName];
         struct DiskObject *dob;
         int n;
         strcpy(name, (char *)ap->ap_Info.fib_FileName + 4);         /* after "def_" */
         n = strlen(name);
         if (n < 6) continue;
         name[n - 5] = 0;                                            /* before ".info" */
+        if (n - 5 >= (int)sizeof types[0].name) continue;           /* longer than the list keeps: left out, never cut */
         strcpy(path, "ENVARC:Sys/def_");
         strcat(path, name);
         if (!(dob = GetDiskObject((STRPTR)path)))
@@ -121,7 +122,7 @@ static int load_types(void)
         if (dob->do_Type == WBPROJECT) {
             ftype *t = &types[ntypes++];
             memset(t, 0, sizeof *t);
-            strncpy(t->name, name, sizeof t->name - 1);
+            strlcpy(t->name, name, sizeof t->name);
             if (dob->do_DefaultTool)
                 strncpy(t->tool, (char *)dob->do_DefaultTool, sizeof t->tool - 1);
             strcpy(t->pick, t->tool);

@@ -195,7 +195,7 @@ static int tray_before(const char *mine, int my_order, int *count)
     *count = 0;
     if (fib && lock && Examine(lock, fib)) {
         while (ExNext(lock, fib)) {
-            char path[96], *t;
+            char path[sizeof TRAY_DIR "/" + sizeof fib->fib_FileName], *t;
             int w = 0, order = 0;
             const char *name = (const char *)fib->fib_FileName;
             if (fib->fib_DirEntryType > 0 || !strcmp(name, mine)) continue;
@@ -1107,8 +1107,8 @@ static void ts_command(struct TaskspaceMsg *m)
         t = ts[i];
         memset(t, 0, sizeof *t);
         strcpy(t->name, m->tsm_Name);
-        strncpy(t->help, m->tsm_Help, sizeof t->help - 1);
-        strncpy(t->port, m->tsm_Port, sizeof t->port - 1);
+        strlcpy(t->help, m->tsm_Help, sizeof t->help);  /* the sender may fill the field: always ended */
+        strlcpy(t->port, m->tsm_Port, sizeof t->port);
         t->order = m->tsm_Order;
         t->w = m->tsm_Width; t->h = m->tsm_Height; t->states = m->tsm_States;
         t->state = m->tsm_State < t->states ? m->tsm_State : 0;

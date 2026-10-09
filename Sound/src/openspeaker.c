@@ -215,7 +215,7 @@ static int tray_before(int *count)
     *count = 0;
     if (fib && lock && Examine(lock, fib)) {
         while (ExNext(lock, fib)) {
-            char path[96], buf[24];
+            char path[sizeof TRAY_DIR "/" + sizeof fib->fib_FileName], buf[24];
             BPTR fh;
             int w = 0, order = 0;
             LONG n;
