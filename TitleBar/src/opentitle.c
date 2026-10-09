@@ -64,6 +64,7 @@
 #include "om_prefs.h"
 #include "logo.h"
 #include "taskspace.h"
+#include "wbclose.h"
 
 const char version[] __attribute__((used)) = "$VER: OpenTitle 0.6.1 (8.10.2026) OpenPrefs, Dalsin Limited";
 
@@ -93,6 +94,7 @@ static int bar_edge = OM_BAR_TITLE;
 static int border_set;                         /* we made the border black */
 static struct Window *last_other;              /* the window that was active before a click on ours */
 static char shown[40];
+static int wb_down;                            /* Workbench is shutting down or shut: 1 our windows are closed, 2 to open them again */
 
 /* the network icons: LAN and Wi-Fi, from OpenSocket */
 static struct Window *net_w, *pop_w;
@@ -1324,6 +1326,7 @@ int main(void)
     LayersBase = OpenLibrary((STRPTR)"layers.library", 39);
     UtilityBase = OpenLibrary((STRPTR)"utility.library", 39);
     if (!IntuitionBase || !GfxBase || !LayersBase || !UtilityBase) goto out;
+    wbc_start();
     Forbid();
     port = FindPort((STRPTR)TB_PORT);
     Permit();
@@ -1348,7 +1351,7 @@ int main(void)
             tr->tr_node.io_Command = TR_ADDREQUEST; tr->tr_time.tv_secs = 0; tr->tr_time.tv_micro = ms * 1000;
             SendIO((struct IORequest *)tr);
             sig = Wait(SIGBREAKF_CTRL_C | SIGBREAKF_CTRL_F | (1UL << tport->mp_SigBit) | (1UL << port->mp_SigBit)
-                       | (ts_reply ? 1UL << ts_reply->mp_SigBit : 0) | window_sigs());
+                       | (ts_reply ? 1UL << ts_reply->mp_SigBit : 0) | window_sigs() | wbc_sigmask());
             /* Only a request that came back by itself counts as time waited. An
              * aborted one comes back too, and its reply sets the timer port's
              * signal after Wait() has returned; WaitIO() takes the reply but leaves
@@ -1369,6 +1372,13 @@ int main(void)
             waited += 500;
         }
         if (sig & SIGBREAKF_CTRL_C) break;
+        /* Workbench is shutting down (Font prefs' Use, a screen mode): no window, no lock on its screen until it is back */
+        switch (wbc_take()) {
+        case WBC_CLOSE: close_all(); wb_down = 1; wbc_closed(); break;
+        case WBC_OPEN:  wb_down = 2; break;
+        }
+        if (wb_down == 2 && open_all()) wb_down = 0;
+        if (wb_down) { port_events(port); ts_replies(); continue; }
         if (sig & SIGBREAKF_CTRL_F) {
             close_all();
             read_prefs();
@@ -1465,6 +1475,7 @@ out:
     if (timer) CloseDevice((struct IORequest *)tr);
     if (tr) DeleteIORequest((struct IORequest *)tr);
     if (tport) DeleteMsgPort(tport);
+    wbc_stop();
     if (WorkbenchBase) CloseLibrary(WorkbenchBase);
     if (SocketBase) CloseLibrary(SocketBase);
     if (UtilityBase) CloseLibrary(UtilityBase);
