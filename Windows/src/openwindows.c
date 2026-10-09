@@ -52,7 +52,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-static const char version[] = "$VER: OpenWindows 0.5 (8.10.2026) MIT, Copyright (c) 2026 Dalsin Limited";
+static const char version[] __attribute__((used)) = "$VER: OpenWindows 0.5 (8.10.2026) MIT, Copyright (c) 2026 Dalsin Limited";
 
 #define PREFS_ENV "ENV:OpenPrefs/Windows"
 #define PLACES_ENV "ENV:OpenPrefs/WindowPlaces"

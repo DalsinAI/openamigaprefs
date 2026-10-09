@@ -27,7 +27,7 @@
 
 #include "tb_prefs.h"
 
-static const char version[] = "$VER: TitleBar 0.2 (8.10.2026) OpenPrefs, MIT, Copyright (c) 2026 Dalsin Limited";
+static const char version[] __attribute__((used)) = "$VER: TitleBar 0.2 (8.10.2026) OpenPrefs, MIT, Copyright (c) 2026 Dalsin Limited";
 
 static tb_prefs cur;
 

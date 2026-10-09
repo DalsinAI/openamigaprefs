@@ -47,7 +47,7 @@
 
 #include <string.h>
 
-static const char version[] = "$VER: OpenTypes 0.2 (6.10.2026) MIT, Copyright (c) 2026 Dalsin Limited";
+static const char version[] __attribute__((used)) = "$VER: OpenTypes 0.2 (6.10.2026) MIT, Copyright (c) 2026 Dalsin Limited";
 
 #define STATE "ENVARC:OpenTypes"
 #define BACKUP "ENVARC:OpenTypes/Backup"
