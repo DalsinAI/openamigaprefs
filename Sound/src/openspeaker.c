@@ -54,6 +54,7 @@
 #include "sp_core.h"
 #include "sp_amiga.h"
 #include "om_prefs.h"
+#include "wbclose.h"
 
 const char version[] __attribute__((used)) = "$VER: OpenSpeaker 0.1 (6.10.2026) OpenPrefs, Dalsin Limited";
 
@@ -82,6 +83,7 @@ static struct Window *spk;                   /* the speaker */
 static WORD sx, sy, sw, sh;
 
 static struct Window *pop;                   /* its levels */
+static int wb_down;                         /* Workbench is shutting down or shut: 1 our windows are closed, 2 to open them again */
 static struct Gadget *pop_glist;
 static APTR vi;
 static struct Window *before;                /* the window that was active when the levels opened */
@@ -505,6 +507,7 @@ int main(void)
     LayersBase = OpenLibrary((STRPTR)"layers.library", 39);
     CxBase = OpenLibrary((STRPTR)"commodities.library", 39);
     if (!IntuitionBase || !GfxBase || !GadToolsBase || !LayersBase || !CxBase) goto out;
+    wbc_start();
     me = FindTask(NULL);
     if ((s1 = AllocSignal(-1)) < 0) goto out;
     sig_input = 1UL << s1;
@@ -527,9 +530,15 @@ int main(void)
     ActivateCxObj(broker, 1);
     while (!quit) {
         ULONG got = Wait((1UL << port->mp_SigBit) | (1UL << tport->mp_SigBit) | sig_input | SIGBREAKF_CTRL_C | SIGBREAKF_CTRL_F |
-                         (spk ? 1UL << spk->UserPort->mp_SigBit : 0) | (pop ? 1UL << pop->UserPort->mp_SigBit : 0));
+                         (spk ? 1UL << spk->UserPort->mp_SigBit : 0) | (pop ? 1UL << pop->UserPort->mp_SigBit : 0) | wbc_sigmask());
         CxMsg *cm;
         if (got & SIGBREAKF_CTRL_C) quit = 1;
+        /* Workbench is shutting down (Font prefs' Use, a screen mode): no window, no lock on its screen until it is back */
+        switch (wbc_take()) {
+        case WBC_CLOSE: if (pop) pop_close(0); close_speaker(); wb_down = 1; wbc_closed(); break;
+        case WBC_OPEN:  wb_down = 2; break;
+        }
+        if (wb_down == 2 && open_speaker()) wb_down = 0;
         if (got & SIGBREAKF_CTRL_F) {                       /* Sound prefs changed the settings */
             sp_load(&cur, NULL);
             if (!cur.speaker) quit = 1;
@@ -569,7 +578,7 @@ int main(void)
             WaitIO((struct IORequest *)tr);
             if (levels_in()) { draw_speaker(); if (pop) pop_show(); }
             if (save_in && !--save_in) sp_save_levels(&cur, 1);
-            if (++ticks % 10 == 0 && !pop) {                 /* every 2 s: OpenMenus' bar moved? */
+            if (++ticks % 10 == 0 && !pop && !wb_down) {                 /* every 2 s: OpenMenus' bar moved? */
                 int e = read_bar_edge();
                 if (e != bar_edge) { close_speaker(); open_speaker(); }
                 else if (spk) {                     /* the clock came or went, or changed its width */
@@ -587,6 +596,7 @@ out:
     if (broker) DeleteCxObjAll(broker);
     if (pop) pop_close(0);
     if (save_in) sp_save_levels(&cur, 1);
+    wbc_stop();
     if (spk) { close_speaker(); tray(0); }
     if (timer) { if (!CheckIO((struct IORequest *)tr)) AbortIO((struct IORequest *)tr); WaitIO((struct IORequest *)tr); CloseDevice((struct IORequest *)tr); }
     if (tr) DeleteIORequest((struct IORequest *)tr);
