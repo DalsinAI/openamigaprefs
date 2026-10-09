@@ -259,7 +259,7 @@ static struct List list;
 static struct Node nodes[OD_MAX];
 static char shown[OD_MAX][64];
 static int sel = -1, source;
-static char status_text[120];
+static char status_text[160];                 /* "Couldn't take that over: " and an err[120] */
 
 #define SET(id, ...) (gad[id] ? GT_SetGadgetAttrs(gad[id], win, NULL, __VA_ARGS__, TAG_DONE) : (void)0)
 

@@ -334,7 +334,7 @@ static const char rc_note[] = "The right button on the screen bar or in a progra
 static struct Gadget *gad[G_COUNT];
 static struct Window *win;
 static int px, py, pw, ph, which;
-static char status_text[120];
+static char status_text[160];                 /* the longest: "MagicMenu's settings couldn't be taken over: " and err[100] */
 
 /* a gadget the view leaves out is NULL, and setting it does nothing */
 #define SET(id, ...) (gad[id] ? GT_SetGadgetAttrs(gad[id], win, NULL, __VA_ARGS__, TAG_DONE) : (void)0)

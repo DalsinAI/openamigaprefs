@@ -157,7 +157,7 @@ static void parse_look(struct look *l, const char *text)
         char *next = strchr(line, '\n');
         p = line;
         if (line == t && word(&p, w, sizeof w) && w[0] != ';' && strcmp(w, "target") && strcmp(w, "name")) {
-            strncpy(l->theme, w, sizeof l->theme - 1);
+            strlcpy(l->theme, w, sizeof l->theme);
             if (word(&p, v, sizeof v)) l->mode = !strcmp(v, "dark") ? 1 : !strcmp(v, "auto") ? 2 : 0;
         } else if (line != t || p != line) {
             p = line;
@@ -166,9 +166,9 @@ static void parse_look(struct look *l, const char *text)
                     if (!strcmp(v, "auto")) l->mode = 2;
                     if (word(&p, v, sizeof v)) l->dark_from = atoi(v) % 24;
                     if (word(&p, v, sizeof v)) l->dark_to = atoi(v) % 24;
-                } else if (!strcmp(w, "theme") && word(&p, v, sizeof v)) strncpy(l->theme, v, sizeof l->theme - 1);
-                else if (!strcmp(w, "accent") && word(&p, v, sizeof v)) { l->own_accent = 1; strncpy(l->accent, v, sizeof l->accent - 1); }
-                else if (!strcmp(w, "desktop")) { while (*p == ' ') p++; strncpy(l->desktop, p, sizeof l->desktop - 1); { char *e = strchr(l->desktop, '\n'); if (e) *e = 0; } }
+                } else if (!strcmp(w, "theme") && word(&p, v, sizeof v)) strlcpy(l->theme, v, sizeof l->theme);
+                else if (!strcmp(w, "accent") && word(&p, v, sizeof v)) { l->own_accent = 1; strlcpy(l->accent, v, sizeof l->accent); }
+                else if (!strcmp(w, "desktop")) { while (*p == ' ') p++; strlcpy(l->desktop, p, sizeof l->desktop); { char *e = strchr(l->desktop, '\n'); if (e) *e = 0; } }
                 else if (!strcmp(w, "lite") && word(&p, v, sizeof v)) l->lite = !strcmp(v, "on") ? 1 : !strcmp(v, "off") ? 2 : 0;
                 else if (!strncmp(w, "lite.", 5) && word(&p, v, sizeof v)) {
                     int on = !strcmp(v, "on");

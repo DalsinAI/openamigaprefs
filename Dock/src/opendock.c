@@ -1216,9 +1216,9 @@ static void dropped(struct AppMessage *am)
         memset(b, 0, sizeof *b);
         b->kind = OD_WB;
         b->stack = 4096;
-        strncpy(b->command, path, sizeof b->command - 1);
-        strncpy(b->label, (const char *)FilePart((STRPTR)path), sizeof b->label - 1);
-        if (!b->label[0]) strncpy(b->label, path, sizeof b->label - 1);
+        strlcpy(b->command, path, sizeof b->command);
+        strlcpy(b->label, (const char *)FilePart((STRPTR)path), sizeof b->label);   /* a label is short: cut to fit */
+        if (!b->label[0]) strlcpy(b->label, path, sizeof b->label);
     }
     keep();
 }

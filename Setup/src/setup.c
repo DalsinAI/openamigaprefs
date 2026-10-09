@@ -225,10 +225,11 @@ static int apply_profile(void)
 
 #define MAX_LINES 32
 
+#define LINE_TEXT 256
 typedef struct sline {
-    char text[256];                 /* the command, without ";OFF " */
+    char text[LINE_TEXT];           /* the command, without ";OFF " */
     int on, was_on;
-    char shown[120];                /* what the list shows */
+    char shown[LINE_TEXT + 8];      /* what the list shows: "[Off]  " and the whole command */
 } sline;
 
 static sline lines[MAX_LINES];
