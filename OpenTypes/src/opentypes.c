@@ -47,7 +47,7 @@
 
 #include <string.h>
 
-static const char version[] __attribute__((used)) = "$VER: OpenTypes 0.2 (6.10.2026) MIT, Copyright (c) 2026 Dalsin Limited";
+static const char version[] __attribute__((used)) = "$VER: OpenTypes 0.2.1 (9.10.2026) MIT, Copyright (c) 2026 Dalsin Limited";
 
 #define STATE "ENVARC:OpenTypes"
 #define BACKUP "ENVARC:OpenTypes/Backup"
@@ -146,6 +146,24 @@ static int load_types(void)
 static const char *base(const char *tool)
 {
     return (const char *)FilePart((STRPTR)tool);
+}
+
+/* 1 when two tool names are the same program: the parts after the last ':' or
+ * '/', capitals ignored. A plain loop, and each name found on a line of its
+ * own: Stricmp(base(a), base(b)) made GCC call utility.library's Stricmp
+ * with A6 still holding dos.library (the second base() had set it), so the
+ * call went to a dos.library vector, returned 0, and every icon and every
+ * kind of file "named" the program (9 Oct 2026). */
+static int same_program(const char *a, const char *b)
+{
+    const char *x = base(a);
+    const char *y = base(b);
+    for (; *x && *y; x++, y++) {
+        char cx = (*x >= 'A' && *x <= 'Z') ? *x + 32 : *x;
+        char cy = (*y >= 'A' && *y <= 'Z') ? *y + 32 : *y;
+        if (cx != cy) return 0;
+    }
+    return *x == *y;
 }
 
 /* ---- files, the backup and the list of changes ------------------------------------ */
@@ -390,7 +408,7 @@ static void scan_dir(const char *dir, ftype *t, int depth)
                 path[strlen(path) - 5] = 0;                             /* the file the icon belongs to */
                 if ((dob = GetDiskObject((STRPTR)path))) {
                     if (dob->do_Type == WBPROJECT && dob->do_DefaultTool && t->tool[0] &&
-                        !Stricmp((STRPTR)base((char *)dob->do_DefaultTool), (STRPTR)base(t->tool))) {
+                        same_program((char *)dob->do_DefaultTool, t->tool)) {
                         const char *k = file_type(path);
                         if (k && !Stricmp((STRPTR)k, (STRPTR)t->name)) {
                             found_icon *f = &found[nfound++];
@@ -475,7 +493,7 @@ static void switch_dir(const char *from, const char *to, int depth)
                 walk_path[strlen(walk_path) - 5] = 0;                   /* the file the icon belongs to */
                 if ((dob = GetDiskObject((STRPTR)walk_path))) {
                     match = dob->do_Type == WBPROJECT && dob->do_DefaultTool &&
-                            !Stricmp((STRPTR)base((char *)dob->do_DefaultTool), (STRPTR)base(from));
+                            same_program((char *)dob->do_DefaultTool, from);
                     FreeDiskObject(dob);
                 }
                 if (match) {
@@ -508,7 +526,7 @@ static int shell_switch(LONG *a)
     if (!exists(to)) Printf((STRPTR)"OpenTypes: note: %s isn't there (yet)\n", (LONG)to);
     for (i = 0; i < ntypes; i++) {
         ftype *t = &types[i];
-        if (!t->tool[0] || Stricmp((STRPTR)base(t->tool), (STRPTR)base(from)) || keeps_its_program(t->name))
+        if (!t->tool[0] || !same_program(t->tool, from) || keeps_its_program(t->name))
             continue;
         if (set_type(t, to, a[3] != 0)) {
             t->switched = 1;
