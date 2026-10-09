@@ -59,7 +59,6 @@
 const char version[] __attribute__((used)) = "$VER: OpenSpeaker 0.1 (6.10.2026) OpenPrefs, Dalsin Limited";
 
 struct IntuitionBase *IntuitionBase;
-struct Library *WorkbenchBase;
 struct GfxBase *GfxBase;
 struct Library *GadToolsBase, *LayersBase, *CxBase;
 

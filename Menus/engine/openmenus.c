@@ -82,7 +82,6 @@ struct Device *TimerBase;
 struct RxsLib *RexxSysBase;
 struct Library *AslBase;
 struct Library *KeymapBase;
-struct Library *WorkbenchBase;
 static int wb_hold;                            /* Workbench is shutting down or shut: no bar window until it is back */
 
 /* ---- files and settings --------------------------------------------------- */
