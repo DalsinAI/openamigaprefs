@@ -1027,13 +1027,33 @@ static void bubble_on(int i)
     bubble_off();
     if ((bubble = OpenWindowTags(NULL, WA_PubScreen, (ULONG)scr, WA_Left, x, WA_Top, y, WA_Width, bw, WA_Height, bh,
                                  WA_Borderless, TRUE, WA_SmartRefresh, TRUE, WA_Activate, FALSE, WA_RMBTrap, TRUE, TAG_DONE))) {
-        struct DrawInfo *dri = GetScreenDrawInfo(scr);
         struct RastPort *b = bubble->RPort;
-        SetAPen(b, dri ? dri->dri_Pens[SHINEPEN] : 2); RectFill(b, 1, 1, bw - 2, bh - 2);
-        SetAPen(b, dri ? dri->dri_Pens[SHADOWPEN] : 1);
-        Move(b, 1, 0); Draw(b, bw - 2, 0); Move(b, bw - 1, 1); Draw(b, bw - 1, bh - 2);
-        Move(b, bw - 2, bh - 1); Draw(b, 1, bh - 1); Move(b, 0, bh - 2); Draw(b, 0, 1);
-        SetAPen(b, dri ? dri->dri_Pens[TEXTPEN] : 1); SetDrMd(b, JAM1);
+        struct DrawInfo *dri = GetScreenDrawInfo(scr);
+        /* the screen's font (Font prefs' Screen text), as the labels under the icons: a window's own is Topaz */
+        SetFont(b, scr->RastPort.Font);
+        if (card) {
+            /* the shelf's tint, and its rim as the frame */
+            ULONG *px = AllocVec(bw * bh * 4, MEMF_ANY);
+            if (px) {
+                ULONG fill = 0xff000000UL | (ULONG)tint.r << 16 | (ULONG)tint.g << 8 | (ULONG)tint.b;
+                ULONG edge = 0xff000000UL | (ULONG)sep_c.r << 16 | (ULONG)sep_c.g << 8 | (ULONG)sep_c.b;
+                for (int yy = 0; yy < bh; yy++)
+                    for (int xx = 0; xx < bw; xx++)
+                        px[yy * bw + xx] = xx == 0 || yy == 0 || xx == bw - 1 || yy == bh - 1 ? edge : fill;
+                WritePixelArray(px, 0, 0, bw * 4, b, 0, 0, bw, bh, RECTFMT_ARGB);
+                FreeVec(px);
+            }
+        } else if (tint_pen >= 0) {
+            SetAPen(b, tint_pen); RectFill(b, 0, 0, bw - 1, bh - 1);
+            SetAPen(b, sep_pen >= 0 ? sep_pen : (dri ? dri->dri_Pens[SHADOWPEN] : 1));
+            Move(b, 0, 0); Draw(b, bw - 1, 0); Draw(b, bw - 1, bh - 1); Draw(b, 0, bh - 1); Draw(b, 0, 0);
+        } else {
+            SetAPen(b, dri ? dri->dri_Pens[SHINEPEN] : 2); RectFill(b, 1, 1, bw - 2, bh - 2);
+            SetAPen(b, dri ? dri->dri_Pens[SHADOWPEN] : 1);
+            Move(b, 1, 0); Draw(b, bw - 2, 0); Move(b, bw - 1, 1); Draw(b, bw - 1, bh - 2);
+            Move(b, bw - 2, bh - 1); Draw(b, 1, bh - 1); Move(b, 0, bh - 2); Draw(b, 0, 1);
+        }
+        SetAPen(b, dot_pen >= 0 ? dot_pen : dri ? dri->dri_Pens[TEXTPEN] : 1); SetDrMd(b, JAM1);
         Move(b, 7, 3 + b->TxBaseline); Text(b, (STRPTR)name, n);
         if (dri) FreeScreenDrawInfo(scr, dri);
         bubble_for = i;
