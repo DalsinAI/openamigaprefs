@@ -367,8 +367,8 @@ static void pop_open(void)
     (ng.ng_LeftEdge = (gx), ng.ng_TopEdge = (gy), ng.ng_Width = (gw), ng.ng_Height = (gh), ng.ng_GadgetText = (STRPTR)(text), \
      ng.ng_Flags = (flags), ng.ng_GadgetID = (id), g = pg[id] = CreateGadget(kind, g, &ng, __VA_ARGS__, TAG_DONE))
 #define PSLIDER(id, gy, text) \
-    PG(SLIDER_KIND, id, X, gy, W - X - 44, lh - 2, text, PLACETEXT_LEFT, GTSL_Min, 0, GTSL_Max, 100, GTSL_Level, 0, \
-       GTSL_LevelFormat, (ULONG)"%3ld%%", GTSL_MaxLevelLen, 4, GTSL_LevelPlace, PLACETEXT_RIGHT, GA_RelVerify, TRUE, GA_Immediate, TRUE)
+    PG(SLIDER_KIND, id, X, gy, W - X - 64, lh - 2, text, PLACETEXT_LEFT, GTSL_Min, 0, GTSL_Max, 100, GTSL_Level, 0, \
+       GTSL_LevelFormat, (ULONG)"%ld%%", GTSL_MaxLevelLen, 6, GTSL_LevelPlace, PLACETEXT_RIGHT, GA_RelVerify, TRUE, GA_Immediate, TRUE)
     PG(CHECKBOX_KIND, P_MUTE, W - 84, 4, 26, fh + 3, "Mute", PLACETEXT_RIGHT, GTCB_Scaled, TRUE);
     row = fh + 14;
     PSLIDER(P_VOL, row, board ? "Volume" : "Volume (AHI)"); row += lh + 2;
