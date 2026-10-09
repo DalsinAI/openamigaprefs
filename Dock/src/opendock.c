@@ -50,7 +50,7 @@
 
 #include "od_dock.h"
 
-const char version[] __attribute__((used)) = "$VER: OpenDock 0.4 (8.10.2026) OpenPrefs, Dalsin Limited";
+const char version[] __attribute__((used)) = "$VER: OpenDock 0.5 (10.10.2026) OpenPrefs, Dalsin Limited";
 
 #define PREFS_ENV "ENV:OpenDock/Dock"
 #define PREFS_ENVARC "ENVARC:OpenDock/Dock"
@@ -483,7 +483,7 @@ static int hit(int x, int y)
 static void layout(int *w, int *h)
 {
     struct Rectangle r;
-    int label = dock.labels ? scr->RastPort.TxHeight + 2 : 0, thick, most = 0, margin, rows;
+    int label = dock.labels ? scr->RastPort.TxHeight + 2 : 0, thick, most = 0, margin, rows, trim;
     big = od_cell(dock.size);
     standing = dock.place == OD_LEFT || dock.place == OD_RIGHT;
     /* a cell fits the largest icon */
@@ -517,6 +517,11 @@ static void layout(int *w, int *h)
     if (apad < 6 - margin) apad = 6 - margin;
     if (apad < 2) apad = 2;
     rows = apad - 1 + margin;                      /* between the shelf's edge line and the nearest icon */
+    /* 0.5 (10 October 2026): ten pixels less between the shelf's edge and the icons, above and below
+     * (at the ends of a standing shelf, left and right), kept so the dot still has room */
+    trim = rows - 5 < 10 ? (rows - 5 > 0 ? rows - 5 : 0) : 10;
+    apad -= trim;
+    rows -= trim;
     dot_big = big >= 40 && rows >= 7;
     dot_at = 1 + (rows - 1) / 2;
     thick = (standing ? cellw : cellh) + 2 * apad;
@@ -695,6 +700,7 @@ static void each_separator(int W, int H, void (*fn)(void *, int, int, int, int),
     int inset;
     shelf(W, H, &x0, &y0, &x1, &y1);
     inset = apad + (standing ? cellw : cellh) / 8;
+    if (inset < 3) inset = 3;
     for (int i = 0; i < dock.n; i++) {
         int s = item_size(i);
         if (pos + s > (standing ? H : W) - endpad) break;
@@ -1075,6 +1081,60 @@ static ULONG behind_sig(void)
 
 static ULONG seen_sig, moving_sig;
 static int still;
+static int stale_wait;                             /* ticks to wait after a copy made for staleness */
+
+/* True when the screen beside the dock (a line along its screen side) no longer matches the copy of what
+ * is behind it: the picture on the desktop was drawn or changed after the dock opened, or a window that
+ * was over the dock's place when it opened has gone. Only on a graphics card, and only where the desktop
+ * itself shows beside the dock. */
+static int behind_stale(void)
+{
+    int n, along_x = !standing, diff = 0, count = 0;
+    int lx, ly, W, H;
+    ULONG *screen_px, *copy_px;
+    struct RastPort brp2;
+    if (!win || !behind || !card || !CyberGfxBase) return 0;
+    W = win->Width; H = win->Height;
+    n = along_x ? W : H;
+    /* the line beside the dock, on the side the screen's edge isn't */
+    if (along_x) { lx = win->LeftEdge; ly = dock.place == OD_TOP ? win->TopEdge + H : win->TopEdge - 1; }
+    else { ly = win->TopEdge; lx = dock.place == OD_LEFT ? win->LeftEdge + W : win->LeftEdge - 1; }
+    if (lx < 0 || ly < 0 || lx >= scr->Width || ly >= scr->Height) return 0;
+    if (along_x ? lx + n > scr->Width : ly + n > scr->Height) return 0;
+    {
+        int i, ok = 1;
+        LockLayerInfo(&scr->LayerInfo);
+        for (i = 0; i < n && ok; i += 16) {
+            struct Layer *l = WhichLayer(&scr->LayerInfo, lx + (along_x ? i : 0), ly + (along_x ? 0 : i));
+            if (!l || !l->Window || !(((struct Window *)l->Window)->Flags & WFLG_BACKDROP)) ok = 0;   /* a window is over the desktop there */
+        }
+        UnlockLayerInfo(&scr->LayerInfo);
+        if (!ok) return 0;
+    }
+    screen_px = AllocVec(n * 4, MEMF_ANY);
+    copy_px = AllocVec(n * 4, MEMF_ANY);
+    if (screen_px && copy_px) {
+        InitRastPort(&brp2);
+        brp2.BitMap = behind;
+        ReadPixelArray(screen_px, 0, 0, along_x ? n * 4 : 4, &scr->RastPort, lx, ly, along_x ? n : 1, along_x ? 1 : n, RECTFMT_ARGB);
+        {
+            /* the copy's own line on that side */
+            int cx = along_x ? 0 : (dock.place == OD_LEFT ? W - 1 : 0), cy = along_x ? (dock.place == OD_TOP ? H - 1 : 0) : 0;
+            ReadPixelArray(copy_px, 0, 0, along_x ? n * 4 : 4, &brp2, cx, cy, along_x ? n : 1, along_x ? 1 : n, RECTFMT_ARGB);
+        }
+        for (int i = 0; i < n; i += 4) {
+            ULONG a = screen_px[i], b = copy_px[i];
+            int dr = (int)((a >> 16) & 255) - (int)((b >> 16) & 255), dg = (int)((a >> 8) & 255) - (int)((b >> 8) & 255),
+                db = (int)(a & 255) - (int)(b & 255);
+            diff += (dr < 0 ? -dr : dr) + (dg < 0 ? -dg : dg) + (db < 0 ? -db : db);
+            count++;
+        }
+        diff = count ? diff / count / 3 : 0;
+    }
+    if (screen_px) FreeVec(screen_px);
+    if (copy_px) FreeVec(copy_px);
+    return diff > 14;
+}
 
 /* Called ten times a second. True once a window has been dropped behind the
  * dock (what is there changed, then stayed put for 0.3 seconds, so a window
@@ -1133,7 +1193,10 @@ static int open_dock(struct Menu *menus)
         if (over && behind && behind_w == w && behind_h == h) { kept = behind; behind = NULL; }
         free_bitmaps();
         behind = kept;
-        if (!behind && !over) {                    /* a solid shelf too: its corners are rounded */
+        /* A copy even with a window over the place (0.5): the screen as it shows, the best there is; once
+         * the window is gone behind_stale() sees the dock no longer matches its neighbours and copies afresh.
+         * Without one the shelf's corners and the room round it were a grey slab. */
+        if (!behind) {
             if ((behind = AllocBitMap(w, h, depth, 0, scr->RastPort.BitMap)))
                 BltBitMap(scr->RastPort.BitMap, x, y, behind, 0, 0, w, h, 0xc0, 0xff, NULL);
         }
@@ -1152,7 +1215,7 @@ static int open_dock(struct Menu *menus)
     }
     win = OpenWindowTags(NULL, WA_PubScreen, (ULONG)scr, WA_Left, x, WA_Top, y, WA_Width, w, WA_Height, h,
                          WA_Borderless, TRUE, WA_SmartRefresh, TRUE, WA_NewLookMenus, TRUE,
-                         WA_ScreenTitle, (ULONG)"OpenDock 0.3",
+                         WA_ScreenTitle, (ULONG)"OpenDock 0.5",
                          WA_IDCMP, IDCMP_MOUSEBUTTONS | IDCMP_MENUPICK | IDCMP_REFRESHWINDOW | IDCMP_INACTIVEWINDOW |
                                    IDCMP_ACTIVEWINDOW, TAG_DONE);
     if (!win) { free_bitmaps(); return 0; }
@@ -1289,6 +1352,8 @@ int main(void)
             WaitIO((struct IORequest *)tr);
             check_hover();
             if (behind_changed()) relayout(menus);
+            else if (ticks % 10 == 9 && stale_wait <= 0 && behind_stale()) { stale_wait = 30; relayout(menus); }
+            if (stale_wait > 0) stale_wait--;
             if (++ticks >= 20) { ticks = 0; check_running(); }
             tr->tr_time.tv_secs = 0; tr->tr_time.tv_micro = 100000;
             SendIO((struct IORequest *)tr);
