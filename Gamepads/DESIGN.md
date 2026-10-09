@@ -50,6 +50,8 @@ moves here from OpenUSB Prefs. MIT, Copyright (c) 2026 Dalsin Limited.
   shakes a pad that can. The Advanced view adds the raw buttons, axes and
   hat as the device reports them. The view is as tall as the font asks,
   and shorter when the window would not fit the screen.
+  [0.1's view beside 0.2's](docs/testview-0.1-and-0.2.png), on 16-bit and
+  8-bit RTG screens in the Open and Graphite themes.
 - **Mapping:** Built in, or Your own. **Map...** asks for each part of the
   layout in turn ("Press the bottom face button", ... "Pull the right
   trigger"), with **Skip** for what the pad lacks (shown only while Map...
