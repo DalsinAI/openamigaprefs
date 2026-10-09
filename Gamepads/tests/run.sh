@@ -6,3 +6,5 @@ HERE=$(cd "$(dirname "$0")" && pwd)
 OUT=${TMPDIR:-/tmp}/gp_core_test
 ${CC:-cc} -std=gnu99 -Wall -Wextra -Werror -O2 -fsanitize=address,undefined -I"$HERE/../src" -o "$OUT" "$HERE/test_gp_core.c" "$HERE/../src/gp_core.c"
 "$OUT"
+${CC:-cc} -std=gnu99 -Wall -Wextra -Werror -O2 -fsanitize=address,undefined -I"$HERE/../src" -o "$OUT-pad" "$HERE/test_gp_pad.c" "$HERE/../src/gp_pad.c"
+"$OUT-pad" ${PICTURES:-}

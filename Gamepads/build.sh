@@ -14,5 +14,5 @@ OUT=${1:-$HERE/build/os3}
 CFLAGS="-noixemul -m68020 -std=gnu99 -Wall -Werror -O2 -fno-delete-null-pointer-checks -fno-common -I$HERE/src -I$HERE/include"
 mkdir -p "$OUT"
 S="$HERE/src"
-"$CC" $CFLAGS -o "$OUT/Gamepads" "$S/gamepads.c" "$S/gp_core.c"
+"$CC" $CFLAGS -o "$OUT/Gamepads" "$S/gamepads.c" "$S/gp_core.c" "$S/gp_pad.c" "$S/gp_draw.c"
 echo "$OUT/Gamepads ($(wc -c < "$OUT/Gamepads") bytes)"

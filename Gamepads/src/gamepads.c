@@ -1,4 +1,4 @@
-/* OpenPrefs Gamepads 0.1: game controllers, through OpenInput
+/* OpenPrefs Gamepads 0.2: game controllers, through OpenInput
  * (openinput.library; design: DESIGN.md, and openamigainput's
  * Design-OpenInput.md section 8).
  *
@@ -46,8 +46,10 @@
 #include <stdlib.h>
 
 #include "gp_core.h"
+#include "gp_pad.h"
+#include "gp_draw.h"
 
-const char version[] __attribute__((used)) = "$VER: Gamepads 0.1 (8.10.2026) OpenPrefs, Dalsin Limited";
+const char version[] __attribute__((used)) = "$VER: Gamepads 0.2 (9.10.2026) OpenPrefs, Dalsin Limited";
 
 struct Library *OpenInputBase;
 
@@ -105,7 +107,7 @@ static gp_input map_in[GP_TARGETS];
 enum {
     G_LIST, G_KIND, G_MAKER, G_FROM, G_MAPPED, G_FEEDS,
     G_RUMBLE, G_RAW, G_OTHER,
-    G_MAPCHOICE, G_MAP, G_SKIP, G_MAPLINE, G_MAPTEXT,
+    G_MAPCHOICE, G_MAP, G_SKIP, G_MAPLINE,
     G_PATCH, G_PATCHTEXT, G_PORT, G_AS, G_WHICH, G_PATCHNOTE, G_MOUSESTICK,
     G_STATUS, G_SAVE, G_USE, G_TEST, G_CANCEL, G_COUNT
 };
@@ -123,7 +125,7 @@ static struct Window *win;
 static struct Screen *scr;
 static struct DrawInfo *dri;
 static char status_text[120], patch_text[80], kind_text[40], maker_text[40], from_text[40], mapped_text[48], feeds_text[60];
-static char raw_text[120], other_text[100], map_summary[100], map_line[MAPLEN];
+static char raw_text[120], other_text[100], map_line[MAPLEN];
 static int box_x, box_y, box_w, box_h;                /* the test view */
 
 #define SET(id, ...) do { if (gad[id]) GT_SetGadgetAttrs(gad[id], win, NULL, __VA_ARGS__, TAG_DONE); } while (0)
@@ -372,6 +374,17 @@ static void status(const char *s)
     SET(G_STATUS, GTTX_Text, (ULONG)status_text);
 }
 
+/* Skip is in the window only while Map... runs (it is last in the gadget list, so taking it out leaves the rest linked) */
+static int skip_shown;
+static void show_skip(int on)
+{
+    struct Gadget *k = gad[G_SKIP];
+    if (!win || !k || on == skip_shown) return;
+    if (on) { AddGList(win, k, ~0, 1, NULL); RefreshGList(k, win, NULL, 1); }
+    else { RemoveGList(win, k, 1); EraseRect(win->RPort, k->LeftEdge, k->TopEdge, k->LeftEdge + k->Width - 1, k->TopEdge + k->Height - 1); }
+    skip_shown = on;
+}
+
 static void show_info(void)
 {
     struct OILegacyPort lp;
@@ -400,13 +413,9 @@ static void show_info(void)
     SET(G_RUMBLE, GA_Disabled, !handle || !(sel.oci_Flags & OICF_RUMBLE));
     map_line[0] = 0;
     if (have_lib && sel_id) OIN_GetMapping(sel.oci_GUID, (STRPTR)map_line, sizeof map_line);
-    gp_mapping_summary(map_line, map_summary, sizeof map_summary);
-    if (!map_line[0]) strcpy(map_summary, sel.oci_Source == OISRC_AMIGAPORT || sel.oci_Source == OISRC_AMIGACHROME ?
-                             "Mapped by its source" : "None yet: use Map...");
     SET(G_MAPCHOICE, GTCY_Active, sel_id && own_mapping(sel.oci_GUID) ? 1 : 0, GA_Disabled, !sel_id || map_step >= 0);
     SET(G_MAP, GA_Disabled, !handle || map_step >= 0);
-    SET(G_SKIP, GA_Disabled, map_step < 0);
-    SET(G_MAPTEXT, GTTX_Text, (ULONG)map_summary);
+    show_skip(map_step >= 0);
     SET(G_MAPLINE, GTST_String, (ULONG)map_line, GA_Disabled, !sel_id);
 }
 
@@ -432,57 +441,11 @@ static void show_list(void)
     if (gad[G_WHICH]) show_patch();
 }
 
-/* ---- the test view ------------------------------------------------------------------------------ */
+/* ---- the test view (gp_draw.c draws it) ------------------------------------------------------ */
 
-static void box(struct RastPort *rp, int x, int y, int w, int h, int lit, const char *label)
-{
-    SetAPen(rp, dri->dri_Pens[lit ? FILLPEN : BACKGROUNDPEN]);
-    RectFill(rp, x + 1, y + 1, x + w - 2, y + h - 2);
-    SetAPen(rp, dri->dri_Pens[lit ? SHINEPEN : SHADOWPEN]);
-    Move(rp, x, y + h - 1); Draw(rp, x, y); Draw(rp, x + w - 1, y);
-    SetAPen(rp, dri->dri_Pens[lit ? SHADOWPEN : SHINEPEN]);
-    Draw(rp, x + w - 1, y + h - 1); Draw(rp, x, y + h - 1);
-    if (label) {
-        int n = strlen(label), tw;
-        while (n > 0 && (tw = TextLength(rp, (STRPTR)label, n)) > w - 4) n--;
-        tw = TextLength(rp, (STRPTR)label, n);
-        SetAPen(rp, dri->dri_Pens[lit ? FILLTEXTPEN : TEXTPEN]);
-        SetDrMd(rp, JAM1);
-        Move(rp, x + (w - tw) / 2, y + (h - rp->TxHeight) / 2 + rp->TxBaseline + 1);
-        Text(rp, (STRPTR)label, n);
-    }
-}
-
-static void bar(struct RastPort *rp, int x, int y, int w, int h, int value, const char *label)
-{
-    int fill = value <= 0 ? 0 : (int)((long)(w - 2) * value / 32767);
-    box(rp, x, y, w, h, 0, NULL);
-    if (fill > 0) { SetAPen(rp, dri->dri_Pens[FILLPEN]); RectFill(rp, x + 1, y + 1, x + fill, y + h - 2); }
-    if (label) {
-        int tw = TextLength(rp, (STRPTR)label, strlen(label));
-        SetAPen(rp, dri->dri_Pens[TEXTPEN]); SetDrMd(rp, JAM1);
-        Move(rp, x + (w - tw) / 2, y + (h - rp->TxHeight) / 2 + rp->TxBaseline + 1);
-        Text(rp, (STRPTR)label, strlen(label));
-    }
-}
-
-static void stick(struct RastPort *rp, int cx, int cy, int r, int x, int y, int click, const char *label)
-{
-    int px = cx + (int)((long)x * (r - 3) / 32768), py = cy + (int)((long)y * (r - 3) / 32768);
-    SetAPen(rp, dri->dri_Pens[click ? FILLPEN : BACKGROUNDPEN]);
-    RectFill(rp, cx - r + 1, cy - r + 1, cx + r - 1, cy + r - 1);
-    SetAPen(rp, dri->dri_Pens[SHADOWPEN]);
-    DrawEllipse(rp, cx, cy, r, r);
-    Move(rp, cx - r, cy); Draw(rp, cx + r, cy); Move(rp, cx, cy - r); Draw(rp, cx, cy + r);
-    SetAPen(rp, dri->dri_Pens[click ? FILLTEXTPEN : FILLPEN]);
-    RectFill(rp, px - 2, py - 2, px + 2, py + 2);
-    if (label) {
-        int tw = TextLength(rp, (STRPTR)label, strlen(label));
-        SetAPen(rp, dri->dri_Pens[TEXTPEN]); SetDrMd(rp, JAM1);
-        Move(rp, cx - tw / 2, cy + r + rp->TxBaseline + 3);
-        Text(rp, (STRPTR)label, strlen(label));
-    }
-}
+static struct gpv_view *view;
+static int view_dirty = 1;                            /* draw it all at the next draw_test */
+static LONG dead_zone = -1;                           /* ENV:OpenInput/DeadZone, read once */
 
 static const char *label_of(ULONG b)
 {
@@ -490,71 +453,75 @@ static const char *label_of(ULONG b)
     return s ? (const char *)s : "?";
 }
 
-static void draw_test(void)
+static int pad_kind(void)
 {
+    if (sel.oci_Type == OITYPE_CD32PAD || sel.oci_Family == OIFAM_CD32) return GP_PAD_CD32;
+    if (sel.oci_Type == OITYPE_JOYSTICK || sel.oci_Family == OIFAM_AMIGA) return GP_PAD_JOYSTICK;
+    return GP_PAD_MODERN;
+}
+
+/* The dead zone the sticks are drawn with: OpenInput's (ENV:OpenInput/DeadZone),
+ * or a tenth of the travel, the rest zone a game usually takes, when none is set. */
+static int stick_dead_zone(void)
+{
+    if (dead_zone < 0) {
+        char t[16];
+        LONG v = 0, i;
+        if (read_file("ENV:OpenInput/DeadZone", t, sizeof t) > 0)
+            for (i = 0; t[i] >= '0' && t[i] <= '9'; i++) v = v * 10 + (t[i] - '0');
+        dead_zone = v > 0 ? (v > 32767 ? 32767 : v) : 3277;
+    }
+    return (int)dead_zone;
+}
+
+static void draw_test(int force)
+{
+    gpv_state s;
+    int i, fam = sel.oci_Family, x0 = box_x + 2, y0 = box_y + 1, w = box_w - 4, h = box_h - 2;
     struct RastPort *rp;
-    int x0, y0, w, h, fh, cw, row1, row2, cx, bw, i;
-    ULONG b = (sel_id && !sel_gone) ? st.ois_Buttons : 0;
     if (!win || !box_w) return;
     rp = win->RPort;
-    fh = rp->TxHeight;
-    x0 = box_x + 2; y0 = box_y + 1; w = box_w - 4; h = box_h - 2;
-    SetAPen(rp, dri->dri_Pens[BACKGROUNDPEN]);
-    RectFill(rp, x0, y0, x0 + w - 1, y0 + h - 1);
-    if (!sel_id) {
+    if (!sel_id || !view) {
         const char *t = have_lib ? "No game controller is connected." : "OpenInput (LIBS:openinput.library 1.2) is not installed.";
+        SetAPen(rp, dri->dri_Pens[BACKGROUNDPEN]); RectFill(rp, x0, y0, x0 + w - 1, y0 + h - 1);
         SetAPen(rp, dri->dri_Pens[TEXTPEN]); SetDrMd(rp, JAM1);
-        Move(rp, x0 + 8, y0 + h / 2); Text(rp, (STRPTR)t, strlen(t));
+        Move(rp, x0 + (w - TextLength(rp, (STRPTR)t, strlen(t))) / 2, y0 + h / 2); Text(rp, (STRPTR)t, strlen(t));
+        view_dirty = 1;
         return;
     }
-    cw = fh + 4;
-    bw = TextLength(rp, (STRPTR)"Triangle", 8) + 8;
-    /* the shoulders and triggers */
-    row1 = y0 + 3;
-    bar(rp, x0 + 6, row1, 60, fh + 4, (sel_id && !sel_gone) ? st.ois_Axes[OIAXIS_TRIGGERLEFT] : 0, "LT");
-    {   /* the pad's own names ("Reverse"), or LB and RB where "Left shoulder" won't fit */
-        const char *ls = label_of(OIB_LEFTSHOULDER), *rs = label_of(OIB_RIGHTSHOULDER);
-        if (TextLength(rp, (STRPTR)ls, strlen(ls)) > bw - 4) ls = "LB";
-        if (TextLength(rp, (STRPTR)rs, strlen(rs)) > bw - 4) rs = "RB";
-        box(rp, x0 + 72, row1, bw, fh + 4, b & OIBF(OIB_LEFTSHOULDER), ls);
-        box(rp, x0 + w - 72 - bw, row1, bw, fh + 4, b & OIBF(OIB_RIGHTSHOULDER), rs);
+    memset(&s, 0, sizeof s);
+    s.kind = pad_kind();
+    s.family = fam;
+    s.connected = !sel_gone;
+    s.buttons = st.ois_Buttons;
+    for (i = 0; i < 6; i++) s.axes[i] = st.ois_Axes[i];
+    s.deadzone = stick_dead_zone();
+    for (i = 0; i < 4; i++) s.face[i] = label_of(OIB_A + i);
+    if (s.kind == GP_PAD_JOYSTICK) { s.face[0] = "1"; s.face[1] = "2"; }
+    if (s.kind == GP_PAD_CD32) {
+        s.shoulder[0] = label_of(OIB_LEFTSHOULDER); s.shoulder[1] = label_of(OIB_RIGHTSHOULDER);
+        s.pill[0] = label_of(OIB_START);
+    } else if (fam == OIFAM_PLAYSTATION) {
+        s.shoulder[0] = "L1"; s.shoulder[1] = "R1"; s.trigger[0] = "L2"; s.trigger[1] = "R2"; s.pill[0] = "Share"; s.pill[1] = "Options";
+    } else if (fam == OIFAM_SWITCH || fam == OIFAM_8BITDO) {
+        s.shoulder[0] = "L"; s.shoulder[1] = "R"; s.trigger[0] = "ZL"; s.trigger[1] = "ZR"; s.pill[0] = "-"; s.pill[1] = "+";
+    } else {
+        s.shoulder[0] = "LB"; s.shoulder[1] = "RB"; s.trigger[0] = "LT"; s.trigger[1] = "RT";
+        s.pill[0] = fam == OIFAM_XBOX ? "View" : "Back"; s.pill[1] = fam == OIFAM_XBOX ? "Menu" : "Start";
     }
-    bar(rp, x0 + w - 66, row1, 60, fh + 4, (sel_id && !sel_gone) ? st.ois_Axes[OIAXIS_TRIGGERRIGHT] : 0, "RT");
-    /* the d-pad */
-    row2 = row1 + fh + 10;
-    box(rp, x0 + 8 + cw, row2, cw, cw, b & OIBF(OIB_DPAD_UP), NULL);
-    box(rp, x0 + 8, row2 + cw, cw, cw, b & OIBF(OIB_DPAD_LEFT), NULL);
-    box(rp, x0 + 8 + 2 * cw, row2 + cw, cw, cw, b & OIBF(OIB_DPAD_RIGHT), NULL);
-    box(rp, x0 + 8 + cw, row2 + 2 * cw, cw, cw, b & OIBF(OIB_DPAD_DOWN), NULL);
-    /* the left stick */
-    stick(rp, x0 + 8 + 3 * cw + 14 + cw + 4, row2 + cw + cw / 2, cw + 4, st.ois_Axes[OIAXIS_LEFTX], st.ois_Axes[OIAXIS_LEFTY],
-          b & OIBF(OIB_LEFTSTICK), "L");
-    /* Back, Guide, Start */
-    {
-        int sw = TextLength(rp, (STRPTR)"Options", 7) + 8, total = 3 * sw + 8;
-        cx = x0 + (w - total) / 2 - 40;               /* left of the right stick */
-        box(rp, cx, row2 + cw / 2, sw, fh + 4, b & OIBF(OIB_BACK), label_of(OIB_BACK));
-        box(rp, cx + sw + 4, row2 + cw / 2, sw, fh + 4, b & OIBF(OIB_GUIDE), label_of(OIB_GUIDE));
-        box(rp, cx + 2 * sw + 8, row2 + cw / 2, sw, fh + 4, b & OIBF(OIB_START), label_of(OIB_START));
-    }
-    /* the face buttons: Y on top, X left, B right, A at the bottom */
-    cx = x0 + w - 8 - bw - 2;
-    box(rp, cx - bw / 2, row2, bw, fh + 4, b & OIBF(OIB_Y), label_of(OIB_Y));
-    box(rp, cx - bw - 1, row2 + fh + 5, bw, fh + 4, b & OIBF(OIB_X), label_of(OIB_X));
-    box(rp, cx + 1, row2 + fh + 5, bw, fh + 4, b & OIBF(OIB_B), label_of(OIB_B));
-    box(rp, cx - bw / 2, row2 + 2 * (fh + 5), bw, fh + 4, b & OIBF(OIB_A), label_of(OIB_A));
-    /* the right stick, left of the face buttons */
-    stick(rp, cx - bw - 1 - 14 - cw - 4, row2 + 2 * cw + 4, cw + 4, st.ois_Axes[OIAXIS_RIGHTX], st.ois_Axes[OIAXIS_RIGHTY],
-          b & OIBF(OIB_RIGHTSTICK), "R");
-    /* the rest, in words */
+    gpv_draw(view, rp, x0, y0, w, h, &s, force || view_dirty);
+    view_dirty = 0;
+    /* what is pressed, in words: every button by the pad's own name */
     other_text[0] = 0;
-    for (i = OIB_MISC1; i < OIB_COUNT; i++)
-        if (b & OIBF(i)) {
-            const char *l = label_of(i);
-            if (strlen(other_text) + strlen(l) + 3 < sizeof other_text) { if (other_text[0]) strcat(other_text, ", "); strcat(other_text, l); }
-        }
     if (sel_gone) strcpy(other_text, "Not connected: it shows again when it comes back.");
-    else if (!other_text[0]) strcpy(other_text, map_step >= 0 ? "" : "Press the buttons and move the sticks: they light up here.");
+    else {
+        for (i = 0; i < OIB_COUNT; i++)
+            if (st.ois_Buttons & OIBF(i)) {
+                const char *l = label_of(i);
+                if (strlen(other_text) + strlen(l) + 12 < sizeof other_text) { strcat(other_text, other_text[0] ? ", " : "Pressed: "); strcat(other_text, l); }
+            }
+        if (!other_text[0] && map_step < 0) strcpy(other_text, "Press the buttons and move the sticks: they light up above.");
+    }
     SET(G_OTHER, GTTX_Text, (ULONG)other_text);
 }
 
@@ -647,12 +614,12 @@ static void map_tick(void)
 
 static void read_pad(int force)
 {
-    if (!handle) { if (force) { memset(&st, 0, sizeof st); draw_test(); } return; }
-    if (OIN_ReadState(handle, &st, sizeof st) == OIERR_GONE) { show_list(); memset(&st, 0, sizeof st); draw_test(); return; }
+    if (!handle) { if (force) { memset(&st, 0, sizeof st); draw_test(0); } return; }
+    if (OIN_ReadState(handle, &st, sizeof st) == OIERR_GONE) { show_list(); memset(&st, 0, sizeof st); draw_test(0); return; }
     OIN_ReadRaw(handle, &raw, sizeof raw);
     if (force || st.ois_Sequence != last_seq) {
         last_seq = st.ois_Sequence;
-        draw_test();
+        draw_test(0);
         show_raw();
     }
     map_tick();
@@ -757,7 +724,7 @@ static int gui_once(void)
     APTR vi;
     struct Gadget *glist = NULL, *g;
     struct NewGadget ng;
-    int fh, top, row, quit = 0, rc = RETURN_OK, W = 560, L = 10, X = 96, lh, i, listw = 270, ix;
+    int fh, top, row, quit = 0, rc = RETURN_OK, W = 560, L = 10, X = 96, lh, i, listw = 270, ix, pass, boxh, skip_x = 0, skip_y = 0;
     struct Menu *menu = NULL;
     ULONG sigs;
     if (!(scr = LockPubScreen(NULL))) return RETURN_FAIL;
@@ -768,8 +735,13 @@ static int gui_once(void)
     fh = scr->Font->ta_YSize;
     lh = fh + 6;
     top = scr->WBorTop + fh + 1 + 6;
+    boxh = 12 * fh + 70;
     list_pads();
 
+    /* twice, if need be: the test view as big as the font asks, but the window no taller than the screen */
+    for (pass = 0; pass < 2; pass++) {
+    glist = NULL;
+    memset(gad, 0, sizeof gad);
     g = CreateContext(&glist);
     memset(&ng, 0, sizeof ng);
     ng.ng_TextAttr = scr->Font;
@@ -792,7 +764,7 @@ static int gui_once(void)
 
     /* the test view: drawn by draw_test() */
     row += fh + 2;
-    box_x = L; box_y = row; box_w = W - 20; box_h = 3 * (fh + 4) + 3 * fh + 18 + 6;
+    box_x = L; box_y = row; box_w = W - 20; box_h = boxh;
     row += box_h + 2;
     G(TEXT_KIND, G_OTHER, L, row + 2, W - 20 - 96, fh + 2, NULL, 0, GTTX_Text, (ULONG)other_text);
     G(BUTTON_KIND, G_RUMBLE, W - 10 - 90, row, 90, lh - 2, "Rumble", 0, GA_Disabled, TRUE); row += lh;
@@ -802,8 +774,8 @@ static int gui_once(void)
     /* the mapping */
     G(CYCLE_KIND, G_MAPCHOICE, X, row, 120, lh, "Mapping", PLACETEXT_LEFT, GTCY_Labels, (ULONG)mapchoice_labels);
     G(BUTTON_KIND, G_MAP, X + 126, row, 80, lh, "Map...", 0, GA_Disabled, FALSE);
-    G(BUTTON_KIND, G_SKIP, X + 210, row, 60, lh, "Skip", 0, GA_Disabled, TRUE);
-    G(TEXT_KIND, G_MAPTEXT, X + 276, row, W - X - 276 - 10, lh, NULL, 0, GTTX_Text, (ULONG)map_summary); row += lh + 2;
+    skip_x = X + 210; skip_y = row;
+    row += lh + 2;
     if (advanced) { G(STRING_KIND, G_MAPLINE, X, row, W - X - 10, lh, "Line", PLACETEXT_LEFT, GTST_MaxChars, MAPLEN - 1); row += lh + 2; }
     row += 6;
 
@@ -831,9 +803,20 @@ static int gui_once(void)
         for (i = 0; i < 4; i++) G(BUTTON_KIND, ids[i], L + i * (bw + 10), row, bw, lh, names[i], 0, GA_Disabled, FALSE);
         row += lh + 6;
     }
+    /* Skip, last in the list: shown only while Map... runs (show_skip) */
+    G(BUTTON_KIND, G_SKIP, skip_x, skip_y, 60, lh, "Skip", 0, GA_Disabled, FALSE);
+    if (!g || pass) break;
+    {   int room = scr->Height - (scr->BarHeight + 4);              /* the window's top edge is there */
+        int need = row + scr->WBorBottom;                           /* the window's whole height */
+        if (need <= room || boxh <= 96) break;
+        boxh -= need - room;
+        if (boxh < 96) boxh = 96;
+        FreeGadgets(glist);
+    }
+    }
     if (!g) { rc = RETURN_FAIL; goto out; }
     menus[6].nm_Flags = CHECKIT | MENUTOGGLE | (advanced ? CHECKED : 0);
-    win = OpenWindowTags(NULL, WA_Title, (ULONG)"Gamepads", WA_ScreenTitle, (ULONG)"OpenPrefs Gamepads 0.1", WA_PubScreen, (ULONG)scr,
+    win = OpenWindowTags(NULL, WA_Title, (ULONG)"Gamepads", WA_ScreenTitle, (ULONG)"OpenPrefs Gamepads 0.2", WA_PubScreen, (ULONG)scr,
                          WA_Left, 40, WA_Top, scr->BarHeight + 4, WA_InnerWidth, W, WA_InnerHeight, row - scr->WBorTop - fh - 1,
                          WA_Gadgets, (ULONG)glist, WA_DragBar, TRUE, WA_DepthGadget, TRUE, WA_CloseGadget, TRUE, WA_Activate, TRUE,
                          WA_SmartRefresh, TRUE, WA_NewLookMenus, TRUE,
@@ -841,6 +824,10 @@ static int gui_once(void)
                                    CYCLEIDCMP | STRINGIDCMP | CHECKBOXIDCMP,
                          TAG_DONE);
     if (!win) { rc = RETURN_FAIL; goto out; }
+    skip_shown = 1;
+    show_skip(map_step >= 0);
+    if (!(view = gpv_open(scr, dri))) { rc = RETURN_FAIL; goto out; }
+    view_dirty = 1;
     if ((menu = CreateMenus(menus, TAG_DONE)) && LayoutMenus(menu, vi, GTMN_NewLookMenus, TRUE, TAG_DONE)) SetMenuStrip(win, menu);
     GT_RefreshWindow(win, NULL);
     /* the test view's frame and title */
@@ -854,7 +841,7 @@ static int gui_once(void)
     show_info();
     show_patch();
     read_pad(1);
-    draw_test();
+    draw_test(1);
     show_raw();
     if (map_step >= 0) map_ask(); else status(status_text);
 
@@ -883,7 +870,7 @@ static int gui_once(void)
                     mc = it->NextSelect;
                 }
             }
-            else if (cls == IDCMP_REFRESHWINDOW) { GT_BeginRefresh(win); GT_EndRefresh(win, TRUE); draw_test(); }
+            else if (cls == IDCMP_REFRESHWINDOW) { GT_BeginRefresh(win); GT_EndRefresh(win, TRUE); draw_test(1); }
             else if (cls == IDCMP_INTUITICKS) {
                 static int ticks;
                 read_pad(0);                                    /* in case a notification was missed */
@@ -965,7 +952,10 @@ static int gui_once(void)
 out:
     if (win) { ClearMenuStrip(win); CloseWindow(win); win = NULL; }
     if (menu) FreeMenus(menu);
+    if (!skip_shown && gad[G_SKIP]) FreeGadgets(gad[G_SKIP]);   /* out of the list: freed on its own */
+    skip_shown = 1;
     FreeGadgets(glist);
+    gpv_close(view); view = NULL;
     if (vi) FreeVisualInfo(vi);
     if (dri) { FreeScreenDrawInfo(scr, dri); dri = NULL; }
     UnlockPubScreen(NULL, scr);
