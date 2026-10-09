@@ -35,7 +35,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-static const char version[] = "$VER: OpenBlanker 1.0 (7.10.2026) MIT, Copyright (c) 2026 Dalsin Limited";
+static const char version[] __attribute__((used)) = "$VER: OpenBlanker 1.0 (7.10.2026) MIT, Copyright (c) 2026 Dalsin Limited";
 
 struct IntuitionBase *IntuitionBase;
 struct GfxBase *GfxBase;

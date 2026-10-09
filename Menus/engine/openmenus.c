@@ -67,7 +67,7 @@
 #include "om_kbd.h"
 #include "ogt_theme.h"
 
-static const char version[] = "$VER: OpenMenus 0.4 (6.10.2026) MIT, Copyright (c) 2026 Dalsin Limited";
+static const char version[] __attribute__((used)) = "$VER: OpenMenus 0.4 (6.10.2026) MIT, Copyright (c) 2026 Dalsin Limited";
 
 #define PREFS_ENV "ENV:OpenMenus/Menus"
 #define TRAY_DIR "ENV:OpenMenus/Tray"     /* one file per tray program: "width order" (OpenSpeaker, the clock) */

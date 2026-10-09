@@ -30,7 +30,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-static const char version[] = "$VER: Windows 0.4 (8.10.2026) OpenPrefs, MIT, Copyright (c) 2026 Dalsin Limited";
+static const char version[] __attribute__((used)) = "$VER: Windows 0.4 (8.10.2026) OpenPrefs, MIT, Copyright (c) 2026 Dalsin Limited";
 
 #define PREFS_ENV "ENV:OpenPrefs/Windows"
 #define PREFS_ENVARC "ENVARC:OpenPrefs/Windows"
