@@ -117,7 +117,7 @@ static void read_tray(void)
     tray_w = tray_n = 0;
     if (dir && Examine(dir, fib) && fib->fib_DirEntryType > 0) {
         while (ExNext(dir, fib)) {
-            char path[96], *t;
+            char path[sizeof TRAY_DIR "/" + sizeof fib->fib_FileName], *t;
             long v;
             if (fib->fib_DirEntryType > 0) continue;
             snprintf(path, sizeof path, TRAY_DIR "/%s", fib->fib_FileName);
@@ -1408,10 +1408,11 @@ static void selected_paths(void)
 {
     rc_paths[0] = 0; rc_npaths = 0;
     for (int i = 0; i < rc_nicons; i++) {
-        char p[300];
+        char p[sizeof rc_win + sizeof rc_icons[0].name + 1];   /* the window's path, "/" and the name: never cut */
+        const int nl = (int)sizeof rc_icons[0].name - 1;
         if (!rc_icons[i].selected || rc_icons[i].kind == K_APPICON) continue;
-        if (!strcmp(rc_win, "root")) snprintf(p, sizeof p, rc_icons[i].kind == K_DISK ? "%s:" : "%s", rc_icons[i].name);
-        else snprintf(p, sizeof p, "%s%s%s", rc_win, rc_win[strlen(rc_win) - 1] == ':' ? "" : "/", rc_icons[i].name);
+        if (!strcmp(rc_win, "root")) snprintf(p, sizeof p, rc_icons[i].kind == K_DISK ? "%.*s:" : "%.*s", nl, rc_icons[i].name);
+        else snprintf(p, sizeof p, "%s%s%.*s", rc_win, !rc_win[0] || rc_win[strlen(rc_win) - 1] == ':' ? "" : "/", nl, rc_icons[i].name);
         if (strlen(rc_paths) + strlen(p) + 4 < sizeof rc_paths) {
             strcat(rc_paths, rc_paths[0] ? " \"" : "\""); strcat(rc_paths, p); strcat(rc_paths, "\"");
             rc_npaths++;

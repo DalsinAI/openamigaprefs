@@ -758,8 +758,13 @@ static void watch(void)
             now[n].wb = (w->Flags & WFLG_WBENCHWINDOW) != 0;
             /* a Workbench drawer, not its root window, takes a place when the switch says */
             now[n].drawer = now[n].wb && w->Title && strncmp((const char *)w->Title, "Workbench", 9);
-            program_of(w, now[n].prog, sizeof now[n].prog);      /* while the window is sure to be there */
-            make_key(w, now[n].prog, now[n].key, sizeof now[n].key);
+            {   /* the program's name while the window is sure to be there; the key from a copy
+                   of it (GCC 16 can't tell now[n].prog from now[n].key: -Wrestrict) */
+                char prog[sizeof now[0].prog];
+                program_of(w, prog, sizeof prog);
+                memcpy(now[n].prog, prog, sizeof prog);
+                make_key(w, prog, now[n].key, sizeof now[n].key);
+            }
             n++;
         }
     UnlockIBase(lock);
