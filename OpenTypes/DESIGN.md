@@ -97,8 +97,26 @@ We, 6 October 2026: replace MultiView with OpenView, keeping MultiView.
   whose kind was switched, change too. They're found first and changed after
   the walk.
 - Every change is backed up and listed like SET's, so `UNDO` puts it all back.
-- OpenUp runs `SWITCH MultiView TO SYS:Utilities/OpenPrint/OpenView SAVE IN
-  SYS:` when it installs OpenPrint, and `UNDO` when it is uninstalled.
+- OpenUp runs `SWITCH MultiView TO SYS:Utilities/OpenPrint/OpenView SAVE`
+  when it installs OpenPrint (the kinds of file only, no `IN`: icons that are
+  already there keep their own default tool), and `UNDO` when it is
+  uninstalled.
+
+### 4c. OpenTypes 0.2.1 (9 October 2026): the program compare
+
+0.2 compared two tool names as `Stricmp(base(a), base(b))`. GCC 6.5 called
+utility.library's Stricmp with A6 still holding dos.library (the second
+`base()`, which calls dos.library's FilePart, had set it), so the call went to
+a dos.library vector, returned 0, and every icon and every kind of file
+"named" the first program. OpenUp 0.6.14 to 0.7.0 (`SWITCH MultiView TO
+OpenView SAVE IN SYS:`) so changed the default tool of about 40 of AmigaOS
+3.2.3's own icons (datatype descriptors, pointer presets, DOSDrivers, the
+Picasso96 guides, Help) and of 16 default icons to OpenView.
+
+- `same_program()` compares two names with a plain loop, no library call
+  (`opentypes.c`, used by SCAN, SWITCH IN and SWITCH).
+- `tests/check_stricmp_a6.py` builds OpenTypes and fails when any call of
+  Stricmp in the machine code is made with another A6 than UtilityBase.
 
 ## 5. Phases
 
