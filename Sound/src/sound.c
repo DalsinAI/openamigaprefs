@@ -238,9 +238,13 @@ static int gui_once(void)
 #define G(kind, id, x, y, w, h, text, flags, ...) \
     (ng.ng_LeftEdge = (x), ng.ng_TopEdge = (y), ng.ng_Width = (w), ng.ng_Height = (h), ng.ng_GadgetText = (STRPTR)(text), \
      ng.ng_Flags = (flags), ng.ng_GadgetID = (id), g = gad[id] = CreateGadget(kind, g, &ng, __VA_ARGS__, TAG_DONE))
+/* GadTools sizes the level's field from MaxLevelLen times the font's widest-looking digit, which is not
+ * enough for "100%" in a proportional screen font such as CGTriumvirate 13: the % was cut ("100/", "55"
+ * for "55%"). Room for six characters, and the slider is 30 pixels shorter to make it. */
+#define LEVEL_CHARS 6
 #define SLIDER(id, y, text, max) \
-    G(SLIDER_KIND, id, X, y, W - X - 130, lh - 2, text, PLACETEXT_LEFT, GTSL_Min, 0, GTSL_Max, max, GTSL_Level, 0, \
-      GTSL_LevelFormat, (ULONG)"%3ld%%", GTSL_MaxLevelLen, 4, GTSL_LevelPlace, PLACETEXT_RIGHT, GA_RelVerify, TRUE, GA_Immediate, TRUE)
+    G(SLIDER_KIND, id, X, y, W - X - 160, lh - 2, text, PLACETEXT_LEFT, GTSL_Min, 0, GTSL_Max, max, GTSL_Level, 0, \
+      GTSL_LevelFormat, (ULONG)"%ld%%", GTSL_MaxLevelLen, LEVEL_CHARS, GTSL_LevelPlace, PLACETEXT_RIGHT, GA_RelVerify, TRUE, GA_Immediate, TRUE)
 
     /* the levels */
     row = top;
