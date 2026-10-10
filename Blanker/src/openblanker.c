@@ -10,7 +10,9 @@
  *     NOW      play the show at once, then go on watching
  *
  * A commodity: Exchange can disable, enable or quit it. Started again, the
- * running one plays the show at once.
+ * running one is left alone (1.1: it used to play the show at once, so a
+ * startup that lists OpenBlanker twice blanked the screen at boot); started
+ * again with NOW, it plays the show at once.
  *
  * MIT, Copyright (c) 2026 Dalsin Limited. */
 #include <exec/types.h>
@@ -35,7 +37,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-static const char version[] __attribute__((used)) = "$VER: OpenBlanker 1.0 (7.10.2026) MIT, Copyright (c) 2026 Dalsin Limited";
+static const char version[] __attribute__((used)) = "$VER: OpenBlanker 1.1 (10.10.2026) MIT, Copyright (c) 2026 Dalsin Limited";
 
 struct IntuitionBase *IntuitionBase;
 struct GfxBase *GfxBase;
@@ -45,6 +47,8 @@ static struct Task *me;
 static volatile ULONG idle_ticks;      /* seconds since the last key or mouse */
 static volatile int showing, woken, on = 1;
 #define SIG_WAKE SIGBREAKF_CTRL_E
+#define SIG_PLAY SIGBREAKF_CTRL_D     /* a second OpenBlanker NOW asks the running one to play the show */
+#define PORT_NAME "OpenBlanker"
 
 /* ---- the show: cards of styled lines --------------------------------------------------------- */
 
@@ -258,14 +262,28 @@ static int open_show(void)
     return 1;
 }
 
+/* The show ends cleanly (1.1): the pointer is the window's again, the window closes so Intuition has
+ * the Workbench's windows to redraw, the Workbench screen is brought to the front before ours goes
+ * (so the display is the Workbench's, not the show's last picture), the screen's bitmap is cleared
+ * and closed, and then the fonts, the pointer's sprite and the rest go. */
 static void close_show(void)
 {
     struct TextFont **f[] = { &f_title, &f_sans_big, &f_sans_mid, &f_sans_small, &f_serif, &f_serif_small };
     unsigned i;
-    for (i = 0; i < sizeof f / sizeof f[0]; i++) if (*f[i]) { CloseFont(*f[i]); *f[i] = NULL; }
+    int tries;
+    if (scr) SetRast(&scr->RastPort, P_BG);           /* nothing of the last card left in the picture */
     if (win) { ClearPointer(win); CloseWindow(win); win = NULL; }
+    {
+        struct Screen *wb = LockPubScreen((STRPTR)"Workbench");
+        if (wb) { ScreenToFront(wb); UnlockPubScreen(NULL, wb); }
+    }
+    if (scr) {
+        WaitBlit();
+        for (tries = 0; tries < 20 && !CloseScreen(scr); tries++) Delay(5);   /* a window of another program on it: wait for it */
+        scr = NULL;
+    }
+    for (i = 0; i < sizeof f / sizeof f[0]; i++) if (*f[i]) { CloseFont(*f[i]); *f[i] = NULL; }
     if (blank_sprite) { FreeVec(blank_sprite); blank_sprite = NULL; }
-    if (scr) { CloseScreen(scr); scr = NULL; }
 }
 
 static void play(void)
@@ -335,7 +353,18 @@ int main(int argc, char **argv)
         timeout = timeout_setting(args[0] ? *(LONG *)args[0] : 0);
     } else timeout = timeout_setting(0);
     me = FindTask(NULL);
+    {   /* already running: only OpenBlanker NOW does anything, and by a signal */
+        struct MsgPort *other;
+        Forbid();
+        other = FindPort((STRPTR)PORT_NAME);
+        if (other && other->mp_SigTask && now) Signal((struct Task *)other->mp_SigTask, SIG_PLAY);
+        Permit();
+        if (other) goto out;
+    }
     if (!(port = CreateMsgPort())) goto out;
+    port->mp_Node.ln_Name = (char *)PORT_NAME;
+    port->mp_Node.ln_Pri = 0;
+    AddPort(port);
     nb.nb_Port = port;
     if (!(broker = CxBroker(&nb, NULL))) goto out;    /* already running: it got CXCMD_UNIQUE and plays */
     if (!(cust = CxCustom(custom, 0))) goto out;
@@ -347,11 +376,12 @@ int main(int argc, char **argv)
     if (now) play();
 
     while (!quit) {
-        ULONG got = Wait((1UL << port->mp_SigBit) | SIGBREAKF_CTRL_C | SIGBREAKF_CTRL_F | SIG_WAKE |
+        ULONG got = Wait((1UL << port->mp_SigBit) | SIGBREAKF_CTRL_C | SIGBREAKF_CTRL_F | SIG_WAKE | SIG_PLAY |
                          (timer ? 1UL << tport->mp_SigBit : 0));
         CxMsg *m;
         if (got & SIGBREAKF_CTRL_C) quit = 1;
         if (got & SIGBREAKF_CTRL_F) timeout = timeout_setting(0);    /* the settings changed */
+        if ((got & SIG_PLAY) && on) play();
         while ((m = (CxMsg *)GetMsg(port))) {
             ULONG type = CxMsgType(m), id = CxMsgID(m);
             ReplyMsg((struct Message *)m);
@@ -359,7 +389,7 @@ int main(int argc, char **argv)
             case CXCMD_DISABLE: ActivateCxObj(broker, 0); on = 0; break;
             case CXCMD_ENABLE: ActivateCxObj(broker, 1); on = 1; idle_ticks = 0; break;
             case CXCMD_KILL: quit = 1; break;
-            case CXCMD_UNIQUE: if (on) play(); break;      /* started again: show it now */
+            case CXCMD_UNIQUE: break;                      /* started again: nothing (OpenBlanker NOW asks by signal) */
             }
         }
         if (timer && CheckIO((struct IORequest *)tr)) {
@@ -370,11 +400,12 @@ int main(int argc, char **argv)
         }
     }
 out:
+    if (broker) ActivateCxObj(broker, 0);
     if (timer) { AbortIO((struct IORequest *)tr); WaitIO((struct IORequest *)tr); CloseDevice((struct IORequest *)tr); }
     if (tr) DeleteIORequest((struct IORequest *)tr);
     if (tport) DeleteMsgPort(tport);
     if (broker) DeleteCxObjAll(broker);
-    if (port) { struct Message *msg; while ((msg = GetMsg(port))) ReplyMsg(msg); DeleteMsgPort(port); }
+    if (port) { struct Message *msg; if (port->mp_Node.ln_Name) RemPort(port); while ((msg = GetMsg(port))) ReplyMsg(msg); DeleteMsgPort(port); }
     if (rd) FreeArgs(rd);
     if (DiskfontBase) CloseLibrary(DiskfontBase);
     if (CxBase) CloseLibrary(CxBase);

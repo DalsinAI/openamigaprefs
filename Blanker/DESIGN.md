@@ -19,7 +19,7 @@ colour, then `SetRGB32` brings them up, frame by frame on the vertical blank.
 
 - **A commodity**: `CxCustom` sees every key and mouse event and resets the
   idle count; a timer counts the seconds. Exchange can disable, enable or quit
-  it. Started a second time, the running one plays the show at once.
+  it. Started a second time, the running one is left alone (1.1); `OpenBlanker NOW` asks it by a signal to play the show at once. (1.0 played the show at once on any second start, and a User-Startup that lists OpenBlanker twice, as Instance-32's did after an OpenUp upgrade, blanked the screen at boot.)
 - **Its own screen**, the Workbench's size, in a 256-colour mode
   (`BestModeID`, depth 8): AGA, or a CLUT mode on an RTG card, so the palette
   can fade the picture. A borderless window covers it: the pointer is hidden,
@@ -27,6 +27,12 @@ colour, then `SetRGB32` brings them up, frame by frame on the vertical blank.
 - **Type**: CGTriumvirate and CGTimes, the outline fonts every AmigaOS 3.2 has,
   made at exact sizes for the screen's height (topaz if they are missing).
   Text is ISO-8859-1.
+
+- **Ending cleanly (1.1):** the pointer is the window's again, the window is
+  closed so Intuition redraws what it covered, the Workbench screen is brought
+  to the front before the show's screen goes, the show's bitmap is cleared and
+  the screen closed (it waits for any other window on it), then the fonts and
+  the pointer's sprite are freed.
 
 ## Settings
 
