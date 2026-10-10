@@ -49,8 +49,9 @@
 #include <stdio.h>
 
 #include "ogt_theme.h"
+#include "../../Common/looktabs.h"
 
-const char version[] __attribute__((used)) = "$VER: Look 0.3 (8.10.2026) OpenPrefs, Dalsin Limited";
+const char version[] __attribute__((used)) = "$VER: Look 0.4 (10.10.2026) OpenPrefs, Dalsin Limited";
 
 #define PREFS_ENV "ENV:OpenGadTools/Look"
 #define PREFS_ENVARC "ENVARC:OpenGadTools/Look"
@@ -663,7 +664,7 @@ static int gui_once(void)
     APTR vi = scr ? GetVisualInfoA(scr, NULL) : NULL;
     struct Gadget *glist = NULL, *g;
     struct NewGadget ng;
-    int fh, top, row, quit = 0, rc = RETURN_OK, W = 620, L = 10, R = 300, i, lh;
+    int fh, top, row, quit = 0, rc = RETURN_OK, W = 620, L = 10, R = 300, i, lh, tabs_y, wl = 40, wt;
     struct MsgPort *tport = NULL;
     struct timerequest *tr = NULL;
     int timer = 0;
@@ -673,6 +674,8 @@ static int gui_once(void)
     fh = scr->Font->ta_YSize;
     lh = fh + 6;
     top = scr->WBorTop + fh + 1 + 6;
+    tabs_y = top;
+    top += lh + 8;                                   /* the tabs (looktabs.h) */
     build_theme_list();
     for (i = 0; i < nprofiles; i++) profile_labels[i] = (STRPTR)profile_names[i];
     if (!nprofiles) profile_labels[nprofiles++] = (STRPTR)"(no profiles)";
@@ -688,6 +691,7 @@ static int gui_once(void)
     (ng.ng_LeftEdge = (x), ng.ng_TopEdge = (y), ng.ng_Width = (w), ng.ng_Height = (h), ng.ng_GadgetText = (STRPTR)(text), \
      ng.ng_Flags = (flags), ng.ng_GadgetID = (id), g = gad[id] = CreateGadget(kind, g, &ng, __VA_ARGS__, TAG_DONE))
 
+    g = lt_make(g, &ng, L, tabs_y, W - 20, lh, LT_LOOK);
     /* the left column: themes and the preview */
     row = top + fh + 4;
     G(LISTVIEW_KIND, G_THEMES, L, row, 270, 6 * (fh + 1) + 4, "Theme", PLACETEXT_ABOVE, GTLV_Labels, (ULONG)&theme_list, GTLV_ShowSelected, NULL);
@@ -734,9 +738,11 @@ static int gui_once(void)
         row += lh + 8;
     }
     if (!g) { rc = RETURN_FAIL; goto out; }
+    wt = scr->BarHeight + 10;
+    lt_place(&wl, &wt);
     menus[6].nm_Flags = CHECKIT | MENUTOGGLE | (advanced ? CHECKED : 0);
-    win = OpenWindowTags(NULL, WA_Title, (ULONG)"Look", WA_ScreenTitle, (ULONG)"OpenPrefs Look 0.3", WA_PubScreen, (ULONG)scr,
-                         WA_Left, 40, WA_Top, scr->BarHeight + 10, WA_InnerWidth, W, WA_InnerHeight, row - scr->WBorTop - fh - 1,
+    win = OpenWindowTags(NULL, WA_Title, (ULONG)"OpenLook", WA_ScreenTitle, (ULONG)"OpenPrefs Look 0.3", WA_PubScreen, (ULONG)scr,
+                         WA_Left, wl, WA_Top, wt, WA_InnerWidth, W, WA_InnerHeight, row - scr->WBorTop - fh - 1,
                          WA_Gadgets, (ULONG)glist, WA_DragBar, TRUE, WA_DepthGadget, TRUE, WA_CloseGadget, TRUE, WA_Activate, TRUE,
                          WA_SmartRefresh, TRUE, WA_NewLookMenus, TRUE,
                          WA_IDCMP, IDCMP_CLOSEWINDOW | IDCMP_REFRESHWINDOW | IDCMP_MENUPICK | LISTVIEWIDCMP | BUTTONIDCMP | CYCLEIDCMP | STRINGIDCMP |
@@ -841,6 +847,8 @@ static int gui_once(void)
                     redraw = 0;
                     break;
                 case G_USE: put_in_place(0); focus_now(); test_until = 0; quit = 1; break;
+                case LT_ID + LT_WINDOWS: case LT_ID + LT_TITLEBAR: case LT_ID + LT_MENUS:   /* another tab: keep, as Use, and hand over */
+                    put_in_place(0); focus_now(); test_until = 0; lt_go(win, gg->GadgetID - LT_ID); quit = 1; break;
                 case G_SAVE: put_in_place(1); focus_now(); test_until = 0; quit = 1; break;
                 case G_CANCEL: if (test_until) go_back(); quit = 1; break;
                 }

@@ -26,8 +26,9 @@
 #include <stdlib.h>
 
 #include "tb_prefs.h"
+#include "../../Common/looktabs.h"
 
-static const char version[] __attribute__((used)) = "$VER: TitleBar 0.2 (8.10.2026) OpenPrefs, MIT, Copyright (c) 2026 Dalsin Limited";
+static const char version[] __attribute__((used)) = "$VER: TitleBar 0.3 (10.10.2026) OpenPrefs, MIT, Copyright (c) 2026 Dalsin Limited";
 
 static tb_prefs cur;
 
@@ -137,7 +138,7 @@ static int gui(void)
     APTR vi = scr ? GetVisualInfoA(scr, NULL) : NULL;
     struct Gadget *glist = NULL, *g;
     struct NewGadget ng;
-    int fh, lh, row, quit = 0, rc = RETURN_OK, W = 400, X = 260, i;
+    int fh, lh, row, quit = 0, rc = RETURN_OK, W = 400, X = 260, i, wl = 60, wt;
     struct Menu *menu = NULL;
     if (!vi) { if (scr) UnlockPubScreen(NULL, scr); return RETURN_FAIL; }
     memset(gad, 0, sizeof gad);
@@ -154,6 +155,8 @@ static int gui(void)
      ng.ng_Flags = (flags), ng.ng_GadgetID = (id), g = gad[id] = CreateGadget(kind, g, &ng, __VA_ARGS__, TAG_DONE))
 
     row = scr->WBorTop + fh + 1 + 8;
+    g = lt_make(g, &ng, 10, row, W - 20, lh, LT_TITLEBAR);
+    row += lh + 8;                                   /* below the tabs (looktabs.h) */
     G(CHECKBOX_KIND, G_LOGO, X, row, 26, lh, "AmigaChrome logo at the left", PLACETEXT_LEFT, GTCB_Scaled, TRUE); row += lh + 4;
     G(CHECKBOX_KIND, G_MEMORY, X, row, 26, lh, "Free chip and fast memory", PLACETEXT_LEFT, GTCB_Scaled, TRUE); row += lh + 4;
     G(CHECKBOX_KIND, G_CLOCK, X, row, 26, lh, "Clock at the right", PLACETEXT_LEFT, GTCB_Scaled, TRUE); row += lh + 4;
@@ -170,8 +173,10 @@ static int gui(void)
         row += lh + 8;
     }
     if (!g) { rc = RETURN_FAIL; goto out; }
-    win = OpenWindowTags(NULL, WA_Title, (ULONG)"Title bar", WA_ScreenTitle, (ULONG)"OpenPrefs Title bar 0.2", WA_PubScreen, (ULONG)scr,
-                         WA_Left, 60, WA_Top, scr->BarHeight + 20, WA_InnerWidth, W, WA_InnerHeight, row - scr->WBorTop - fh - 1,
+    wt = scr->BarHeight + 20;
+    lt_place(&wl, &wt);
+    win = OpenWindowTags(NULL, WA_Title, (ULONG)"OpenLook", WA_ScreenTitle, (ULONG)"OpenPrefs Title bar 0.2", WA_PubScreen, (ULONG)scr,
+                         WA_Left, wl, WA_Top, wt, WA_InnerWidth, W, WA_InnerHeight, row - scr->WBorTop - fh - 1,
                          WA_Gadgets, (ULONG)glist, WA_DragBar, TRUE, WA_DepthGadget, TRUE, WA_CloseGadget, TRUE, WA_Activate, TRUE,
                          WA_SmartRefresh, TRUE, WA_NewLookMenus, TRUE,
                          WA_IDCMP, IDCMP_CLOSEWINDOW | IDCMP_REFRESHWINDOW | IDCMP_MENUPICK | BUTTONIDCMP | CHECKBOXIDCMP,
@@ -214,6 +219,8 @@ static int gui(void)
                 case G_COG: cur.cog = sel; break;
                 case G_BORDER: cur.border_black = sel; break;
                 case G_USE: put_in_place(0); quit = 1; break;
+                case LT_ID + LT_LOOK: case LT_ID + LT_WINDOWS: case LT_ID + LT_MENUS:   /* another tab: keep, as Use, and hand over */
+                    put_in_place(0); lt_go(win, gg->GadgetID - LT_ID); quit = 1; break;
                 case G_SAVE: put_in_place(1); quit = 1; break;
                 case G_CANCEL: quit = 1; break;
                 }
