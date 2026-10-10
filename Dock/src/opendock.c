@@ -51,7 +51,7 @@
 #include "od_dock.h"
 #include "wbclose.h"
 
-const char version[] __attribute__((used)) = "$VER: OpenDock 0.5 (10.10.2026) OpenPrefs, Dalsin Limited";
+const char version[] __attribute__((used)) = "$VER: OpenDock 0.5.1 (10.10.2026) OpenPrefs, Dalsin Limited";
 
 #define PREFS_ENV "ENV:OpenDock/Dock"
 #define PREFS_ENVARC "ENVARC:OpenDock/Dock"
@@ -488,7 +488,7 @@ static int hit(int x, int y)
 static void layout(int *w, int *h)
 {
     struct Rectangle r;
-    int label = dock.labels ? scr->RastPort.TxHeight + 2 : 0, thick, most = 0, margin, rows, trim;
+    int label = dock.labels ? scr->RastPort.TxHeight + 2 : 0, thick, most = 0, margin, rows, trim, below;
     big = od_cell(dock.size);
     standing = dock.place == OD_LEFT || dock.place == OD_RIGHT;
     /* a cell fits the largest icon */
@@ -527,17 +527,21 @@ static void layout(int *w, int *h)
     trim = rows - 5 < 10 ? (rows - 5 > 0 ? rows - 5 : 0) : 10;
     apad -= trim;
     rows -= trim;
+    /* 0.5.1 (10 October 2026): five pixels less again on the screen edge's side (below the icons on a
+     * bottom dock), still leaving the dot its room; the side away from the edge keeps apad */
+    below = rows - 5 >= 5 ? 5 : (rows - 5 > 0 ? rows - 5 : 0);
+    rows -= below;
     dot_big = big >= 40 && rows >= 7;
     dot_at = 1 + (rows - 1) / 2;
-    thick = (standing ? cellw : cellh) + 2 * apad;
+    thick = (standing ? cellw : cellh) + 2 * apad - below;
     radius = thick / 4 > MAX_RADIUS ? MAX_RADIUS : thick / 4;
     room = dock.hop ? HOP_ROOM : 0;
     along = 2 * endpad;
     for (int i = 0; i < dock.n; i++) along += item_size(i);
     if (along < 2 * endpad + cellw) along = 2 * endpad + cellw;
     /* the hop room is on the side away from the edge, the gap on the edge's side */
-    bx = (standing ? apad : endpad) + (dock.place == OD_RIGHT ? room : 0) + (dock.place == OD_LEFT ? gap : 0);
-    by = (standing ? endpad : apad) + (dock.place == OD_BOTTOM ? room : 0) + (dock.place == OD_TOP ? gap : 0);
+    bx = (standing ? apad - (dock.place == OD_LEFT ? below : 0) : endpad) + (dock.place == OD_RIGHT ? room : 0) + (dock.place == OD_LEFT ? gap : 0);
+    by = (standing ? endpad : apad - (dock.place == OD_TOP ? below : 0)) + (dock.place == OD_BOTTOM ? room : 0) + (dock.place == OD_TOP ? gap : 0);
     if (standing) { *w = thick + room + gap; *h = along; }
     else { *w = along; *h = thick + room + gap; }
     if (*w > scr->Width) *w = scr->Width;
@@ -1245,7 +1249,7 @@ static int open_dock(struct Menu *menus)
     }
     win = OpenWindowTags(NULL, WA_PubScreen, (ULONG)scr, WA_Left, x, WA_Top, y, WA_Width, w, WA_Height, h,
                          WA_Borderless, TRUE, WA_SmartRefresh, TRUE, WA_NewLookMenus, TRUE,
-                         WA_ScreenTitle, (ULONG)"OpenDock 0.5",
+                         WA_ScreenTitle, (ULONG)"OpenDock 0.5.1",
                          WA_IDCMP, IDCMP_MOUSEBUTTONS | IDCMP_MENUPICK | IDCMP_REFRESHWINDOW | IDCMP_INACTIVEWINDOW |
                                    IDCMP_ACTIVEWINDOW, TAG_DONE);
     if (!win) { free_bitmaps(); return 0; }
