@@ -68,7 +68,7 @@
 #include <stdlib.h>
 #include "../../Common/cogplace.h"
 
-static const char version[] __attribute__((used)) = "$VER: OpenWindows 0.8.2 (10.10.2026) MIT, Copyright (c) 2026 Dalsin Limited";
+static const char version[] __attribute__((used)) = "$VER: OpenWindows 0.8.3 (10.10.2026) MIT, Copyright (c) 2026 Dalsin Limited";
 
 #define PREFS_ENV "ENV:OpenPrefs/Windows"
 #define PLACES_ENV "ENV:OpenPrefs/WindowPlaces"
@@ -115,7 +115,7 @@ static void read_prefs(void)
 {
     char *text = read_file(PREFS_ENV), *p, *line;
     memset(&cfg, 0, sizeof cfg);
-    cfg.snap = 1; cfg.snap_dist = 12; cfg.halves = 0; cfg.switcher = 1; cfg.wheel = 1; cfg.places = 1; cfg.dblfront = 1; cfg.edges = 1; cfg.edge_ptr = 0; cfg.drive_title = 1; cfg.taller = 4;
+    cfg.snap = 1; cfg.snap_dist = 12; cfg.halves = 0; cfg.switcher = 1; cfg.wheel = 1; cfg.places = 1; cfg.dblfront = 1; cfg.edges = 1; cfg.edge_ptr = 1; cfg.drive_title = 1; cfg.taller = 4;
     strcpy(cfg.key, "lcommand tab");
     if (!text) return;
     for (p = text; *p; ) {
@@ -207,9 +207,13 @@ static volatile int click_in, click_out;
 #define EDGE_R 2
 #define EDGE_B 4
 #define EDGE_MOVE 8                             /* 0.8: not an edge: the title bar, dragging the window solid */
-#define ZONE_OUT 4                              /* a side: this many pixels outside the frame grab it (0.6.1; nothing is drawn) */
-#define ZONE_IN 1                               /* and the frame's own line (a one pixel edge) */
-#define ZONE_CORNER 2                           /* a bottom corner: a square 5 x 5 centred on it, two pixels each way */
+/* 0.8.3 (the user, 10 October 2026: "mouse behaviour at window edges and corner is odd and inconsistent"): the
+ * same reach outside and inside on every side, a corner square big enough to find, and the corner takes in
+ * Intuition's own size gadget, so a press there resizes the same way (solid, from here) as a press on an edge. */
+#define ZONE_OUT 5                              /* a side: this many pixels outside the frame grab it (nothing is drawn) */
+#define ZONE_IN 3                               /* and this many inside it: the frame's line and the border beside it */
+#define ZONE_CORNER 6                           /* a bottom corner: a square 13 x 13 centred on it */
+#define SIZE_GADGET_W 18                        /* Intuition's size gadget at the bottom right: its box is the corner's too */
 static ULONG sig_grab;
 static struct Window *volatile grab_win;        /* the window being resized, set by the handler */
 static volatile int grab_edges, grab_on, grab_end;
@@ -246,7 +250,7 @@ static struct Window *edge_at(struct Screen *s, WORD x, WORD y, int *edges)
             if (in) break;                      /* a window that keeps its size */
             continue;
         }
-        if (x >= L - ZONE_OUT && x <= R + ZONE_OUT && y >= T + w->BorderTop && y <= B + ZONE_CORNER + ZONE_OUT) {
+        if (x >= L - ZONE_OUT && x <= R + ZONE_OUT && y >= T + w->BorderTop && y <= B + ZONE_CORNER) {
             /* the sides: a strip outside the frame and its own line, below the title bar; the bottom: the same along it */
             if (x >= L - ZONE_OUT && x <= L + ZONE_IN - 1 && y <= B) e |= EDGE_L;
             if (x <= R + ZONE_OUT && x >= R - ZONE_IN + 1 && y <= B) e |= EDGE_R;
@@ -256,6 +260,9 @@ static struct Window *edge_at(struct Screen *s, WORD x, WORD y, int *edges)
                 if (x >= L - ZONE_CORNER && x <= L + ZONE_CORNER) e |= EDGE_L | EDGE_B;
                 if (x >= R - ZONE_CORNER && x <= R + ZONE_CORNER) e |= EDGE_R | EDGE_B;
             }
+            /* Intuition's size gadget (bottom right, in the bottom border): ours, so both corners feel the same */
+            if (x >= R - SIZE_GADGET_W && x <= R && y >= B - (w->BorderBottom > 2 ? w->BorderBottom : 2) - 1 && y <= B)
+                e |= EDGE_R | EDGE_B;
         }
         if (e) { *edges = e; found = w; break; }
         if (in) break;                          /* inside it, off its edges: an ordinary press */
