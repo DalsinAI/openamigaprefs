@@ -39,7 +39,8 @@ static BP_UNUSED int bp_clear(struct Screen *scr, WORD x0, WORD x1, int (*ours)(
     LockLayerInfo(&scr->LayerInfo);
     for (l = scr->BarLayer->front; l && ok; l = l->front) {
         struct Window *o = (struct Window *)l->Window;
-        if (o && ours(o)) continue;
+        /* our own, and the other bar windows (borderless, in the bar's rows): they are the bar */
+        if (o && (ours(o) || ((o->Flags & WFLG_BORDERLESS) && o->TopEdge <= 0 && o->Height <= scr->BarHeight + 1))) continue;
         if (l->bounds.MinX <= x1 && l->bounds.MaxX >= x0 && l->bounds.MinY <= scr->BarHeight) ok = 0;
     }
     UnlockLayerInfo(&scr->LayerInfo);
