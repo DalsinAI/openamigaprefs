@@ -47,7 +47,7 @@
 
 #include <string.h>
 
-static const char version[] __attribute__((used)) = "$VER: OpenTypes 0.2.1 (9.10.2026) MIT, Copyright (c) 2026 Dalsin Limited";
+static const char version[] __attribute__((used)) = "$VER: OpenTypes 0.2.2 (10.10.2026) MIT, Copyright (c) 2026 Dalsin Limited";
 
 #define STATE "ENVARC:OpenTypes"
 #define BACKUP "ENVARC:OpenTypes/Backup"
@@ -88,6 +88,7 @@ static const struct { const char *types, *label, *tool; } catalogue[] = {
     { " install ", "Installer", "SYS:System/Installer" },
     { " adf diskarchive ", "DAControl", "C:DAControl" },
     { " prefs ", "Prefs", "SYS:Prefs/Pointer" },
+    { " prefs ", "Prefs", "SYS:Prefs/Classic/Pointer" },      /* after OpenUp's RECONCILE */
 };
 #define NCAT (int)(sizeof catalogue / sizeof catalogue[0])
 
