@@ -38,7 +38,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-static const char version[] __attribute__((used)) = "$VER: OpenDateTime 0.1 (10.10.2026) OpenPrefs, MIT, Copyright (c) 2026 Dalsin Limited";
+static const char version[] __attribute__((used)) = "$VER: OpenDateTime 0.1.1 (10.10.2026) OpenPrefs, MIT, Copyright (c) 2026 Dalsin Limited";
 
 struct Library *UtilityBase;
 
@@ -422,10 +422,10 @@ static int gui(void)
         row += lh + 10 + fh + 2;
     }
     G(LISTVIEW_KIND, G_COUNTRY, 12, row, half, lvh, "Country", PLACETEXT_ABOVE,
-      GTLV_Labels, (ULONG)&list_c, GTLV_ShowSelected, (ULONG)NULL, GTLV_Selected, (ULONG)sel_country,
+      GTLV_Labels, (ULONG)&list_c, GTLV_Selected, (ULONG)sel_country,
       GTLV_Top, (ULONG)(sel_country > 3 ? sel_country - 3 : 0));
     G(LISTVIEW_KIND, G_LANGUAGE, 12 + half + 12, row, half, lvh, "Language", PLACETEXT_ABOVE,
-      GTLV_Labels, (ULONG)&list_l, GTLV_ShowSelected, (ULONG)NULL, GTLV_Selected, (ULONG)sel_language,
+      GTLV_Labels, (ULONG)&list_l, GTLV_Selected, (ULONG)sel_language,
       GTLV_Top, (ULONG)(sel_language > 3 ? sel_language - 3 : 0));
     row += lvh + 8;
     G(TEXT_KIND, G_STATUS, 12, row, W - 24, lh, NULL, 0, GTTX_Text, (ULONG)status_text, GTTX_Border, TRUE);
