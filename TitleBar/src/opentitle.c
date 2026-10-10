@@ -89,7 +89,7 @@
 #include "popuptheme.h"
 #include "cogplace.h"
 
-const char version[] __attribute__((used)) = "$VER: OpenTitle 0.6.7 (10.10.2026) OpenPrefs, Dalsin Limited";
+const char version[] __attribute__((used)) = "$VER: OpenTitle 0.6.8 (10.10.2026) OpenPrefs, Dalsin Limited";
 
 struct IntuitionBase *IntuitionBase;
 struct GfxBase *GfxBase;
@@ -744,10 +744,10 @@ static const char *const cog13[13] = {
 static const struct { const char *label, *path, *needs; } cog_items[] = {
     { "Look",         "SYS:Prefs/Look",         NULL },
     { "Windows",      "SYS:Prefs/Windows",      NULL },
-    { "Dock",         "SYS:Prefs/Dock",         NULL },
+    { "Dock",         "SYS:Prefs/OpenDock",     NULL },                   /* 0.6.8: every editor of ours is Open...: the user, 10 Oct 2026 */
     { "Menus",        "SYS:Prefs/Menus",        NULL },
     { "Title bar",    "SYS:Prefs/TitleBar",     NULL },
-    { "Sound",        "SYS:Prefs/Sound",        "SYS:C/OpenSpeaker" },    /* OS 3.2's own until OpenUp's Sound replaces it */
+    { "Sound",        "SYS:Prefs/OpenSound",    NULL },                   /* 0.6.8: OpenPrefs Sound (the OS's Sound is in Classic) */
     { "Date and time", "SYS:Prefs/OpenDateTime", NULL },                 /* 0.6.5: OpenDateTime (date, time, zone, country, language) */
     { "Input",        "SYS:Prefs/OpenInput",    NULL },                   /* 0.6.7: OpenInput (mouse, keyboard, keymap; Gamepads under it) */
     { "Serial",       "SYS:Prefs/OpenSerial",   NULL },                   /* 0.6.7: OpenSerial */
@@ -755,7 +755,7 @@ static const struct { const char *label, *path, *needs; } cog_items[] = {
     { "Network",      "SYS:Tools/Commodities/OpenSocketControl", NULL },     /* 0.6.6: OpenSocket's settings and status */
     { "OpenTypes",    "SYS:Prefs/OpenTypes",    NULL },
     { "OpenUp Setup", "SYS:Prefs/OpenUp-Setup", NULL },
-    { "Tata",         "SYS:Prefs/Tata",         NULL },                   /* 0.6: Tata's window, when Tata is installed */
+    { "Tata",         "SYS:Prefs/OpenTata",     NULL },                   /* 0.6: Tata's window, when Tata is installed */
     { NULL,           NULL,                     NULL },                   /* a line */
     { "All Prefs...", "SYS:Prefs",              NULL },
 };
