@@ -20,6 +20,7 @@ Limited.
 | Drawers too (0.3) | Workbench's drawer windows are remembered the same way, with no Snapshot needed | `places.drawers on` |
 | Double-click to front (0.4) | A double-click in a window's title bar brings it to the front. On by default | `doubleclick.front on` |
 | Edges (0.5) | A resizable window is resized by dragging any edge but its title bar. On by default | `edges on` |
+| Drive windows (0.6) | A drive's window is titled with the drive's name only: Workbench's "Work  70% full, 453MB free, 62.0MB in use" loses its usage part. On by default | `drive.title on` |
 | Drawers | Workbench drawer windows open at least this big | `drawer 400 250` (0 0 leaves them) |
 
 The settings are in `ENV:OpenPrefs/Windows`. Save writes `ENV:` and
@@ -69,9 +70,12 @@ dragging any edge but its title bar, the sides, the bottom and the bottom
 corners, as on today's desktops. OpenWindows does it without patching
 Intuition:
 
-- **The grab zone** is 4 pixels outside the frame and 2 inside it (the
-  frame's own line and one more), down both sides and along the bottom,
-  below the title bar. The title bar's height only ever moves a window.
+- **The grab zone** is 7 pixels outside the frame and 3 inside it (the
+  frame's own line and two more), down both sides and along the bottom,
+  below the title bar (0.6: it was 4 and 2, hard to hit on a slim edge). A
+  bottom corner reaches 16 pixels along both edges: the bottom edge's last
+  16 pixels hold the side too, and a side's last 16 hold the bottom. The
+  title bar's height only ever moves a window.
 - **The input handler decides at the press.** It reads the screen's layers
   front to back with no lock (it runs on input.device's task and can't wait,
   as the wheel's test already does): the first window whose frame holds the
@@ -101,6 +105,36 @@ Intuition:
   frame, so it comes with openworkbench.library.
 - `edges on` (the default) in `ENV:OpenPrefs/Windows`; the editor's switch,
   in both views: "Resize a window from any edge but its title bar".
+
+**0.6 (10 October 2026): the user's "it only lets us resize vertically".** On
+Instance-32 (1920 x 1080, the Open light look, the size gadget off) a window
+could be sized from its bottom edge but not from its sides. The edges were
+tested in a lab, with pointer positions injected through input.device
+exactly on the frame: right, bottom, left and both bottom corners were
+grabbed and sized as designed, so the grab itself was sound. What stopped it
+was the pointer. OpenRTG gave a mode 18 ticks a pixel and OS 3.2's Intuition
+stops the pointer at 30000 ticks, so at 1920 pixels wide the pointer ended at
+x 1666 (openrtg.library 0.13.1 fixes it: openamigartg #59): a right edge
+beyond it could not be reached and a window could not be widened past it,
+while 1080 rows are well inside the limit. The grab zone was also only six
+pixels wide against a slim one-pixel frame, with the pointer's position
+steered from the viewer; it is now ten wide, with corners that reach along
+the edges. Lab: right edge grabbed 6 pixels outside the frame and pulled 60
+wider, bottom 6 outside pulled 60 taller, left 4 outside, and both bottom
+corners 10 pixels along an edge; each window box came out as set.
+
+**Drive windows (0.6).** Workbench makes a drive's window title from its
+format "%s  %lU%% full, %sB free, %sB in use" (the two spaces, the
+percentage and the sign are what OpenWindows looks for). Workbench 3.2.3 has
+no setting for it (its Workbench prefs only switch the fill gauge off, which
+OpenUp's look steps do: `OpenUpTool WBGAUGE`). Once a second OpenWindows
+cuts the text at its first space in the title of a Workbench window, in
+place, in the string Workbench made (its memory stays its own), and has
+Intuition draw the title again with `SetWindowTitles(w, title, ~0)`. Only
+Workbench's windows (`WFLG_WBENCHWINDOW`) are looked at, so no other
+program's title is touched. `drive.title off` (the editor's switch, in both
+views: "Drive windows titled with the name only") leaves Workbench's titles
+alone.
 
 The size gadget itself is OpenLook 0.5's (`sizegadget off` draws it as the
 window); it still works where it is.
