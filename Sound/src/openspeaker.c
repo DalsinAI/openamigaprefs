@@ -56,8 +56,9 @@
 #include "om_prefs.h"
 #include "wbclose.h"
 #include "popuptheme.h"
+#include "barpaint.h"
 
-const char version[] __attribute__((used)) = "$VER: OpenSpeaker 0.1 (6.10.2026) OpenPrefs, Dalsin Limited";
+const char version[] __attribute__((used)) = "$VER: OpenSpeaker 0.1.1 (10.10.2026) OpenPrefs, Dalsin Limited";
 
 struct IntuitionBase *IntuitionBase;
 struct Library *CyberGfxBase;
@@ -142,10 +143,10 @@ static void draw_speaker(void)
     if (!spk) return;
     rp = spk->RPort;
     bar_pens(&fg, &bg);
-    SetAPen(rp, bg);
-    RectFill(rp, 0, 0, sw - 1, sh - 1);
+    if (pop) { SetAPen(rp, bg); RectFill(rp, 0, 0, sw - 1, sh - 1); }
+    else bp_paint(spk, bg, 0, 0, sw, sh);                       /* the bar's own colour, not the pen's white */
     SetAPen(rp, fg);
-    h = sh - (bar_edge == OM_BAR_TITLE ? 1 : 0);
+    h = sh;                                                      /* the bar's rows: the line under them isn't ours */
     cy = h / 2;
     x = 5;
     RectFill(rp, x, cy - 1, x + 2, cy + 1);                       /* the speaker: its box and cone */
@@ -257,6 +258,8 @@ static void place(void)
     hx0 = sx; hy0 = sy; hx1 = sx + sw; hy1 = sy + sh;
 }
 
+static int speaker_ours(struct Window *w) { return w == spk || w == pop; }
+
 static void close_speaker(void)
 {
     hscr = NULL;
@@ -275,9 +278,11 @@ static int open_speaker(void)
         bar_edge = read_bar_edge();
         pt_load(s);
         place();
+        bp_sample(s, bar_edge == OM_BAR_TITLE, speaker_ours);
         spk = OpenWindowTags(NULL, WA_CustomScreen, (ULONG)s, WA_Left, sx, WA_Top, sy, WA_Width, sw, WA_Height, sh,
                              WA_Borderless, TRUE, WA_Activate, FALSE, WA_RMBTrap, TRUE, WA_SmartRefresh, TRUE,
                              WA_IDCMP, IDCMP_REFRESHWINDOW, TAG_DONE);
+        if (spk) WindowToBack(spk);              /* under every other window, as the bar's title is: a window over the bar covers it */
     }
     UnlockPubScreen(NULL, s);                /* the window keeps the screen open */
     if (!spk) { close_speaker(); return 0; }
@@ -286,22 +291,6 @@ static int open_speaker(void)
     hscr = s;
     tray(sw);                                /* in the title bar too: the clock and others keep clear of us */
     return 1;
-}
-
-/* in front again when a window (not a borderless one: menus, bars, our levels) has come over it */
-static void keep_in_front(void)
-{
-    struct Layer *l;
-    int covered = 0;
-    if (!spk) return;
-    LockLayerInfo(&scr->LayerInfo);
-    for (l = spk->WLayer->front; l && !covered; l = l->front) {
-        struct Window *w = (struct Window *)l->Window;
-        if (!w || (w->Flags & WFLG_BORDERLESS)) continue;
-        covered = l->bounds.MinX < sx + sw && l->bounds.MaxX >= sx && l->bounds.MinY < sy + sh && l->bounds.MaxY >= sy;
-    }
-    UnlockLayerInfo(&scr->LayerInfo);
-    if (covered) WindowToFront(spk);
 }
 
 /* ---- its levels ------------------------------------------------------------------------------------ */
@@ -597,7 +586,7 @@ int main(void)
                     if (ox != sx || oy != sy) { ChangeWindowBox(spk, sx, sy, sw, sh); draw_speaker(); }
                 }
             }
-            keep_in_front();
+            if (spk && ticks % 10 == 5 && bp_sample(scr, bar_edge == OM_BAR_TITLE, speaker_ours)) draw_speaker();   /* the theme changed the bar */
             tr->tr_node.io_Command = TR_ADDREQUEST; tr->tr_time.tv_secs = 0; tr->tr_time.tv_micro = 200000;
             SendIO((struct IORequest *)tr);
         }
