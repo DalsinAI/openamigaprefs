@@ -64,6 +64,8 @@
 #include <graphics/layers.h>
 #include <utility/date.h>
 #include <proto/exec.h>
+#include <proto/expansion.h>
+#include <libraries/configvars.h>
 #include <proto/dos.h>
 #include <proto/intuition.h>
 #include <proto/graphics.h>
@@ -305,6 +307,26 @@ static void wb_set_title(const char *fmt)
  * cpus / cores"): the main CPU, and the cores openmulticore.library's board gives (OMC_CoreCount, its first
  * call, -30; 0 without a board or without the library). Written into the title once, at the start and on
  * Ctrl-F, as Workbench's title format has no token for it. */
+/* The cores the CPU cores board presents through AutoConfig (the user, 10 October 2026: "the cpu count
+ * should read the amount of cores presented via autoconfig"): a Dalsin ($DA15) product 7 board carrying
+ * the ACSV block, CLASS ($20) 2, UNITS ($24) its cores. 0 without the board. */
+struct Library *ExpansionBase;      /* opened for the look, closed after (-fno-common: ours, not libnix's stub) */
+static ULONG board_cores(void)
+{
+    ULONG n = 0;
+    ExpansionBase = OpenLibrary((STRPTR)"expansion.library", 36);
+    if (ExpansionBase) {
+        struct ConfigDev *cd = FindConfigDev(NULL, 0xDA15, 7);
+        if (cd && cd->cd_BoardAddr) {
+            volatile ULONG *r = (volatile ULONG *)cd->cd_BoardAddr;
+            if (r[0] == 0x41435356UL && r[0x20 / 4] == 2) n = r[0x24 / 4];
+        }
+        CloseLibrary(ExpansionBase);
+        ExpansionBase = NULL;
+    }
+    return n > 1024 ? 0 : n;
+}
+
 static ULONG omc_cores(void)
 {
     struct Library *omc = OpenLibrary((STRPTR)"openmulticore.library", 0);
@@ -321,7 +343,7 @@ static ULONG omc_cores(void)
 
 static void cpus_text(char *buf, int size)
 {
-    ULONG n = omc_cores();
+    ULONG n = (board_cores() ? board_cores() : omc_cores());
     if (n) snprintf(buf, size, " - 1 CPU + %lu core%s", (unsigned long)n, n == 1 ? "" : "s");
     else snprintf(buf, size, " - 1 CPU");
 }
