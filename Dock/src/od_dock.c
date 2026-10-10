@@ -145,6 +145,12 @@ void od_starter(od_dock *d)
     add_program(d, NULL, OD_CLI, "Shell", "NewShell");      /* the Shell's icon moves between OS releases; NewShell doesn't */
     add_program(d, NULL, OD_WB, "OpenFiles", "SYS:Utilities/OpenFiles");
     add_program(d, NULL, OD_WB, "OpenView", "SYS:Utilities/OpenPrint/OpenView");
+    /* the Open apps on the dock from the start (the user, 10 October 2026); those not installed are dropped */
+    add_program(d, NULL, OD_WB, "OpenWrite", "SYS:Utilities/OpenWrite/OpenWrite");
+    add_program(d, NULL, OD_WB, "OpenPlay", "SYS:Utilities/OpenPlay");
+    add_program(d, NULL, OD_WB, "OpenCompress", "SYS:Utilities/OpenCompress");
+    add_program(d, NULL, OD_WB, "OpenFTP", "SYS:Utilities/OpenFTP/OpenFTP");
+    add_program(d, NULL, OD_WB, "OpenPuTTY", "SYS:Utilities/OpenPuTTY/OpenPuTTY");
     add_program(d, NULL, OD_WB, "Clock", "SYS:Utilities/Clock");
     add_program(d, NULL, OD_WB, "Calculator", "SYS:Tools/Calculator");
     add_program(d, NULL, OD_WB, "Prefs", "SYS:Prefs");

@@ -48,7 +48,8 @@ tuned there with the user:
   glass is frosted less (a box of `big / 24` pixels, 2 at the medium size).
   The settings line is unchanged; a file that gives `opacity` keeps it.
 - **The starter buttons** (a first start with no dock to take over): Shell,
-  OpenFiles, OpenView, Clock, Calculator, Prefs and Look, a separator, and
+  OpenFiles, OpenView, OpenWrite, OpenPlay, OpenCompress, OpenFTP, OpenPuTTY (each
+  only when installed), Clock, Calculator, Prefs and Look, a separator, and
   the Trashcan (`SYS:Trashcan`, opened as a drawer).
 
 Tested on the host: 58 checks (`tests/run.sh`), the starter set and the new
@@ -216,7 +217,8 @@ program that wrote the file.
 
 On the first start, when there is no `ENVARC:OpenDock/Dock`, Dock takes
 over the first of these it finds, once. Otherwise it starts with Shell
-(`NewShell`), OpenFiles, OpenView, Clock, Calculator, Prefs and Look, a
+(`NewShell`), OpenFiles, OpenView, OpenWrite, OpenPlay, OpenCompress, OpenFTP,
+OpenPuTTY, Clock, Calculator, Prefs and Look, a
 separator and the Trashcan (0.4; OpenView took MultiView's place on 6
 October 2026). Workbench buttons whose program
 isn't on the machine are left out, both from the starter set and from a

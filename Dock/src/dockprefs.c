@@ -45,7 +45,7 @@
 
 #include "od_dock.h"
 
-const char version[] __attribute__((used)) = "$VER: Dock 0.5 (10.10.2026) OpenPrefs, Dalsin Limited";
+const char version[] __attribute__((used)) = "$VER: Dock 0.5.1 (10.10.2026) OpenPrefs, Dalsin Limited";
 
 #define PREFS_ENV "ENV:OpenDock/Dock"
 #define PREFS_ENVARC "ENVARC:OpenDock/Dock"
