@@ -9,7 +9,7 @@ HERE=$(cd "$(dirname "$0")" && pwd)
 STOVE=${STOVE:-$HOME/AmigaChrome/stoves/os32}
 CC="$STOVE/prefix/bin/m68k-amigaos-gcc"
 OUT=${1:-$HERE/build/os3}
-CFLAGS="-noixemul -m68020 -std=gnu99 -Wall -Werror -O2 -fno-delete-null-pointer-checks -fno-common -I$HERE/src -I$HERE/include"
+CFLAGS="-noixemul -m68020 -std=gnu99 -Wall -Werror -O2 -fno-delete-null-pointer-checks -fno-common -I$HERE/src -I$HERE/include -I$HERE/../Common"
 mkdir -p "$OUT"
 "$CC" $CFLAGS -o "$OUT/TitleBar" "$HERE/src/titlebar.c"
 # OpenTitle reads where OpenMenus' bar is with the Menus editor's om_prefs.c

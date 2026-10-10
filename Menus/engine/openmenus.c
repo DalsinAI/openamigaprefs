@@ -64,6 +64,7 @@
 #include <stdlib.h>
 
 #include "om_prefs.h"
+#include "wbclose.h"
 #include "om_kbd.h"
 #include "ogt_theme.h"
 
@@ -81,6 +82,7 @@ struct Device *TimerBase;
 struct RxsLib *RexxSysBase;
 struct Library *AslBase;
 struct Library *KeymapBase;
+static int wb_hold;                            /* Workbench is shutting down or shut: no bar window until it is back */
 
 /* ---- files and settings --------------------------------------------------- */
 
@@ -1159,7 +1161,7 @@ static void bar_tick(void)
     struct Screen *wb, *front;
     int want;
     if (!on || !prefs.enabled || prefs.bar == OM_BAR_TITLE) { if (bar_win || bar_screen) bar_close(); return; }
-    if (session) return;
+    if (session || wb_hold) return;
     wb = wb_screen();
     front = IntuitionBase->FirstScreen;
     want = wb != NULL;
@@ -1731,6 +1733,7 @@ int main(void)
     CxBase = OpenLibrary((STRPTR)"commodities.library", 39);
     KeymapBase = OpenLibrary((STRPTR)"keymap.library", 37);
     if (!IntuitionBase || !GfxBase || !LayersBase || !CxBase) goto out;
+    wbc_start();
     me = FindTask(NULL);
     if ((s1 = AllocSignal(-1)) < 0 || (s2 = AllocSignal(-1)) < 0) goto out;
     sig_start = 1UL << s1; sig_event = 1UL << s2;
@@ -1751,9 +1754,14 @@ int main(void)
     ActivateCxObj(broker, 1);
     while (!quit) {
         ULONG got = Wait((1UL << port->mp_SigBit) | sig_start | sig_event | (1UL << reply_port->mp_SigBit) | (1UL << tport->mp_SigBit) |
-                         SIGBREAKF_CTRL_C | SIGBREAKF_CTRL_F);
+                         SIGBREAKF_CTRL_C | SIGBREAKF_CTRL_F | wbc_sigmask());
         CxMsg *m;
         if (got & SIGBREAKF_CTRL_C) quit = 1;
+        /* Workbench is shutting down (Font prefs' Use, a screen mode): no bar window on its screen until it is back */
+        switch (wbc_take()) {
+        case WBC_CLOSE: wb_hold = 1; bar_close(); wbc_closed(); break;
+        case WBC_OPEN: wb_hold = 0; break;
+        }
         if (got & SIGBREAKF_CTRL_F) { read_settings(); bar_close(); }   /* the bar comes back as the settings say */
         reap();
         if ((got & sig_start) && session == 2) rc_session();
@@ -1779,6 +1787,7 @@ int main(void)
         }
     }
 out:
+    wbc_stop();
     bar_close();
     if (broker) DeleteCxObjAll(broker);
     if (timer) { AbortIO((struct IORequest *)tr); WaitIO((struct IORequest *)tr); CloseDevice((struct IORequest *)tr); }

@@ -49,6 +49,7 @@
 #include <stdio.h>
 
 #include "od_dock.h"
+#include "wbclose.h"
 
 const char version[] __attribute__((used)) = "$VER: OpenDock 0.4 (8.10.2026) OpenPrefs, Dalsin Limited";
 
@@ -65,6 +66,7 @@ static struct Task *running[OD_MAX];               /* compared, never followed *
 static struct Window *win;
 static struct Screen *scr;
 static int cellw, cellh, along, standing, pressed = -1, removing;
+static int wb_down;                                /* Workbench is shutting down or shut: 1 the dock is closed, 2 to open it again */
 
 /* An icon at an item size under 100%, both looks ([0] as it is, [1] pressed). */
 typedef struct { int w, h; ULONG *argb[2]; UWORD *pen[2]; } small_icon;
@@ -1250,6 +1252,7 @@ int main(void)
     struct Menu *menus = NULL;
     APTR vi = NULL;
     int quit = 0, timer = 0, ticks = 0, rc = RETURN_OK;
+    ULONG sigs;
 
     Forbid();
     if ((port = FindPort((STRPTR)PORT_NAME))) {
@@ -1262,6 +1265,7 @@ int main(void)
     if (!(IconBase = OpenLibrary((STRPTR)"icon.library", 44))) { PutStr((STRPTR)"OpenDock needs icon.library 44 (AmigaOS 3.5 or later).\n"); return RETURN_FAIL; }
     WorkbenchBase = OpenLibrary((STRPTR)"workbench.library", 44);
     CyberGfxBase = OpenLibrary((STRPTR)"cybergraphics.library", 41);   /* small icons on a graphics card */
+    wbc_start();
     if (!(port = CreateMsgPort())) { rc = RETURN_FAIL; goto out; }
     port->mp_Node.ln_Name = (char *)PORT_NAME;
     port->mp_Node.ln_Pri = 0;
@@ -1279,11 +1283,38 @@ int main(void)
     /* ten times a second for the name under the pointer; every two seconds for running programs */
     if (timer) { tr->tr_node.io_Command = TR_ADDREQUEST; tr->tr_time.tv_secs = 0; tr->tr_time.tv_micro = 100000; SendIO((struct IORequest *)tr); }
 
-    while (!quit && win) {
-        ULONG got = Wait((1UL << win->UserPort->mp_SigBit) | (appport ? 1UL << appport->mp_SigBit : 0) |
-                         (timer ? 1UL << tport->mp_SigBit : 0) | SIGBREAKF_CTRL_C | SIGBREAKF_CTRL_F);
+    while (!quit && (win || wb_down)) {
+        ULONG got;
         struct IntuiMessage *m;
+        sigs = (appport ? 1UL << appport->mp_SigBit : 0) | (timer ? 1UL << tport->mp_SigBit : 0) | SIGBREAKF_CTRL_C | SIGBREAKF_CTRL_F |
+               wbc_sigmask() | (win ? 1UL << win->UserPort->mp_SigBit : 0);
+        got = Wait(sigs);
         if (got & SIGBREAKF_CTRL_C) quit = 1;
+        /* Workbench is shutting down (Font prefs' Use, a screen mode): no window, no lock on its screen until it is back */
+        switch (wbc_take()) {
+        case WBC_CLOSE:
+            close_dock();
+            free_icons();
+            if (menus) { FreeMenus(menus); menus = NULL; }
+            if (vi) { FreeVisualInfo(vi); vi = NULL; }
+            if (scr) { UnlockPubScreen(NULL, scr); scr = NULL; }
+            wb_down = 1;
+            wbc_closed();
+            break;
+        case WBC_OPEN: wb_down = 2; break;
+        }
+        if (wb_down == 2 && (scr = LockPubScreen((STRPTR)"Workbench"))) {
+            if ((vi = GetVisualInfoA(scr, NULL)) && (menus = CreateMenus(newmenus, TAG_DONE)))
+                LayoutMenus(menus, vi, GTMN_NewLookMenus, TRUE, TAG_DONE);
+            if (open_dock(menus)) { wb_down = 0; check_running(); }
+            else {                                 /* the screen isn't ready yet: try again */
+                close_dock();
+                if (menus) { FreeMenus(menus); menus = NULL; }
+                if (vi) { FreeVisualInfo(vi); vi = NULL; }
+                UnlockPubScreen(NULL, scr); scr = NULL;
+            }
+        }
+        if (wb_down) continue;
         if (got & SIGBREAKF_CTRL_F) { load(); relayout(menus); check_running(); }
         if (timer && CheckIO((struct IORequest *)tr)) {
             WaitIO((struct IORequest *)tr);
@@ -1331,6 +1362,7 @@ int main(void)
         }
     }
 out:
+    wbc_stop();
     if (timer) { if (!CheckIO((struct IORequest *)tr)) AbortIO((struct IORequest *)tr); WaitIO((struct IORequest *)tr); CloseDevice((struct IORequest *)tr); }
     if (tr) DeleteIORequest((struct IORequest *)tr);
     if (tport) DeleteMsgPort(tport);
