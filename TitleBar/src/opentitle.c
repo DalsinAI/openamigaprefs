@@ -72,6 +72,7 @@
 #include "taskspace.h"
 #include "barpaint.h"
 #include "wbclose.h"
+#include "popuptheme.h"
 
 const char version[] __attribute__((used)) = "$VER: OpenTitle 0.6.2 (10.10.2026) OpenPrefs, Dalsin Limited";
 
@@ -611,19 +612,28 @@ static void draw_pop(void)
     rp = pop_w->RPort;
     fh = rp->TxHeight;
     pop_lines(l);
-    SetAPen(rp, dri->dri_Pens[BACKGROUNDPEN]);
-    RectFill(rp, 0, 0, pop_w->Width - 1, pop_w->Height - 1);
-    SetAPen(rp, dri->dri_Pens[SHADOWPEN]);
-    Move(rp, 0, 0); Draw(rp, pop_w->Width - 1, 0); Draw(rp, pop_w->Width - 1, pop_w->Height - 1); Draw(rp, 0, pop_w->Height - 1); Draw(rp, 0, 0);
-    SetAPen(rp, dri->dri_Pens[TEXTPEN]);
+    if (pt_ok) pt_panel(rp, pop_w->Width, pop_w->Height);       /* the theme's menu colour and a slim frame */
+    else {
+        SetAPen(rp, dri->dri_Pens[BACKGROUNDPEN]);
+        RectFill(rp, 0, 0, pop_w->Width - 1, pop_w->Height - 1);
+        SetAPen(rp, dri->dri_Pens[SHADOWPEN]);
+        Move(rp, 0, 0); Draw(rp, pop_w->Width - 1, 0); Draw(rp, pop_w->Width - 1, pop_w->Height - 1); Draw(rp, 0, pop_w->Height - 1); Draw(rp, 0, 0);
+    }
+    SetAPen(rp, pt_ok ? pt_text_pen() : dri->dri_Pens[TEXTPEN]);
     SetDrMd(rp, JAM1);
     for (i = 0, y = 6; i < 2; i++, y += fh + 4) { Move(rp, 8, y + rp->TxBaseline); Text(rp, (STRPTR)l[i], strlen(l[i])); }
     /* the button */
-    SetAPen(rp, dri->dri_Pens[SHINEPEN]);
-    Move(rp, 8, y + fh + 5); Draw(rp, 8, y); Draw(rp, pop_w->Width - 9, y);
-    SetAPen(rp, dri->dri_Pens[SHADOWPEN]);
-    Draw(rp, pop_w->Width - 9, y + fh + 5); Draw(rp, 8, y + fh + 5);
-    SetAPen(rp, dri->dri_Pens[TEXTPEN]);
+    if (pt_ok) {
+        SetAPen(rp, pt_hot_pen());
+        RectFill(rp, 8, y, pop_w->Width - 9, y + fh + 5);
+        SetAPen(rp, pt_hot_text_pen());
+    } else {
+        SetAPen(rp, dri->dri_Pens[SHINEPEN]);
+        Move(rp, 8, y + fh + 5); Draw(rp, 8, y); Draw(rp, pop_w->Width - 9, y);
+        SetAPen(rp, dri->dri_Pens[SHADOWPEN]);
+        Draw(rp, pop_w->Width - 9, y + fh + 5); Draw(rp, 8, y + fh + 5);
+        SetAPen(rp, dri->dri_Pens[TEXTPEN]);
+    }
     Move(rp, (pop_w->Width - TextLength(rp, (STRPTR)l[2], strlen(l[2]))) / 2, y + 3 + rp->TxBaseline);
     Text(rp, (STRPTR)l[2], strlen(l[2]));
 }
@@ -786,23 +796,31 @@ static void draw_menu(void)
     if (!menu_w) return;
     rp = menu_w->RPort;
     w = menu_w->Width; h = menu_w->Height;
-    SetAPen(rp, dri->dri_Pens[BARBLOCKPEN]);
-    RectFill(rp, 1, 1, w - 2, h - 2);
-    SetAPen(rp, dri->dri_Pens[SHADOWPEN]);
-    Move(rp, 0, 0); Draw(rp, w - 1, 0); Draw(rp, w - 1, h - 1); Draw(rp, 0, h - 1); Draw(rp, 0, 0);
+    if (pt_ok) pt_panel(rp, w, h);              /* the theme's menu colour and a slim frame, as OpenMenus' menus */
+    else {
+        SetAPen(rp, dri->dri_Pens[BARBLOCKPEN]);
+        RectFill(rp, 1, 1, w - 2, h - 2);
+        SetAPen(rp, dri->dri_Pens[SHADOWPEN]);
+        Move(rp, 0, 0); Draw(rp, w - 1, 0); Draw(rp, w - 1, h - 1); Draw(rp, 0, h - 1); Draw(rp, 0, 0);
+    }
     SetDrMd(rp, JAM1);
     for (i = 0; i < menu_n; i++) {
         const char *t = cog_items[menu_idx[i]].label;
         WORD y0 = menu_y[i], y1 = menu_y[i + 1] - 1;
         if (!t) {
+            if (pt_ok) {
+                SetAPen(rp, pt_frame_pen());
+                Move(rp, 4, (y0 + y1) / 2); Draw(rp, w - 5, (y0 + y1) / 2);
+                continue;
+            }
             SetAPen(rp, dri->dri_Pens[SHADOWPEN]);
             Move(rp, 4, (y0 + y1) / 2); Draw(rp, w - 5, (y0 + y1) / 2);
             SetAPen(rp, dri->dri_Pens[SHINEPEN]);
             Move(rp, 4, (y0 + y1) / 2 + 1); Draw(rp, w - 5, (y0 + y1) / 2 + 1);
             continue;
         }
-        if (i == menu_hot) { SetAPen(rp, dri->dri_Pens[FILLPEN]); RectFill(rp, 2, y0, w - 3, y1); }
-        SetAPen(rp, dri->dri_Pens[i == menu_hot ? FILLTEXTPEN : BARDETAILPEN]);
+        if (i == menu_hot) { SetAPen(rp, pt_ok ? pt_hot_pen() : dri->dri_Pens[FILLPEN]); RectFill(rp, 2, y0, w - 3, y1); }
+        SetAPen(rp, pt_ok ? (i == menu_hot ? pt_hot_text_pen() : pt_text_pen()) : dri->dri_Pens[i == menu_hot ? FILLTEXTPEN : BARDETAILPEN]);
         Move(rp, COG_PAD, y0 + (y1 - y0 + 1 - rp->TxHeight) / 2 + rp->TxBaseline);
         Text(rp, (STRPTR)t, strlen(t));
     }
@@ -1216,6 +1234,7 @@ static void close_all(void)
     }
     if (border_set) { prefs.border_black = 0; apply_border(); }
     free_pens();
+    pt_free();
     if (dri) { FreeScreenDrawInfo(scr, dri); dri = NULL; }
     if (scr) { UnlockPubScreen(NULL, scr); scr = NULL; }
 }
@@ -1226,6 +1245,7 @@ static int open_all(void)
     if (!(dri = GetScreenDrawInfo(scr))) { close_all(); return 0; }
     bar_edge = read_bar_edge();
     bar_sample_now();
+    pt_load(scr);
     if (prefs.clock) {
         place();
         if ((clock_w = bar_window(cx, cy, cw, ch))) {
