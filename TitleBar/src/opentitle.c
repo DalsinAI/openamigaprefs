@@ -11,7 +11,7 @@
  *
  * The free memory is Workbench's own: its title format (the WBTF chunk of
  * Sys/Workbench.prefs, as Prefs/Workbench writes it) becomes
- *   "OpenBench 0.1 - Chip %mcek KB, Fast %mfek KB, 1 GPU, 1 CPU + 8 cores"
+ *   "OpenBench 0.1 - Chip %mcek KB, Fast %mfek KB, GPU = 1, CPU = 1 (m68k) + 8 cores"
  * (0.6.9; both in whole KB, as the Amiga always showed them: the user, 10
  * October 2026; the earlier Workbench ones are still known as ours and replaced)
  * in ENV:, so IPrefs shows it and it updates as Workbench does; spaces
@@ -33,6 +33,7 @@
  * pointer, shows their help under them and tells the program of a click.
  * Tata is the first.
  *
+ * 0.6.10 (11 October 2026): the counts read "GPU = 1, CPU = 1 (m68k)", as the user put them.
  * 0.6.6 (10 October 2026): the editor the cog starts opens at the screen's top right, 20 pixels in (with
  *   OpenWindows 0.8.1); Network (OpenSocketControl) in the cog's list.
  * 0.6.5 (10 October 2026): the cog's list has Date and time (OpenDateTime)
@@ -92,7 +93,7 @@
 #include "popuptheme.h"
 #include "cogplace.h"
 
-const char version[] __attribute__((used)) = "$VER: OpenTitle 0.6.9 (10.10.2026) OpenPrefs, Dalsin Limited";
+const char version[] __attribute__((used)) = "$VER: OpenTitle 0.6.10 (11.10.2026) OpenPrefs, Dalsin Limited";
 
 struct IntuitionBase *IntuitionBase;
 struct GfxBase *GfxBase;
@@ -362,14 +363,13 @@ static ULONG board_gpus(void)
     return n;
 }
 
-/* ", 1 GPU, 1 CPU + 8 cores": after the memory, as the user asked for the title */
+/* ", GPU = 1, CPU = 1 (m68k) + 8 cores": after the memory (0.6.10, the user, 10 October 2026: "GPU = 1,
+ * CPU = 1 (m68k)"); the cores only when the board or openmulticore.library gives them */
 static void cpus_text(char *buf, int size)
 {
     ULONG n = (board_cores() ? board_cores() : omc_cores()), g = board_gpus();
-    char gpus[24] = "";
-    if (g) snprintf(gpus, sizeof gpus, ", %lu GPU%s", (unsigned long)g, g == 1 ? "" : "s");
-    if (n) snprintf(buf, size, "%s, 1 CPU + %lu core%s", gpus, (unsigned long)n, n == 1 ? "" : "s");
-    else snprintf(buf, size, "%s, 1 CPU", gpus);
+    if (n) snprintf(buf, size, ", GPU = %lu, CPU = 1 (m68k) + %lu core%s", (unsigned long)g, (unsigned long)n, n == 1 ? "" : "s");
+    else snprintf(buf, size, ", GPU = %lu, CPU = 1 (m68k)", (unsigned long)g);
 }
 
 static int ours(const char *fmt)
