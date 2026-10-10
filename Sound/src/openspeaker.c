@@ -130,7 +130,7 @@ static int levels_in(void)
 static int bar_pens(UWORD *fg, UWORD *bg)
 {
     if (pop) { *fg = dri->dri_Pens[FILLTEXTPEN]; *bg = dri->dri_Pens[FILLPEN]; return 1; }
-    *fg = dri->dri_Pens[BARDETAILPEN]; *bg = dri->dri_Pens[BARBLOCKPEN];
+    *fg = bp_text_pen(scr, dri->dri_Pens[BARDETAILPEN]); *bg = dri->dri_Pens[BARBLOCKPEN];
     return 0;
 }
 
@@ -264,6 +264,7 @@ static void close_speaker(void)
 {
     hscr = NULL;
     pt_free();
+    bp_release();
     if (spk) { CloseWindow(spk); spk = NULL; }
     if (dri) { FreeScreenDrawInfo(scr, dri); dri = NULL; }
     scr = NULL;

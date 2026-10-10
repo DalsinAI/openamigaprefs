@@ -98,4 +98,35 @@ static BP_UNUSED void bp_paint(struct Window *win, ULONG fallback_pen, WORD x, W
     RectFill(rp, x, y, x + pw - 1, y + ph - 1);
 }
 
+/* The colour for text and glyphs on the bar: the bar's detail pen is black however dark the theme's bar is.
+ * Light text on a dark bar, dark text on a light one, by the bar's own colour. Falls back to the pen. */
+static LONG bp_pen = -1;
+static ULONG bp_pen_rgb;
+static struct Screen *bp_pen_scr;
+
+static BP_UNUSED void bp_release(void)
+{
+    if (bp_pen >= 0 && bp_pen_scr) ReleasePen(bp_pen_scr->ViewPort.ColorMap, bp_pen);
+    bp_pen = -1;
+    bp_pen_scr = NULL;
+}
+
+static BP_UNUSED LONG bp_text_pen(struct Screen *scr, LONG fallback)
+{
+    ULONG c, want;
+    int luma;
+    if (!bp_n) return fallback;
+    c = bp_rgb[bp_n / 2];
+    luma = (int)((((c >> 16) & 255) * 77 + ((c >> 8) & 255) * 150 + (c & 255) * 29) >> 8);
+    want = luma < 128 ? 0xe8ecf0UL : 0x1c242dUL;
+    if (bp_pen < 0 || bp_pen_scr != scr || bp_pen_rgb != want) {
+        bp_release();
+        bp_pen = ObtainBestPen(scr->ViewPort.ColorMap, (want >> 16) * 0x01010101UL, ((want >> 8) & 255) * 0x01010101UL,
+                               (want & 255) * 0x01010101UL, OBP_Precision, PRECISION_IMAGE, TAG_DONE);
+        bp_pen_scr = scr;
+        bp_pen_rgb = want;
+    }
+    return bp_pen >= 0 ? bp_pen : fallback;
+}
+
 #endif
