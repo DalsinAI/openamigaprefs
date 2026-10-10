@@ -52,7 +52,7 @@
 #include "ogt_theme.h"
 #include "../../Common/looktabs.h"
 
-const char version[] __attribute__((used)) = "$VER: Menus 0.2.1 (10.10.2026) OpenPrefs, Dalsin Limited";
+const char version[] __attribute__((used)) = "$VER: Menus 0.2.2 (10.10.2026) OpenPrefs, Dalsin Limited";
 
 #define PREFS_ENV "ENV:OpenMenus/Menus"
 #define PREFS_ENVARC "ENVARC:OpenMenus/Menus"

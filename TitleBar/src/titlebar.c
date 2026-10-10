@@ -28,7 +28,7 @@
 #include "tb_prefs.h"
 #include "../../Common/looktabs.h"
 
-static const char version[] __attribute__((used)) = "$VER: TitleBar 0.3.1 (10.10.2026) OpenPrefs, MIT, Copyright (c) 2026 Dalsin Limited";
+static const char version[] __attribute__((used)) = "$VER: TitleBar 0.3.2 (10.10.2026) OpenPrefs, MIT, Copyright (c) 2026 Dalsin Limited";
 
 static tb_prefs cur;
 

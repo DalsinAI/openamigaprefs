@@ -51,7 +51,7 @@
 #include "ogt_theme.h"
 #include "../../Common/looktabs.h"
 
-const char version[] __attribute__((used)) = "$VER: Look 0.4.1 (10.10.2026) OpenPrefs, Dalsin Limited";
+const char version[] __attribute__((used)) = "$VER: Look 0.4.2 (10.10.2026) OpenPrefs, Dalsin Limited";
 
 #define PREFS_ENV "ENV:OpenGadTools/Look"
 #define PREFS_ENVARC "ENVARC:OpenGadTools/Look"
