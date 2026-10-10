@@ -13,6 +13,41 @@ The team was asked to design new preferences editors that combine similar settin
 - Everything runs on a real 68040 with FPU and no OpenGPU. Rows a machine can't use are left out, not greyed.
 - Dale took the five decisions on 6 October 2026, listed at the end.
 
+## Revision, 10 October 2026: OpenLook as the home of the look, and what folds where
+
+**Status:** the user's direction of 10 October 2026, recorded; it revises the grouping below and leaves the rest of this design (one frame, Simple and Advanced, the files each editor writes, Prefs/Classic, the 68040 rule) as decided. Where this section and the older sections disagree, this section wins.
+
+The user, 10 October 2026: the Pointer editor "crashes on our desktop" and "should be written in line with the open acceleration and placed as a tab in OpenLook"; then, for the rest of the drawer, that each group of OS editors folds into an Open app.
+
+| OS editor(s) | 6 October design | 10 October direction |
+| --- | --- | --- |
+| Pointer | Appearance, Pointer section | **A tab in OpenLook**, rewritten: the pointer image and the velocity-aware acceleration of OpenInput's design goal (openamigainput `Design-Pointer-Acceleration.md`; OpenMouseAccel source in openamigaup `src/openmouseaccel/`) |
+| Font | Appearance | **OpenLook** |
+| Palette | Appearance | **OpenLook** |
+| WBPattern | Appearance | **OpenLook**, inside the OpenLook framework |
+| Workbench | Desktop | **OpenLook** (moves) |
+| Asl | Files | **OpenLook** (moves): the file requester's settings sit with its theming |
+| ReAction classes' look | not covered | **OpenLook** (the queued ReAction theming: listbrowser, string, button, layout, label in the theme's colours and screen font) |
+| ScreenMode, Overscan | Display | **A new Open app in the OpenLook family**, combining the two (as Display) |
+| Input, IControl | Input; IControl in Desktop | **Open apps** in the same way (open: one app or two, question 1) |
+| Locale, Time | Region | **A new Open app** (as Region) |
+| Printer, PrinterGfx, PrinterPS | Printing | **Redesigned to stitch alongside OpenPrint**, not a separate editor |
+| DefIcons | left where it was | **Folded under OpenTypes**: the remaining default-icon functionality joins OpenTypes |
+
+**What this means for the plan.** "Appearance" in the sections above is OpenLook's own editor (Look, in this repository), grown into tabs: Theme, Pointer, Fonts, Colours, Backdrops, Workbench, File requesters. P1 (the shared frame and Appearance) stays first and now carries the Pointer tab, which also ends the crash. Display and Region keep their shape as new Open apps. Files becomes OpenTypes with DefIcons inside it. Printing moves out of OpenPrefs into OpenPrint's settings. Desktop keeps Windows, Menus, Dock and IControl unless question 1 moves IControl.
+
+**Every file rule above still holds:** each tab and app reads and writes the OS's own files (`ENV:Sys/pointer.prefs`, `font.prefs`, `palette.prefs`, `wbpattern.prefs`, `workbench.prefs`, `asl.prefs`, `screenmode.prefs`, `overscan.prefs`, `input.prefs`, `icontrol.prefs`, `locale.prefs`, the printer files), only what changed is written, and the OS editors stay in Prefs/Classic.
+
+**Questions for the user**
+1. Input and IControl: one Open app, or Input beside Gamepads and the pointer's acceleration, and IControl in Desktop?
+2. The pointer's acceleration: shown in OpenLook's Pointer tab (the user's direction) and also from the Input app, or only in OpenLook?
+3. The names of the new apps: Display and Region as in this design, or Open-prefixed names?
+4. OpenPrint: the printer settings as a page of OpenPrint's own window, or a Printing editor that OpenPrint opens?
+
+**Fix backlog from the same day**
+- **Pointer (the OS editor) crashes on the Team's desktop** (Instance-32, OpenLook theme). Cause not yet found. Until the OpenLook Pointer tab replaces it, the crash is to be found and fixed or the editor kept in Prefs/Classic only.
+- **Gamepads has no icon,** and **reports wrongly** (what it reports is to be confirmed with the user).
+
 ## What we found
 
 OS 3.2's Prefs drawer holds seventeen editors, one per settings file, which is how the OS grew rather than how people look for a setting. AHI adds one more. Since 4 October we have added five of our own in DalsinAI/openamigaprefs: Look, Menus, Windows, Dock and OpenTypes, plus OpenUp Setup, which is a first-start wizard rather than an editor. Each new one made the drawer longer.
