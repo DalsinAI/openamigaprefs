@@ -328,6 +328,9 @@ static int bar_ours(struct Window *o)
 
 static int bar_sample_now(void) { return bp_sample(scr, bar_edge == OM_BAR_TITLE, bar_ours); }
 
+/* the pen for text and glyphs on the bar: light on a dark bar, dark on a light one */
+static LONG bar_text(void) { return bp_text_pen(scr, dri->dri_Pens[BARDETAILPEN]); }
+
 /* the bar's colour behind a box of a bar window, not the pen's white */
 static void bar_paint(struct Window *win, WORD x, WORD y, WORD pw, WORD ph)
 {
@@ -409,7 +412,7 @@ static void draw_clock(int force)
     strcpy(shown, t);
     rp = clock_w->RPort;
     bar_paint(clock_w, 0, 0, cw, ch);
-    SetAPen(rp, dri->dri_Pens[BARDETAILPEN]);
+    SetAPen(rp, bar_text());
     SetDrMd(rp, JAM1);
     h = ch - (bar_edge == OM_BAR_TITLE ? 1 : 0);
     w = TextLength(rp, (STRPTR)t, strlen(t));
@@ -563,7 +566,7 @@ static void draw_net(int force)
     net_drawn = key;
     rp = net_w->RPort;
     bar_paint(net_w, 0, 0, nw, nh);
-    SetAPen(rp, dri->dri_Pens[BARDETAILPEN]);
+    SetAPen(rp, bar_text());
     cy = (nh - (bar_edge == OM_BAR_TITLE ? 1 : 0)) / 2;
     draw_lan(rp, 2, cy, lan_state);
     if (wifi_state >= 0) draw_wifi(rp, 22, cy, wifi_state, wifi_signal);
@@ -755,7 +758,7 @@ static void draw_cog(int force)
     ox = (gw - size) / 2;
     oy = (h - size) / 2;
     if (oy < 0) oy = 0;
-    SetAPen(rp, dri->dri_Pens[state == 2 ? FILLTEXTPEN : BARDETAILPEN]);
+    SetAPen(rp, state == 2 ? dri->dri_Pens[FILLTEXTPEN] : bar_text());
     for (y = 0; y < size && oy + y < gh; y++)
         for (x = 0; x < size; ) {
             int run;
@@ -1010,7 +1013,7 @@ static void ts_draw(struct ts_icon *t, int force)
             LONG pen;
             if (!c) { x++; continue; }
             for (run = x; run < t->w && px[y * t->w + run] == c; run++) ;
-            pen = c == 1 ? dri->dri_Pens[BARDETAILPEN] : c == 2 ? dri->dri_Pens[SHINEPEN] : c == 3 ? dri->dri_Pens[SHADOWPEN]
+            pen = c == 1 ? bar_text() : c == 2 ? dri->dri_Pens[SHINEPEN] : c == 3 ? dri->dri_Pens[SHADOWPEN]
                 : pen_for(t->rgb[(c - 4) & 15]);
             SetAPen(rp, pen);
             RectFill(rp, ox + x, oy + y, ox + run - 1, oy + y);
@@ -1214,6 +1217,7 @@ static void close_all(void)
     }
     if (border_set) { prefs.border_black = 0; apply_border(); }
     free_pens();
+    bp_release();
     if (dri) { FreeScreenDrawInfo(scr, dri); dri = NULL; }
     if (scr) { UnlockPubScreen(NULL, scr); scr = NULL; }
 }
