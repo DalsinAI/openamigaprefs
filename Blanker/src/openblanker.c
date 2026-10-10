@@ -37,7 +37,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-static const char version[] __attribute__((used)) = "$VER: OpenBlanker 1.1 (10.10.2026) MIT, Copyright (c) 2026 Dalsin Limited";
+static const char version[] __attribute__((used)) = "$VER: OpenBlanker 1.1.1 (10.10.2026) MIT, Copyright (c) 2026 Dalsin Limited";
 
 struct IntuitionBase *IntuitionBase;
 struct GfxBase *GfxBase;
@@ -58,7 +58,7 @@ typedef struct { int hold_frames; line lines[8]; } card;
 
 /* Latin-1: the Amiga's fonts are ISO-8859-1 (\xFC u-umlaut, \xE9 e-acute). */
 static const card show[] = {
-    { 130, { { WORDMARK, "" }, { SMALL, "An homage" } } },
+    { 130, { { WORDMARK, "" }, { SMALL, "A homage" } } },
     { 330, { { DEDICATION, "And our undying love and respect to the Gods and Angels of the Amiga community, without whose dedication and undying love for the Amiga we would not be here to work on this today." }, { RULE, "" } } },
     { 120, { { KICKER, "THE GODS" }, { TITLE, "The ones who made the Amiga" } } },
     { 115, { { NAME, "Jay Miner" }, { WHAT, "the father of the Amiga, and its custom chips" } } },
