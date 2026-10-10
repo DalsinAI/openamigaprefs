@@ -22,6 +22,7 @@ Limited.
 | Drawers too (0.3) | Workbench's drawer windows are remembered the same way, with no Snapshot needed | `places.drawers on` |
 | Double-click to front (0.4) | A double-click in a window's title bar brings it to the front. On by default | `doubleclick.front on` |
 | Edges (0.5) | A resizable window is resized by dragging any edge but its title bar. On by default | `edges on` |
+| Solid dragging (0.8) | A window is dragged by its title bar with its contents, not as an outline. Off unless asked for (the editor's "Drag windows with their contents, not an outline") | `drag.solid on` |
 | Drive windows (0.6) | A drive's window is titled with the drive's name only: Workbench's "Work  70% full, 453MB free, 62.0MB in use" loses its usage part. On by default | `drive.title on` |
 | Drawers | Workbench drawer windows open at least this big | `drawer 400 250` (0 0 leaves them) |
 
@@ -232,6 +233,21 @@ view is shared by all OpenPrefs editors as `simple` or `advanced` in
 `ENV:OpenAmiga/PrefsView` (and `ENVARC:`).
 
 Exchange lists OpenWindows and can disable, enable or quit it.
+
+## 0.8 (10 October 2026): solid dragging
+
+The user asked for an option to drag a window and its contents instead of an
+outline. With `drag.solid on`, the input handler takes a left press on a
+window's drag bar (the frontmost window under the pointer, in its title bar,
+on its drag gadget and on no other gadget; read as the edges are, under the
+screen's layer lock with AttemptSemaphore, so the input task never waits)
+away from Intuition, as it does an edge, and the main task moves the window
+with MoveWindow as the pointer moves, kept on the screen. At the button-up
+the window is snapped (or fills a half) as an ordinary drag would be. A
+double-click on the title bar still brings the window to the front. Qualifier
+keys leave the press to Intuition, so Amiga-drag and the rest are as before.
+A window moves with no NEWSIZE or redraw from its program: the layers move
+its contents.
 
 ## Tested
 
