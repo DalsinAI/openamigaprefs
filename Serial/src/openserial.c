@@ -139,7 +139,7 @@ static int save_serial(const char *path)
 
 /* ---- the window ------------------------------------------------------------------ */
 
-enum { G_BAUD = 1, G_INBUF, G_OUTBUF, G_HANDSHAKE, G_PARITY, G_BITS, G_STOP, G_SHARED, G_7WIRE, G_STATUS, G_SAVE, G_USE, G_CANCEL, G_COUNT };
+enum { G_BAUD = 1, G_INBUF, G_OUTBUF, G_HANDSHAKE, G_PARITY, G_BITS, G_STOP, G_SHARED, G_STATUS, G_SAVE, G_USE, G_CANCEL, G_COUNT };
 
 static const ULONG bauds[] = { 300, 1200, 2400, 4800, 9600, 19200, 31250, 38400, 57600, 115200 };
 static const char *const baud_labels[] = { "300", "1200", "2400", "4800", "9600", "19200", "31250", "38400", "57600", "115200", NULL };
@@ -153,7 +153,7 @@ static const char *const stop_labels[] = { "1", "2", NULL };                    
 static struct Window *win;
 static struct Gadget *gad[G_COUNT];
 static char status_text[80];
-static int sel_baud, sel_hs, sel_parity, sel_bits, sel_stop, shared, wire7;
+static int sel_baud, sel_hs, sel_parity, sel_bits, sel_stop, shared;
 
 static void status(const char *s)
 {
@@ -197,7 +197,7 @@ static int put_in_place(int save)
     sp.sp_Parity = sel_parity;
     sp.sp_BitsPerChar = sel_bits;
     sp.sp_StopBits = sel_stop;
-    sp.sp_SerialFlags = (shared ? SERIALFLAG_SHARED : 0) | (wire7 ? SERIALFLAG_7WIRE : 0);
+    sp.sp_SerialFlags = (sp.sp_SerialFlags & ~SERIALFLAG_SHARED) | (shared ? SERIALFLAG_SHARED : 0);
     if (save && !save_serial(SERIAL_ENVARC)) { status("Couldn't write ENVARC:Sys/serial.prefs."); return 0; }
     if (!save_serial(SERIAL_ENV)) { status("Couldn't write ENV:Sys/serial.prefs."); return 0; }
     return 1;
@@ -227,7 +227,6 @@ static int gui(void)
     sel_bits = sp.sp_BitsPerChar == BITS_7 ? 0 : 1;
     sel_stop = sp.sp_StopBits == SBITS_2 ? 1 : 0;
     shared = (sp.sp_SerialFlags & SERIALFLAG_SHARED) != 0;
-    wire7 = (sp.sp_SerialFlags & SERIALFLAG_7WIRE) != 0;
 
     fh = scr->Font->ta_YSize;
     lh = fh + 6;
@@ -263,8 +262,6 @@ static int gui(void)
     G(CYCLE_KIND, G_STOP, X, row, cw, lh, "Stop bits", PLACETEXT_LEFT, GTCY_Labels, (ULONG)stop_labels, GTCY_Active, sel_stop);
     row += lh + 10;
     G(CHECKBOX_KIND, G_SHARED, X, row, 26, lh, "Shared port", PLACETEXT_LEFT, GTCB_Checked, shared, GTCB_Scaled, TRUE);
-    row += lh + 4;
-    G(CHECKBOX_KIND, G_7WIRE, X, row, 26, lh, "7-wire cable", PLACETEXT_LEFT, GTCB_Checked, wire7, GTCB_Scaled, TRUE);
     row += lh + 10;
     G(TEXT_KIND, G_STATUS, 12, row, W - 24, lh, NULL, 0, GTTX_Text, (ULONG)status_text, GTTX_Border, TRUE);
     row += lh + 6;
@@ -318,7 +315,6 @@ static int gui(void)
                 case G_BITS: sel_bits = code; break;
                 case G_STOP: sel_stop = code; break;
                 case G_SHARED: shared = (gg->Flags & GFLG_SELECTED) != 0; break;
-                case G_7WIRE: wire7 = (gg->Flags & GFLG_SELECTED) != 0; break;
                 case G_SAVE: if (put_in_place(1)) quit = 1; break;
                 case G_USE: if (put_in_place(0)) quit = 1; break;
                 case G_CANCEL: quit = 1; break;
