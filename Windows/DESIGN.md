@@ -70,12 +70,10 @@ dragging any edge but its title bar, the sides, the bottom and the bottom
 corners, as on today's desktops. OpenWindows does it without patching
 Intuition:
 
-- **The grab zone** is 7 pixels outside the frame and 3 inside it (the
-  frame's own line and two more), down both sides and along the bottom,
-  below the title bar (0.6: it was 4 and 2, hard to hit on a slim edge). A
-  bottom corner reaches 16 pixels along both edges: the bottom edge's last
-  16 pixels hold the side too, and a side's last 16 hold the bottom. The
-  title bar's height only ever moves a window.
+- **The grab zone** (0.6.1) is 4 pixels outside the frame and the frame's
+  own line, down both sides and along the bottom, below the title bar, and a
+  5 x 5 square on each bottom corner. Nothing is drawn. The title bar's
+  height only ever moves a window.
 - **The input handler decides at the press.** It reads the screen's layers
   front to back with no lock (it runs on input.device's task and can't wait,
   as the wheel's test already does): the first window whose frame holds the
@@ -85,10 +83,13 @@ Intuition:
   task is told. A backdrop, a borderless window and one without
   `WFLG_SIZEGADGET` are never grabbed, and a press with Shift, Ctrl, Alt or
   Amiga held is left to Intuition.
-- **The main task resizes** with `ChangeWindowBox` each time the pointer
-  moves, from the box the window had at the press: the edge or corner held
-  follows the pointer, the others stay. The window keeps to its own limits
-  (`MinWidth` to `MaxWidth`) and to the screen. The window is made active.
+- **The main task sizes the window once** (0.6.1; 0.5 and 0.6 called
+  `ChangeWindowBox` at every move, which froze the screen, see below): while
+  the button is held an outline shows the box, from the box the window had
+  at the press: the edge or corner held follows the pointer, the others stay.
+  At the button-up one `ChangeWindowBox` follows. The window keeps to its own
+  limits (`MinWidth` to `MaxWidth`) and to the screen. The window is made
+  active.
 - **The press is tested under the screen's layer lock.** The input handler
   can't wait, so it takes the lock with `AttemptSemaphore`; while another
   task holds it, the press goes to Intuition as before 0.5. The edges are the
@@ -122,6 +123,57 @@ steered from the viewer; it is now ten wide, with corners that reach along
 the edges. Lab: right edge grabbed 6 pixels outside the frame and pulled 60
 wider, bottom 6 outside pulled 60 taller, left 4 outside, and both bottom
 corners 10 pixels along an edge; each window box came out as set.
+
+**0.6.1 (10 October 2026): "resize crashes the apps", and the whole screen
+froze.** On Instance-32 an edge resize left OpenFiles with a blank body and
+half a frame line, other programs crashed, and dock, bar and pointer stopped.
+Reproduced in a lab at 1920 x 1080 with a test program that holds its layer
+for 1.5 seconds while it redraws (a slow program) and one that quits on more
+than four NEWSIZE in a second or on a size past its own limit (a fragile
+one). The cause was 0.6's resize itself: it called `ChangeWindowBox` for
+every move of the pointer, 150 of them in a short drag, so the program got
+150 NEWSIZE and REFRESHWINDOW (Intuition's own sizing sends one NEWSIZE at the
+end), and every one went through the input task, which waits on the program's
+layer lock. With the slow program the input stream stood still for 82 seconds
+(the lab's pointer commands did not return in 90).
+
+- **An outline while the button is held, one size at the button-up.** The
+  window is left alone during the drag; a two pixel outline of the box it
+  would have is drawn inverted straight into the screen's bitmap, as
+  Intuition's own sizing does, and moved with the pointer. At the button-up
+  the outline is taken away and the window is sized with a single
+  `ChangeWindowBox`: the program sees one NEWSIZE, the same as from its size
+  gadget or a zoom. The slow program then got one NEWSIZE and the input
+  stream never stopped (the same drag returned in 4.8 seconds); the fragile
+  one, dragged 1200 pixels wider in 300 pointer events, got one NEWSIZE, at
+  its own limit.
+- **Limits are kept.** The box is cut to `MinWidth`/`MinHeight` and to
+  `MaxWidth`/`MaxHeight`, where 0 and 65535 (a program that gave none) mean the
+  screen's size, and to the screen.
+- **No lock is held across a wait.** The input handler never waits and holds
+  nothing between events: it takes the layer lock once, with
+  `AttemptSemaphore`, to decide a press, and lets it go. The main task never
+  holds a lock while it waits for anything. The button-up always ends the
+  drag in the handler, whether or not the main task or the program has
+  answered. A drag that gets no event for 8 seconds, or lasts 120, is
+  dropped by the main task (the outline is taken away, the window is left as
+  it was): the cover for a button-up that never arrives.
+- **SIZEVERIFY** is not sent: Intuition's message cannot be sent by a
+  program. A program that asked for it is sized as it is by a zoom or by a
+  program's own `SizeWindow`, once.
+- **Grab zones, as the user specified (10 October).** Nothing is drawn. A
+  side is a strip four pixels outside the frame, with the frame's own line
+  (one pixel); the bottom edge is the same along the bottom. Each bottom
+  corner is a square of 5 x 5 pixels centred on the corner, two pixels
+  outside the window and two inside, and holds both edges. Only the bottom
+  corners: a window is never sized from its top, which is its title bar.
+  The 16 pixel reach along an edge of 0.6 is gone.
+- Lab (OpenWindows 0.6.1, OpenLook 0.7.5): right, bottom, left, bottom left
+  and bottom right of a test window, the Work drawer, OpenFiles and a program
+  with limits, one NEWSIZE each and the window as set; the Sound and Tata
+  windows (no size gadget) stay as they are; OpenFiles redraws its two panes
+  at every size. A resize now draws one frame in OpenLook instead of a
+  hundred.
 
 **Drive windows (0.6).** Workbench makes a drive's window title from its
 format "%s  %lU%% full, %sB free, %sB in use" (the two spaces, the
