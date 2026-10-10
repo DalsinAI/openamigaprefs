@@ -43,7 +43,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 
-const char version[] __attribute__((used)) = "$VER: OpenUp-Setup 0.1 (6.10.2026) OpenPrefs, Dalsin Limited";
+const char version[] __attribute__((used)) = "$VER: OpenUp-Setup 0.1.1 (10.10.2026) OpenPrefs, Dalsin Limited";
 
 #define USER_STARTUP "S:User-Startup"
 #define BLOCK_BEGIN ";BEGIN OpenUp"
@@ -100,10 +100,19 @@ static int exists(const char *path)
     return l != 0;
 }
 
+/* An OS editor that OpenUp's RECONCILE moved to SYS:Prefs/Classic is still found there. */
+static const char *found(const char *path)
+{
+    static char classic[96];
+    if (exists(path) || strncmp(path, "SYS:Prefs/", 10)) return path;
+    snprintf(classic, sizeof classic, "SYS:Prefs/Classic/%s", path + 10);
+    return exists(classic) ? classic : path;
+}
+
 static void run_tool(const char *path)
 {
     char cmd[160];
-    snprintf(cmd, sizeof cmd, "Run >NIL: <NIL: \"%s\"", path);
+    snprintf(cmd, sizeof cmd, "Run >NIL: <NIL: \"%s\"", found(path));
     SystemTags((STRPTR)cmd, TAG_DONE);
 }
 
@@ -561,12 +570,12 @@ static int gui(void)
     g = CreateContext(&adv_glist[P_DESKTOP]);
     for (i = 0; i < 5; i++)
         G(BUTTON_KIND, editors[i].id, cx + (i % 3) * ((cw + 8) / 3), row + 8 * (fh + 1) + 20 + lh + (i / 3) * (lh + 6),
-          (cw + 8) / 3 - 8, lh, editors[i].label, 0, GA_Disabled, !exists(editors[i].path));
+          (cw + 8) / 3 - 8, lh, editors[i].label, 0, GA_Disabled, !exists(found(editors[i].path)));
 
     g = CreateContext(&page_glist[P_DEVICES]);
     for (i = 5; i < 10; i++)
         G(BUTTON_KIND, editors[i].id, cx + ((i - 5) % 2) * (cw / 2), row + 3 * (fh + 2) + ((i - 5) / 2) * (lh + 6),
-          cw / 2 - 8, lh, editors[i].label, 0, GA_Disabled, !exists(editors[i].path));
+          cw / 2 - 8, lh, editors[i].label, 0, GA_Disabled, !exists(found(editors[i].path)));
 
     g = CreateContext(&page_glist[P_STARTUP]);
     G(LISTVIEW_KIND, G_LINES, cx, row + 3 * (fh + 2), cw, 7 * (fh + 1) + 4, NULL, 0,
