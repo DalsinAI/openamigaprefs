@@ -51,7 +51,7 @@
 #include "od_dock.h"
 #include "wbclose.h"
 
-const char version[] __attribute__((used)) = "$VER: OpenDock 0.6.1 (10.10.2026) OpenPrefs, Dalsin Limited";
+const char version[] __attribute__((used)) = "$VER: OpenDock 0.6.2 (10.10.2026) OpenPrefs, Dalsin Limited";
 
 #define PREFS_ENV "ENV:OpenDock/Dock"
 #define PREFS_ENVARC "ENVARC:OpenDock/Dock"
@@ -1260,6 +1260,7 @@ static int open_dock(struct Menu *menus)
     /* what is behind the dock, before it opens; and the bitmap it is drawn in.
      * A window over the dock's place would be copied too, so then the last
      * copy is kept when it is the same size, or the shelf is drawn solid. */
+    bubble_off();                                  /* 0.6.2: the name's bubble must not be in the copy of what is behind */
     {
         struct BitMap *kept = NULL;
         int over = covered(x, y, w, h);
