@@ -89,7 +89,7 @@
 #include "popuptheme.h"
 #include "cogplace.h"
 
-const char version[] __attribute__((used)) = "$VER: OpenTitle 0.6.6 (10.10.2026) OpenPrefs, Dalsin Limited";
+const char version[] __attribute__((used)) = "$VER: OpenTitle 0.6.7 (10.10.2026) OpenPrefs, Dalsin Limited";
 
 struct IntuitionBase *IntuitionBase;
 struct GfxBase *GfxBase;
@@ -749,6 +749,8 @@ static const struct { const char *label, *path, *needs; } cog_items[] = {
     { "Title bar",    "SYS:Prefs/TitleBar",     NULL },
     { "Sound",        "SYS:Prefs/Sound",        "SYS:C/OpenSpeaker" },    /* OS 3.2's own until OpenUp's Sound replaces it */
     { "Date and time", "SYS:Prefs/OpenDateTime", NULL },                 /* 0.6.5: OpenDateTime (date, time, zone, country, language) */
+    { "Input",        "SYS:Prefs/OpenInput",    NULL },                   /* 0.6.7: OpenInput (mouse, keyboard, keymap; Gamepads under it) */
+    { "Serial",       "SYS:Prefs/OpenSerial",   NULL },                   /* 0.6.7: OpenSerial */
     { "Printers",     "SYS:Utilities/OpenPrint/Printers and Queue", NULL },  /* 0.6.5: OpenPrint's printers, the user, 10 Oct 2026 */
     { "Network",      "SYS:Tools/Commodities/OpenSocketControl", NULL },     /* 0.6.6: OpenSocket's settings and status */
     { "OpenTypes",    "SYS:Prefs/OpenTypes",    NULL },
