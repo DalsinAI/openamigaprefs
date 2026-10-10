@@ -31,6 +31,12 @@
  * pointer, shows their help under them and tells the program of a click.
  * Tata is the first.
  *
+ * 0.6.2 (10 October 2026): the bar's icons sit under windows that overlap the
+ * bar (they are windows of their own and are no longer raised over the
+ * others), are painted over the bar's own gradient, not a white box (the
+ * colours are read from the screen's bar, Common/barpaint.h), and are
+ * centred in the bar.
+ *
  * MIT, Copyright (c) 2026 Dalsin Limited. */
 #include <exec/types.h>
 #include <exec/memory.h>
@@ -64,13 +70,15 @@
 #include "om_prefs.h"
 #include "logo.h"
 #include "taskspace.h"
+#include "barpaint.h"
 #include "wbclose.h"
+#include "popuptheme.h"
 
-const char version[] __attribute__((used)) = "$VER: OpenTitle 0.6.1 (8.10.2026) OpenPrefs, Dalsin Limited";
+const char version[] __attribute__((used)) = "$VER: OpenTitle 0.6.2 (10.10.2026) OpenPrefs, Dalsin Limited";
 
 struct IntuitionBase *IntuitionBase;
 struct GfxBase *GfxBase;
-struct Library *LayersBase, *UtilityBase, *SocketBase, *WorkbenchBase;
+struct Library *LayersBase, *UtilityBase, *SocketBase, *WorkbenchBase, *CyberGfxBase;
 
 #define MENUS_ENV  "ENV:OpenMenus/Menus"
 #define TRAY_DIR   "ENV:OpenMenus/Tray"
@@ -312,6 +320,26 @@ static void apply_border(void)
     RethinkDisplay();
 }
 
+/* ---- the bar's own colours ------------------------------------------------------------------ */
+
+static int ts_is(struct Window *w);
+
+static int bar_ours(struct Window *o)
+{
+    return o == logo_w || o == clock_w || o == net_w || o == pop_w || o == cog_w || o == menu_w || ts_is(o);
+}
+
+static int bar_sample_now(void) { return bp_sample(scr, bar_edge == OM_BAR_TITLE, bar_ours); }
+
+/* the pen for text and glyphs on the bar: light on a dark bar, dark on a light one */
+static LONG bar_text(void) { return bp_text_pen(scr, dri->dri_Pens[BARDETAILPEN]); }
+
+/* the bar's colour behind a box of a bar window, not the pen's white */
+static void bar_paint(struct Window *win, WORD x, WORD y, WORD pw, WORD ph)
+{
+    bp_paint(win, dri->dri_Pens[BARBLOCKPEN], x, y, pw, ph);
+}
+
 /* ---- the logo -------------------------------------------------------------------------------- */
 
 static LONG pen_for(ULONG rgb)
@@ -333,21 +361,23 @@ static void free_pens(void)
     npens = 0;
 }
 
+#define LOGO_W 17                              /* the logo's window: the logo is 16 wide, its picture 15 */
+
 static void draw_logo(void)
 {
     struct RastPort *rp;
-    WORD s, x, y;
+    WORD x, y, oy;
     if (!logo_w) return;
     rp = logo_w->RPort;
-    SetAPen(rp, dri->dri_Pens[BARBLOCKPEN]);
-    RectFill(rp, 0, 0, logo_w->Width - 1, logo_w->Height - 1);
-    s = logo_w->Height - 2;                    /* the logo, scaled to the bar, a pixel in from the top */
-    for (y = 0; y < s; y++)
-        for (x = 0; x < s; x++) {
-            long c = logo16[(y * 16 / s) * 16 + x * 16 / s];
+    bar_paint(logo_w, 0, 0, logo_w->Width, logo_w->Height);
+    /* the picture as it is (16 x 16, rows 4 to 12 used), its used rows centred in the bar's colour rows */
+    oy = (logo_w->Height - 9) / 2 - 4;
+    for (y = 4; y < 13; y++)
+        for (x = 0; x < 16; x++) {
+            long c = logo16[y * 16 + x];
             if (c < 0) continue;
             SetAPen(rp, pen_for((ULONG)c));
-            WritePixel(rp, 2 + x, 1 + y);
+            WritePixel(rp, 1 + x, oy + y);
         }
 }
 
@@ -384,9 +414,8 @@ static void draw_clock(int force)
     if (!force && !strcmp(t, shown)) return;
     strcpy(shown, t);
     rp = clock_w->RPort;
-    SetAPen(rp, dri->dri_Pens[BARBLOCKPEN]);
-    RectFill(rp, 0, 0, cw - 1, ch - 1);
-    SetAPen(rp, dri->dri_Pens[BARDETAILPEN]);
+    bar_paint(clock_w, 0, 0, cw, ch);
+    SetAPen(rp, bar_text());
     SetDrMd(rp, JAM1);
     h = ch - (bar_edge == OM_BAR_TITLE ? 1 : 0);
     w = TextLength(rp, (STRPTR)t, strlen(t));
@@ -411,11 +440,19 @@ static void place(void)
 
 /* ---- the windows ----------------------------------------------------------------------------- */
 
+/* a bar window sits in front of the bar and the Workbench backdrop but under every other window:
+ * a window that overlaps the bar covers the bar's icons, as it covers the bar's title */
+static struct Window *to_back(struct Window *w)
+{
+    if (w) WindowToBack(w);
+    return w;
+}
+
 static struct Window *bar_window(WORD x, WORD y, WORD w, WORD h)
 {
-    return OpenWindowTags(NULL, WA_CustomScreen, (ULONG)scr, WA_Left, x, WA_Top, y, WA_Width, w, WA_Height, h,
+    return to_back(OpenWindowTags(NULL, WA_CustomScreen, (ULONG)scr, WA_Left, x, WA_Top, y, WA_Width, w, WA_Height, h,
                           WA_Borderless, TRUE, WA_Activate, FALSE, WA_RMBTrap, TRUE, WA_SmartRefresh, TRUE,
-                          WA_IDCMP, IDCMP_REFRESHWINDOW | IDCMP_ACTIVEWINDOW, TAG_DONE);
+                          WA_IDCMP, IDCMP_REFRESHWINDOW | IDCMP_ACTIVEWINDOW, TAG_DONE));
 }
 
 
@@ -531,9 +568,8 @@ static void draw_net(int force)
     if (!net_w || (!force && key == net_drawn)) return;
     net_drawn = key;
     rp = net_w->RPort;
-    SetAPen(rp, dri->dri_Pens[BARBLOCKPEN]);
-    RectFill(rp, 0, 0, nw - 1, nh - 1);
-    SetAPen(rp, dri->dri_Pens[BARDETAILPEN]);
+    bar_paint(net_w, 0, 0, nw, nh);
+    SetAPen(rp, bar_text());
     cy = (nh - (bar_edge == OM_BAR_TITLE ? 1 : 0)) / 2;
     draw_lan(rp, 2, cy, lan_state);
     if (wifi_state >= 0) draw_wifi(rp, 22, cy, wifi_state, wifi_signal);
@@ -541,9 +577,9 @@ static void draw_net(int force)
 
 static struct Window *net_window(WORD x, WORD y, WORD w, WORD h)
 {
-    return OpenWindowTags(NULL, WA_CustomScreen, (ULONG)scr, WA_Left, x, WA_Top, y, WA_Width, w, WA_Height, h,
+    return to_back(OpenWindowTags(NULL, WA_CustomScreen, (ULONG)scr, WA_Left, x, WA_Top, y, WA_Width, w, WA_Height, h,
                           WA_Borderless, TRUE, WA_Activate, FALSE, WA_RMBTrap, TRUE, WA_SmartRefresh, TRUE,
-                          WA_IDCMP, IDCMP_REFRESHWINDOW | IDCMP_ACTIVEWINDOW | IDCMP_MOUSEBUTTONS, TAG_DONE);
+                          WA_IDCMP, IDCMP_REFRESHWINDOW | IDCMP_ACTIVEWINDOW | IDCMP_MOUSEBUTTONS, TAG_DONE));
 }
 
 static void net_open(void)
@@ -579,19 +615,28 @@ static void draw_pop(void)
     rp = pop_w->RPort;
     fh = rp->TxHeight;
     pop_lines(l);
-    SetAPen(rp, dri->dri_Pens[BACKGROUNDPEN]);
-    RectFill(rp, 0, 0, pop_w->Width - 1, pop_w->Height - 1);
-    SetAPen(rp, dri->dri_Pens[SHADOWPEN]);
-    Move(rp, 0, 0); Draw(rp, pop_w->Width - 1, 0); Draw(rp, pop_w->Width - 1, pop_w->Height - 1); Draw(rp, 0, pop_w->Height - 1); Draw(rp, 0, 0);
-    SetAPen(rp, dri->dri_Pens[TEXTPEN]);
+    if (pt_ok) pt_panel(rp, pop_w->Width, pop_w->Height);       /* the theme's menu colour and a slim frame */
+    else {
+        SetAPen(rp, dri->dri_Pens[BACKGROUNDPEN]);
+        RectFill(rp, 0, 0, pop_w->Width - 1, pop_w->Height - 1);
+        SetAPen(rp, dri->dri_Pens[SHADOWPEN]);
+        Move(rp, 0, 0); Draw(rp, pop_w->Width - 1, 0); Draw(rp, pop_w->Width - 1, pop_w->Height - 1); Draw(rp, 0, pop_w->Height - 1); Draw(rp, 0, 0);
+    }
+    SetAPen(rp, pt_ok ? pt_text_pen() : dri->dri_Pens[TEXTPEN]);
     SetDrMd(rp, JAM1);
     for (i = 0, y = 6; i < 2; i++, y += fh + 4) { Move(rp, 8, y + rp->TxBaseline); Text(rp, (STRPTR)l[i], strlen(l[i])); }
     /* the button */
-    SetAPen(rp, dri->dri_Pens[SHINEPEN]);
-    Move(rp, 8, y + fh + 5); Draw(rp, 8, y); Draw(rp, pop_w->Width - 9, y);
-    SetAPen(rp, dri->dri_Pens[SHADOWPEN]);
-    Draw(rp, pop_w->Width - 9, y + fh + 5); Draw(rp, 8, y + fh + 5);
-    SetAPen(rp, dri->dri_Pens[TEXTPEN]);
+    if (pt_ok) {
+        SetAPen(rp, pt_hot_pen());
+        RectFill(rp, 8, y, pop_w->Width - 9, y + fh + 5);
+        SetAPen(rp, pt_hot_text_pen());
+    } else {
+        SetAPen(rp, dri->dri_Pens[SHINEPEN]);
+        Move(rp, 8, y + fh + 5); Draw(rp, 8, y); Draw(rp, pop_w->Width - 9, y);
+        SetAPen(rp, dri->dri_Pens[SHADOWPEN]);
+        Draw(rp, pop_w->Width - 9, y + fh + 5); Draw(rp, 8, y + fh + 5);
+        SetAPen(rp, dri->dri_Pens[TEXTPEN]);
+    }
     Move(rp, (pop_w->Width - TextLength(rp, (STRPTR)l[2], strlen(l[2]))) / 2, y + 3 + rp->TxBaseline);
     Text(rp, (STRPTR)l[2], strlen(l[2]));
 }
@@ -711,9 +756,9 @@ static void draw_cog(int force)
     if (!cog_w || (!force && state == cog_drawn)) return;
     cog_drawn = state;
     rp = cog_w->RPort;
-    h = gh - (bar_edge == OM_BAR_TITLE ? 1 : 0);
-    SetAPen(rp, dri->dri_Pens[state == 2 ? FILLPEN : BARBLOCKPEN]);
-    RectFill(rp, 0, 0, gw - 1, gh - 1);
+    h = gh;
+    if (state == 2) { SetAPen(rp, dri->dri_Pens[FILLPEN]); RectFill(rp, 0, 0, gw - 1, gh - 1); }
+    else bar_paint(cog_w, 0, 0, gw, gh);
     if (state == 1) {
         SetAPen(rp, dri->dri_Pens[SHINEPEN]);
         Move(rp, 1, h - 1); Draw(rp, 1, 0); Draw(rp, gw - 2, 0);
@@ -725,7 +770,7 @@ static void draw_cog(int force)
     ox = (gw - size) / 2;
     oy = (h - size) / 2;
     if (oy < 0) oy = 0;
-    SetAPen(rp, dri->dri_Pens[state == 2 ? FILLTEXTPEN : BARDETAILPEN]);
+    SetAPen(rp, state == 2 ? dri->dri_Pens[FILLTEXTPEN] : bar_text());
     for (y = 0; y < size && oy + y < gh; y++)
         for (x = 0; x < size; ) {
             int run;
@@ -754,23 +799,31 @@ static void draw_menu(void)
     if (!menu_w) return;
     rp = menu_w->RPort;
     w = menu_w->Width; h = menu_w->Height;
-    SetAPen(rp, dri->dri_Pens[BARBLOCKPEN]);
-    RectFill(rp, 1, 1, w - 2, h - 2);
-    SetAPen(rp, dri->dri_Pens[SHADOWPEN]);
-    Move(rp, 0, 0); Draw(rp, w - 1, 0); Draw(rp, w - 1, h - 1); Draw(rp, 0, h - 1); Draw(rp, 0, 0);
+    if (pt_ok) pt_panel(rp, w, h);              /* the theme's menu colour and a slim frame, as OpenMenus' menus */
+    else {
+        SetAPen(rp, dri->dri_Pens[BARBLOCKPEN]);
+        RectFill(rp, 1, 1, w - 2, h - 2);
+        SetAPen(rp, dri->dri_Pens[SHADOWPEN]);
+        Move(rp, 0, 0); Draw(rp, w - 1, 0); Draw(rp, w - 1, h - 1); Draw(rp, 0, h - 1); Draw(rp, 0, 0);
+    }
     SetDrMd(rp, JAM1);
     for (i = 0; i < menu_n; i++) {
         const char *t = cog_items[menu_idx[i]].label;
         WORD y0 = menu_y[i], y1 = menu_y[i + 1] - 1;
         if (!t) {
+            if (pt_ok) {
+                SetAPen(rp, pt_frame_pen());
+                Move(rp, 4, (y0 + y1) / 2); Draw(rp, w - 5, (y0 + y1) / 2);
+                continue;
+            }
             SetAPen(rp, dri->dri_Pens[SHADOWPEN]);
             Move(rp, 4, (y0 + y1) / 2); Draw(rp, w - 5, (y0 + y1) / 2);
             SetAPen(rp, dri->dri_Pens[SHINEPEN]);
             Move(rp, 4, (y0 + y1) / 2 + 1); Draw(rp, w - 5, (y0 + y1) / 2 + 1);
             continue;
         }
-        if (i == menu_hot) { SetAPen(rp, dri->dri_Pens[FILLPEN]); RectFill(rp, 2, y0, w - 3, y1); }
-        SetAPen(rp, dri->dri_Pens[i == menu_hot ? FILLTEXTPEN : BARDETAILPEN]);
+        if (i == menu_hot) { SetAPen(rp, pt_ok ? pt_hot_pen() : dri->dri_Pens[FILLPEN]); RectFill(rp, 2, y0, w - 3, y1); }
+        SetAPen(rp, pt_ok ? (i == menu_hot ? pt_hot_text_pen() : pt_text_pen()) : dri->dri_Pens[i == menu_hot ? FILLTEXTPEN : BARDETAILPEN]);
         Move(rp, COG_PAD, y0 + (y1 - y0 + 1 - rp->TxHeight) / 2 + rp->TxBaseline);
         Text(rp, (STRPTR)t, strlen(t));
     }
@@ -961,9 +1014,8 @@ static void ts_draw(struct ts_icon *t, int force)
     if (!force && key == t->drawn) return;
     t->drawn = key;
     rp = t->win->RPort;
-    h = t->bh - (bar_edge == OM_BAR_TITLE ? 1 : 0);
-    SetAPen(rp, dri->dri_Pens[BARBLOCKPEN]);
-    RectFill(rp, 0, 0, t->bw - 1, t->bh - 1);
+    h = t->bh;
+    bar_paint(t->win, 0, 0, t->bw, t->bh);
     if (lit) {
         SetAPen(rp, dri->dri_Pens[SHINEPEN]);
         Move(rp, 1, h - 1); Draw(rp, 1, 0); Draw(rp, t->bw - 2, 0);
@@ -981,7 +1033,7 @@ static void ts_draw(struct ts_icon *t, int force)
             LONG pen;
             if (!c) { x++; continue; }
             for (run = x; run < t->w && px[y * t->w + run] == c; run++) ;
-            pen = c == 1 ? dri->dri_Pens[BARDETAILPEN] : c == 2 ? dri->dri_Pens[SHINEPEN] : c == 3 ? dri->dri_Pens[SHADOWPEN]
+            pen = c == 1 ? bar_text() : c == 2 ? dri->dri_Pens[SHINEPEN] : c == 3 ? dri->dri_Pens[SHADOWPEN]
                 : pen_for(t->rgb[(c - 4) & 15]);
             SetAPen(rp, pen);
             RectFill(rp, ox + x, oy + y, ox + run - 1, oy + y);
@@ -1185,6 +1237,8 @@ static void close_all(void)
     }
     if (border_set) { prefs.border_black = 0; apply_border(); }
     free_pens();
+    pt_free();
+    bp_release();
     if (dri) { FreeScreenDrawInfo(scr, dri); dri = NULL; }
     if (scr) { UnlockPubScreen(NULL, scr); scr = NULL; }
 }
@@ -1194,6 +1248,8 @@ static int open_all(void)
     if (!(scr = LockPubScreen((STRPTR)"Workbench"))) return 0;
     if (!(dri = GetScreenDrawInfo(scr))) { close_all(); return 0; }
     bar_edge = read_bar_edge();
+    bar_sample_now();
+    pt_load(scr);
     if (prefs.clock) {
         place();
         if ((clock_w = bar_window(cx, cy, cw, ch))) {
@@ -1211,23 +1267,6 @@ static int open_all(void)
     }
     apply_border();
     return 1;
-}
-
-/* in front again when a window (not a borderless one: menus, bars) has come over it */
-static void keep_in_front(struct Window *w)
-{
-    struct Layer *l;
-    int covered = 0;
-    if (!w) return;
-    LockLayerInfo(&scr->LayerInfo);
-    for (l = w->WLayer->front; l && !covered; l = l->front) {
-        struct Window *o = (struct Window *)l->Window;
-        if (!o || (o->Flags & WFLG_BORDERLESS)) continue;
-        covered = l->bounds.MinX <= w->LeftEdge + w->Width - 1 && l->bounds.MaxX >= w->LeftEdge &&
-                  l->bounds.MinY <= w->TopEdge + w->Height - 1 && l->bounds.MaxY >= w->TopEdge;
-    }
-    UnlockLayerInfo(&scr->LayerInfo);
-    if (covered) WindowToFront(w);
 }
 
 static void events(struct Window *w)
@@ -1288,7 +1327,8 @@ static void logo_follow(void)
 {
     int want = prefs.logo && wb_title_shown();
     if (want && !logo_w) {
-        if ((logo_w = bar_window(0, 0, scr->BarHeight + 2, scr->BarHeight))) draw_logo();
+        bar_sample_now();
+        if ((logo_w = bar_window(0, 0, LOGO_W, scr->BarHeight))) draw_logo();
     } else if (!want && logo_w) {
         CloseWindow(logo_w);
         logo_w = NULL;
@@ -1325,6 +1365,7 @@ int main(void)
     GfxBase = (struct GfxBase *)OpenLibrary((STRPTR)"graphics.library", 39);
     LayersBase = OpenLibrary((STRPTR)"layers.library", 39);
     UtilityBase = OpenLibrary((STRPTR)"utility.library", 39);
+    CyberGfxBase = OpenLibrary((STRPTR)"cybergraphics.library", 41);   /* the bar's own colours; without it the bar's pen */
     if (!IntuitionBase || !GfxBase || !LayersBase || !UtilityBase) goto out;
     wbc_start();
     Forbid();
@@ -1455,13 +1496,13 @@ int main(void)
                     }
                 }
             }
-            keep_in_front(logo_w);
-            keep_in_front(clock_w);
-            keep_in_front(net_w);
-            keep_in_front(cog_w);
-            {
+            if (scr && bar_sample_now()) {        /* the theme changed the bar: paint again */
                 int i;
-                for (i = 0; i < TS_ICONS; i++) if (ts[i]) keep_in_front(ts[i]->win);
+                draw_logo();
+                shown[0] = 0; draw_clock(1);
+                net_drawn = -100; draw_net(1);
+                cog_drawn = -1; draw_cog(1);
+                for (i = 0; i < TS_ICONS; i++) if (ts[i]) ts_draw(ts[i], 1);
             }
         }
     }
@@ -1478,6 +1519,7 @@ out:
     wbc_stop();
     if (WorkbenchBase) CloseLibrary(WorkbenchBase);
     if (SocketBase) CloseLibrary(SocketBase);
+    if (CyberGfxBase) CloseLibrary(CyberGfxBase);
     if (UtilityBase) CloseLibrary(UtilityBase);
     if (LayersBase) CloseLibrary(LayersBase);
     if (GfxBase) CloseLibrary((struct Library *)GfxBase);
