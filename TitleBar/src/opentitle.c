@@ -33,6 +33,10 @@
  * pointer, shows their help under them and tells the program of a click.
  * Tata is the first.
  *
+ * 0.6.4 (10 October 2026): a double-click on the date and time opens
+ * OpenDateTime, the date, time and region editor (the OS's Time editor until
+ * it is installed).
+ *
  * 0.6.3 (10 October 2026): fast memory in whole KB like chip memory, as the
  * Amiga always showed it, and the processors after it: " - 1 CPU + 8 cores"
  * (openmulticore.library's board), or " - 1 CPU".
@@ -80,7 +84,7 @@
 #include "wbclose.h"
 #include "popuptheme.h"
 
-const char version[] __attribute__((used)) = "$VER: OpenTitle 0.6.3 (10.10.2026) OpenPrefs, Dalsin Limited";
+const char version[] __attribute__((used)) = "$VER: OpenTitle 0.6.4 (10.10.2026) OpenPrefs, Dalsin Limited";
 
 struct IntuitionBase *IntuitionBase;
 struct GfxBase *GfxBase;
@@ -1312,7 +1316,7 @@ static void events(struct Window *w)
     struct IntuiMessage *m;
     if (!w) return;
     while ((m = (struct IntuiMessage *)GetMsg(w->UserPort))) {
-        ULONG cls = m->Class;
+        ULONG cls = m->Class, secs = m->Seconds, micros = m->Micros;
         UWORD code = m->Code;
         WORD my = m->MouseY;
         ReplyMsg((struct Message *)m);
@@ -1327,6 +1331,21 @@ static void events(struct Window *w)
         }
         else if (cls == IDCMP_MOUSEBUTTONS && code == SELECTDOWN) {
             if (w == net_w) { if (pop_w) pop_close(); else pop_open(); return; }
+            if (w == clock_w) {
+                /* 0.6.4: a double-click on the date and time opens OpenDateTime (date, time, the clock and the
+                 * region in one editor); until it is installed, the OS's Time editor (the user, 10 Oct 2026) */
+                static ULONG last_s, last_m;
+                if (last_s && DoubleClick(last_s, last_m, secs, micros)) {
+                    static const char *const editors[] = { "SYS:Prefs/OpenDateTime", "SYS:Prefs/Time", "SYS:Prefs/Classic/Time" };
+                    int k;
+                    last_s = 0;
+                    for (k = 0; k < 3; k++) {
+                        BPTR l = Lock((STRPTR)editors[k], ACCESS_READ);
+                        if (l) { UnLock(l); cog_start(editors[k]); break; }
+                    }
+                } else { last_s = secs; last_m = micros; }
+                return;
+            }
             if (w == pop_w) { pop_click(my); return; }
             if (w == cog_w) {
                 if (menu_w) menu_close(1);
