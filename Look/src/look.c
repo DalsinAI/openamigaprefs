@@ -741,13 +741,7 @@ static int gui_once(void)
     wt = scr->BarHeight + 10;
     lt_place(&wl, &wt);
     menus[6].nm_Flags = CHECKIT | MENUTOGGLE | (advanced ? CHECKED : 0);
-    win = OpenWindowTags(NULL, WA_Title, (ULONG)"OpenLook", WA_ScreenTitle, (ULONG)"OpenPrefs Look 0.3", WA_PubScreen, (ULONG)scr,
-                         WA_Left, wl, WA_Top, wt, WA_InnerWidth, W, WA_InnerHeight, row - scr->WBorTop - fh - 1,
-                         WA_Gadgets, (ULONG)glist, WA_DragBar, TRUE, WA_DepthGadget, TRUE, WA_CloseGadget, TRUE, WA_Activate, TRUE,
-                         WA_SmartRefresh, TRUE, WA_NewLookMenus, TRUE,
-                         WA_IDCMP, IDCMP_CLOSEWINDOW | IDCMP_REFRESHWINDOW | IDCMP_MENUPICK | LISTVIEWIDCMP | BUTTONIDCMP | CYCLEIDCMP | STRINGIDCMP |
-                                   CHECKBOXIDCMP | INTEGERIDCMP,
-                         TAG_DONE);
+    win = lt_open(scr, wl, wt, W, row - scr->WBorTop - fh - 1, glist, IDCMP_CLOSEWINDOW | IDCMP_REFRESHWINDOW | IDCMP_MENUPICK | LISTVIEWIDCMP | BUTTONIDCMP | CYCLEIDCMP | STRINGIDCMP | CHECKBOXIDCMP | INTEGERIDCMP, "OpenPrefs Look 0.3");
     if (!win) { rc = RETURN_FAIL; goto out; }
     if ((menu = CreateMenus(menus, TAG_DONE)) && LayoutMenus(menu, vi, GTMN_NewLookMenus, TRUE, TAG_DONE)) SetMenuStrip(win, menu);
     GT_RefreshWindow(win, NULL);
@@ -861,7 +855,7 @@ out:
     if (timer) CloseDevice((struct IORequest *)tr);
     if (tr) DeleteIORequest((struct IORequest *)tr);
     if (tport) DeleteMsgPort(tport);
-    if (win) { free_pens(win->WScreen); ClearMenuStrip(win); CloseWindow(win); win = NULL; }
+    if (win) { free_pens(win->WScreen); ClearMenuStrip(win); lt_close(win, glist); win = NULL; }
     if (menu) FreeMenus(menu);
     FreeGadgets(glist);
     FreeVisualInfo(vi);

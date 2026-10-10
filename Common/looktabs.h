@@ -33,12 +33,23 @@
 #include <stdio.h>
 #include <string.h>
 
+/* One program, one window (LT_ONE, the user, 10 October 2026: "openlook shouldn't open new windows for the
+ * tabs", "the overall window should remain the same size"): the four editors are built into SYS:Prefs/OpenLook
+ * (Look/src/openlookprefs.c), each page's gadgets swapped into the one window, which only ever grows. Without
+ * LT_ONE each editor is its own program and a tab hands over to the next, as before. */
+#ifdef LT_ONE
+extern struct Window *lt_win;              /* the shared window, open across pages */
+extern int lt_next;                        /* the tab clicked: the page to open next, or -1 */
+extern int lt_win_w, lt_win_h;             /* the inner size the window has reached */
+#endif
+
 enum { LT_LOOK, LT_WINDOWS, LT_TITLEBAR, LT_MENUS, LT_N };
 #define LT_ID 900
 #define LT_IS(id) ((id) >= LT_ID && (id) < LT_ID + LT_N)
 #define LT_PLACE "ENV:OpenPrefs/LookTab"
 #define LT_PAD 12                          /* each side of a tab's name */
 #define LT_LIFT 2                          /* how much taller the open page's tab stands */
+#define BP_UNUSED_LT __attribute__((unused))
 
 static const char *const lt_label[LT_N] = { "Look", "Windows", "Title bar", "Menus" };
 static const char *const lt_path[LT_N] = { "SYS:Prefs/Look", "SYS:Prefs/Windows", "SYS:Prefs/TitleBar", "SYS:Prefs/Menus" };
@@ -162,6 +173,10 @@ static void lt_go(struct Window *win, int to)
     BPTR f, in, out;
     char cmd[64];
     if (to < 0 || to >= LT_N) return;
+#ifdef LT_ONE
+    lt_next = to;                          /* the one program opens that page in this window */
+    return;
+#endif
     if (win) {
         BPTR dir = CreateDir((STRPTR)"ENV:OpenPrefs");
         if (dir) UnLock(dir);
@@ -182,4 +197,65 @@ static void lt_go(struct Window *win, int to)
     }
 }
 
+/* The editors' window: opened the first time (at left, top, W x H inside), or the one already open with this
+ * page's gadgets swapped in: the window keeps its place and size, growing only if a page needs more. */
+static BP_UNUSED_LT struct Window *lt_open(struct Screen *scr, int left, int top, int W, int H, struct Gadget *glist,
+                                           ULONG idcmp, const char *screen_title)
+{
+#ifdef LT_ONE
+    if (lt_win) {
+        struct IntuiMessage *m;
+        int w = W > lt_win_w ? W : lt_win_w, h = H > lt_win_h ? H : lt_win_h;
+        if (w != lt_win_w || h != lt_win_h) {
+            ChangeWindowBox(lt_win, lt_win->LeftEdge, lt_win->TopEdge, w + lt_win->BorderLeft + lt_win->BorderRight,
+                            h + lt_win->BorderTop + lt_win->BorderBottom);
+            lt_win_w = w; lt_win_h = h;
+        }
+        while ((m = GT_GetIMsg(lt_win->UserPort))) GT_ReplyIMsg(m);     /* the page before's last messages */
+        ModifyIDCMP(lt_win, idcmp);
+        SetWindowTitles(lt_win, (STRPTR)~0, (STRPTR)screen_title);
+        EraseRect(lt_win->RPort, lt_win->BorderLeft, lt_win->BorderTop, lt_win->Width - lt_win->BorderRight - 1,
+                  lt_win->Height - lt_win->BorderBottom - 1);
+        AddGList(lt_win, glist, ~0, -1, NULL);
+        RefreshGList(glist, lt_win, NULL, -1);
+        return lt_win;
+    }
+    lt_win_w = W; lt_win_h = H;
+    lt_win = OpenWindowTags(NULL, WA_Title, (ULONG)"OpenLook", WA_ScreenTitle, (ULONG)screen_title, WA_PubScreen, (ULONG)scr,
+                            WA_Left, left, WA_Top, top, WA_InnerWidth, W, WA_InnerHeight, H,
+                            WA_Gadgets, (ULONG)glist, WA_DragBar, TRUE, WA_DepthGadget, TRUE, WA_CloseGadget, TRUE, WA_Activate, TRUE,
+                            WA_SmartRefresh, TRUE, WA_NewLookMenus, TRUE, WA_IDCMP, idcmp, TAG_DONE);
+    return lt_win;
+#else
+    return OpenWindowTags(NULL, WA_Title, (ULONG)"OpenLook", WA_ScreenTitle, (ULONG)screen_title, WA_PubScreen, (ULONG)scr,
+                          WA_Left, left, WA_Top, top, WA_InnerWidth, W, WA_InnerHeight, H,
+                          WA_Gadgets, (ULONG)glist, WA_DragBar, TRUE, WA_DepthGadget, TRUE, WA_CloseGadget, TRUE, WA_Activate, TRUE,
+                          WA_SmartRefresh, TRUE, WA_NewLookMenus, TRUE, WA_IDCMP, idcmp, TAG_DONE);
 #endif
+}
+
+/* The page's gadgets out of the window, which stays open for the next page (the caller frees the gadgets). */
+static BP_UNUSED_LT void lt_detach(struct Window *win, struct Gadget *glist)
+{
+    struct IntuiMessage *m;
+    if (!win) return;
+#ifndef LT_ONE
+    CloseWindow(win);                      /* its own program: the page opens a fresh window */
+    return;
+#endif
+    if (glist) RemoveGList(win, glist, -1);
+    while ((m = GT_GetIMsg(win->UserPort))) GT_ReplyIMsg(m);
+}
+
+/* Done with the window: closed, unless another tab was clicked (LT_ONE), when it stays for that page. */
+static BP_UNUSED_LT void lt_close(struct Window *win, struct Gadget *glist)
+{
+    if (!win) return;
+#ifdef LT_ONE
+    if (lt_next >= 0) { lt_detach(win, glist); return; }
+    lt_win = NULL;
+#endif
+    CloseWindow(win);
+}
+
+#endif /* LOOKTABS_H */
