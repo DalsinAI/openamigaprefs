@@ -41,7 +41,7 @@
 #include "sp_amiga.h"
 #include "sp_test.h"
 
-const char version[] __attribute__((used)) = "$VER: Sound 0.1 (6.10.2026) OpenPrefs, Dalsin Limited";
+const char version[] __attribute__((used)) = "$VER: OpenSound 0.1.1 (10.10.2026) OpenPrefs, Dalsin Limited";
 
 #define VIEW_ENV "ENV:OpenAmiga/PrefsView"           /* shared by every OpenPrefs editor: simple or advanced */
 #define VIEW_ENVARC "ENVARC:OpenAmiga/PrefsView"

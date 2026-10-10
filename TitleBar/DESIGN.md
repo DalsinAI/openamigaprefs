@@ -118,7 +118,7 @@ The protocol is `include/taskspace.h` (version 1). In short:
 - OpenTitle keeps running while any program has an icon, even with all
   its own items off.
 - **The cog's list** has a new entry, **Tata**, shown when
-  `SYS:Prefs/Tata` is installed.
+  `SYS:Prefs/OpenTata` (Tata until 10 October 2026) is installed.
 
 ![The taskspace: Tata's shield between the network icons and the speaker, with its help](docs/taskspace.png)
 
