@@ -1,9 +1,11 @@
 # OpenPrefs Windows and OpenWindows
 
 OpenWindows is a commodity that changes how windows behave on Workbench and
-every other screen. OpenPrefs Windows is its editor. Neither patches
-Intuition: OpenWindows watches the input stream and moves, sizes and
-activates windows with the OS's own calls. MIT, Copyright (c) 2026 Dalsin
+every other screen. OpenPrefs Windows is its editor. OpenWindows watches the
+input stream and moves, sizes and activates windows with the OS's own calls.
+Since 0.7 it patches one pair of Intuition calls, OpenWindowTagList and
+OpenWindow, so that a window with a kept place opens there (below); the
+editor patches nothing. MIT, Copyright (c) 2026 Dalsin
 Limited.
 
 ![OpenPrefs Windows 0.3](docs/window.png)
@@ -40,6 +42,39 @@ Workbench). Then each drawer is kept as `Workbench:<drawer>` and reopens
 where it was left; the root window is never moved. Tested on a scratch
 OS 3.2.3: the Work drawer was moved to 188,241 and reopened there after a
 reboot. Forget all deletes the file and restarts OpenWindows.
+
+**Placed before they open (OpenWindows 0.7, 10 October 2026).** The user
+reported that windows open and then jump to their final position. Places
+moved a new window at OpenWindows' next once-a-second look, after it had
+opened where its program asked, so it was seen to open and then jump, for up
+to a second. The user chose (10 October 2026) to place windows before they
+open, which needs a patch: OpenWindows 0.7 patches `OpenWindowTagList` and
+`OpenWindow` the way OpenLook already patches them, stacked with OpenLook's
+patch whichever starts first.
+
+- A window whose place is kept gets `WA_Left` and `WA_Top`, and `WA_Width`
+  and `WA_Height` when it can be sized and the size is within its limits, in
+  front of the program's own tags, and the same corner and size in a copy of
+  its `NewWindow`. The program's own tags and `NewWindow` are not changed.
+- The window is keyed as the once-a-second look keys it: the program (its
+  task, or the command a Shell runs) and its title up to the first digit or
+  bracket. A window opened without IDCMP is looked up by its task first (the
+  shared-port way Workbench and many programs use) and then as `window`.
+- One placing rule (`fit_place`) serves the patch and the look, so a window
+  placed before it opens is never moved again by the look.
+- The patch never waits. It reads the places with `AttemptSemaphoreShared`;
+  when OpenWindows is changing them that instant, the window opens as asked
+  and the look places it, as before.
+- It places nothing while the commodity is disabled in Exchange, for
+  OpenWindows' own windows, or with Places off. Switching Places off takes
+  the patch out.
+- Leaving: OpenWindows takes the calls back only if they are still its own.
+  If another program patched them after it, OpenWindows stays loaded and
+  passes every window through, as OpenLook does in the same case, and says
+  so in the Shell.
+- The once-a-second look stays for windows the patch could not place (a
+  public screen it couldn't lock, a window sized by its inner size, which is
+  moved but not sized).
 
 **Double-click to front (OpenWindows 0.4, 8 October 2026).** The user asked
 for "double click to bring windows forward" as part of the Open tools, on by
