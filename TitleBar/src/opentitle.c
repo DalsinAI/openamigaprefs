@@ -66,6 +66,7 @@
 #include <proto/exec.h>
 #include <proto/expansion.h>
 #include <libraries/configvars.h>
+#include <libraries/expansionbase.h>
 #include <proto/dos.h>
 #include <proto/intuition.h>
 #include <proto/graphics.h>
@@ -310,18 +311,18 @@ static void wb_set_title(const char *fmt)
 /* The cores the CPU cores board presents through AutoConfig (the user, 10 October 2026: "the cpu count
  * should read the amount of cores presented via autoconfig"): a Dalsin ($DA15) product 7 board carrying
  * the ACSV block, CLASS ($20) 2, UNITS ($24) its cores. 0 without the board. */
-struct Library *ExpansionBase;      /* opened for the look, closed after (-fno-common: ours, not libnix's stub) */
+struct ExpansionBase *ExpansionBase;   /* opened for the look, closed after (the type proto/expansion.h declares) */
 static ULONG board_cores(void)
 {
     ULONG n = 0;
-    ExpansionBase = OpenLibrary((STRPTR)"expansion.library", 36);
+    ExpansionBase = (struct ExpansionBase *)OpenLibrary((STRPTR)"expansion.library", 36);
     if (ExpansionBase) {
         struct ConfigDev *cd = FindConfigDev(NULL, 0xDA15, 7);
         if (cd && cd->cd_BoardAddr) {
             volatile ULONG *r = (volatile ULONG *)cd->cd_BoardAddr;
             if (r[0] == 0x41435356UL && r[0x20 / 4] == 2) n = r[0x24 / 4];
         }
-        CloseLibrary(ExpansionBase);
+        CloseLibrary((struct Library *)ExpansionBase);
         ExpansionBase = NULL;
     }
     return n > 1024 ? 0 : n;
