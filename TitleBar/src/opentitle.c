@@ -764,11 +764,8 @@ static const char *const cog13[13] = {
 /* The settings editors, as in OpenUpMenu's Tools > Preferences (openamigaup src/openupmenu.c):
  * each shows when its program is there (needs, or path when NULL). */
 static const struct { const char *label, *path, *needs; } cog_items[] = {
-    { "Look",         "SYS:Prefs/Look",         NULL },
-    { "Windows",      "SYS:Prefs/Windows",      NULL },
+    { "Look",         "SYS:Prefs/OpenLook",     NULL },                   /* 0.6.7: one editor: Look, Windows, Title bar, Menus as pages */
     { "Dock",         "SYS:Prefs/Dock",         NULL },
-    { "Menus",        "SYS:Prefs/Menus",        NULL },
-    { "Title bar",    "SYS:Prefs/TitleBar",     NULL },
     { "Sound",        "SYS:Prefs/Sound",        "SYS:C/OpenSpeaker" },    /* OS 3.2's own until OpenUp's Sound replaces it */
     { "Date and time", "SYS:Prefs/OpenDateTime", NULL },                 /* 0.6.5: OpenDateTime (date, time, zone, country, language) */
     { "Input",        "SYS:Prefs/OpenInput",    NULL },                   /* 0.6.7: OpenInput (mouse, keyboard, keymap; Gamepads under it) */
