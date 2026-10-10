@@ -45,7 +45,7 @@
 
 #include "od_dock.h"
 
-const char version[] __attribute__((used)) = "$VER: Dock 0.4 (8.10.2026) OpenPrefs, Dalsin Limited";
+const char version[] __attribute__((used)) = "$VER: Dock 0.5 (10.10.2026) OpenPrefs, Dalsin Limited";
 
 #define PREFS_ENV "ENV:OpenDock/Dock"
 #define PREFS_ENVARC "ENVARC:OpenDock/Dock"
@@ -250,7 +250,7 @@ static const char *size_labels[] = { "Small", "Medium", "Large", NULL };
 static const char *items_labels[] = { "100%", "75%", "50%", "25%", NULL };   /* the icons' size on the dock */
 static const int items_scale[] = { 100, 75, 50, 25 };
 static const char *kind_labels[] = { "Workbench", "Shell", "ARexx", NULL };
-/* OD_BG_ order. "Clear" is the file's see-through: tinted, not frosted (the slider says how see-through) */
+/* OD_BG_ order. "Clear" is the file's see-through: no shelf at all, the icons on the desktop (0.6); Glass takes the slider */
 static const char *shelf_labels[] = { "Solid", "Clear", "Glass", NULL };
 
 static struct Gadget *gad[G_COUNT];
@@ -296,7 +296,8 @@ static void show(void)
     SET(G_LABELS, GTCB_Checked, cur.labels);
     SET(G_RUNNING, GTCB_Checked, cur.running);
     SET(G_SHELF, GTCY_Active, cur.background);
-    SET(G_OPACITY, GTSL_Level, cur.background == OD_BG_SOLID ? 100 : cur.opacity, GA_Disabled, cur.background == OD_BG_SOLID);
+    SET(G_OPACITY, GTSL_Level, cur.background == OD_BG_SOLID ? 100 : cur.background == OD_BG_CLEAR ? 0 : cur.opacity,
+        GA_Disabled, cur.background != OD_BG_GLASS);       /* only glass is see-through by degrees: Solid is opaque, Clear has no shelf */
     SET(G_HOVER, GTCB_Checked, cur.hover);
     SET(G_HOP, GTCB_Checked, cur.hop);
     SET(G_UP, GA_Disabled, !b || sel == 0);
@@ -402,9 +403,9 @@ static int make_gadgets(struct Screen *scr, APTR vi, struct Gadget **glist, int 
         struct RastPort *srp = &scr->RastPort;
         int lw = TextLength(srp, (STRPTR)"See-through", 11) + 8, sw = TextLength(srp, (STRPTR)"Solid", 5) + 8;
         G(SLIDER_KIND, G_OPACITY, L + lw, row, R - L - 20 - lw - sw, lh, "See-through", PLACETEXT_LEFT,
-          GTSL_Min, 0, GTSL_Max, 100, GTSL_Level, cur.background == OD_BG_SOLID ? 100 : cur.opacity,
+          GTSL_Min, 0, GTSL_Max, 100, GTSL_Level, cur.background == OD_BG_SOLID ? 100 : cur.background == OD_BG_CLEAR ? 0 : cur.opacity,
           GTSL_LevelFormat, (ULONG)"Solid", GTSL_MaxLevelLen, 5, GTSL_LevelPlace, PLACETEXT_RIGHT,
-          GA_RelVerify, TRUE, GA_Disabled, cur.background == OD_BG_SOLID);
+          GA_RelVerify, TRUE, GA_Disabled, cur.background != OD_BG_GLASS);
         row += lh + gp;
     }
     if (advanced) {

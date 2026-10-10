@@ -11,6 +11,7 @@ static const char *const size_words[] = { "small", "medium", "large" };
 static const char *const kind_words[] = { "wb", "cli", "arexx", "separator" };
 static const char *const bg_words[] = { "solid", "see-through", "glass" };
 
+/* the cell: 8 pixels more than the icons' size, 32, 48 or 64 */
 int od_cell(int size) { return size == OD_LARGE ? 72 : size == OD_MEDIUM ? 56 : 40; }
 
 int od_scaled(int px, int scale) { int n = px * scale / 100; return n < 1 ? 1 : n; }
@@ -19,7 +20,7 @@ void od_defaults(od_dock *d)
 {
     memset(d, 0, sizeof *d);
     d->place = OD_BOTTOM;
-    d->size = OD_MEDIUM;
+    d->size = OD_LARGE;             /* 0.6: 64-pixel icons, as the dock has always looked; Size now sets the icons' size */
     d->running = 1;
     d->hover = 1;
     d->hop = 1;

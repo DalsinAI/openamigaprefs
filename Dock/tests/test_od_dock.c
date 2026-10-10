@@ -72,7 +72,7 @@ static void test_own_format(void)
     CHECK(!strcmp(e.b[6].icon, "SYS:Prefs/Look") && !strcmp(e.b[6].label, "Look"));
     CHECK(od_write(&d, buf, 40) == -1);
     od_parse(&e, "; comment\nplace nowhere\nsize huge\nfuture 7\nbutton telepathy \"x\"\nbutton wb \"Work:Thing\"\n");
-    CHECK(e.place == OD_BOTTOM && e.size == OD_MEDIUM && e.n == 1 && !strcmp(e.b[0].label, "Thing"));
+    CHECK(e.place == OD_BOTTOM && e.size == OD_LARGE && e.n == 1 && !strcmp(e.b[0].label, "Thing"));
     CHECK(e.scale == 100 && e.border == 1 && e.opacity == 35);
     /* the opacity: a file from before it keeps its look; out of range is clamped */
     od_parse(&e, "background solid\n");
