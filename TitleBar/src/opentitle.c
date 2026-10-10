@@ -64,6 +64,9 @@
 #include <graphics/layers.h>
 #include <utility/date.h>
 #include <proto/exec.h>
+#include <proto/expansion.h>
+#include <libraries/configvars.h>
+#include <libraries/expansionbase.h>
 #include <proto/dos.h>
 #include <proto/intuition.h>
 #include <proto/graphics.h>
@@ -305,6 +308,26 @@ static void wb_set_title(const char *fmt)
  * cpus / cores"): the main CPU, and the cores openmulticore.library's board gives (OMC_CoreCount, its first
  * call, -30; 0 without a board or without the library). Written into the title once, at the start and on
  * Ctrl-F, as Workbench's title format has no token for it. */
+/* The cores the CPU cores board presents through AutoConfig (the user, 10 October 2026: "the cpu count
+ * should read the amount of cores presented via autoconfig"): a Dalsin ($DA15) product 7 board carrying
+ * the ACSV block, CLASS ($20) 2, UNITS ($24) its cores. 0 without the board. */
+struct ExpansionBase *ExpansionBase;   /* opened for the look, closed after (the type proto/expansion.h declares) */
+static ULONG board_cores(void)
+{
+    ULONG n = 0;
+    ExpansionBase = (struct ExpansionBase *)OpenLibrary((STRPTR)"expansion.library", 36);
+    if (ExpansionBase) {
+        struct ConfigDev *cd = FindConfigDev(NULL, 0xDA15, 7);
+        if (cd && cd->cd_BoardAddr) {
+            volatile ULONG *r = (volatile ULONG *)cd->cd_BoardAddr;
+            if (r[0] == 0x41435356UL && r[0x20 / 4] == 2) n = r[0x24 / 4];
+        }
+        CloseLibrary((struct Library *)ExpansionBase);
+        ExpansionBase = NULL;
+    }
+    return n > 1024 ? 0 : n;
+}
+
 static ULONG omc_cores(void)
 {
     struct Library *omc = OpenLibrary((STRPTR)"openmulticore.library", 0);
@@ -321,7 +344,7 @@ static ULONG omc_cores(void)
 
 static void cpus_text(char *buf, int size)
 {
-    ULONG n = omc_cores();
+    ULONG n = (board_cores() ? board_cores() : omc_cores());
     if (n) snprintf(buf, size, " - 1 CPU + %lu core%s", (unsigned long)n, n == 1 ? "" : "s");
     else snprintf(buf, size, " - 1 CPU");
 }
@@ -742,11 +765,8 @@ static const char *const cog13[13] = {
 /* The settings editors, as in OpenUpMenu's Tools > Preferences (openamigaup src/openupmenu.c):
  * each shows when its program is there (needs, or path when NULL). */
 static const struct { const char *label, *path, *needs; } cog_items[] = {
-    { "Look",         "SYS:Prefs/Look",         NULL },
-    { "Windows",      "SYS:Prefs/Windows",      NULL },
+    { "Look",         "SYS:Prefs/OpenLook",     NULL },                   /* 0.6.7: one editor: Look, Windows, Title bar, Menus as pages */
     { "Dock",         "SYS:Prefs/Dock",         NULL },
-    { "Menus",        "SYS:Prefs/Menus",        NULL },
-    { "Title bar",    "SYS:Prefs/TitleBar",     NULL },
     { "Sound",        "SYS:Prefs/Sound",        "SYS:C/OpenSpeaker" },    /* OS 3.2's own until OpenUp's Sound replaces it */
     { "Date and time", "SYS:Prefs/OpenDateTime", NULL },                 /* 0.6.5: OpenDateTime (date, time, zone, country, language) */
     { "Input",        "SYS:Prefs/OpenInput",    NULL },                   /* 0.6.7: OpenInput (mouse, keyboard, keymap; Gamepads under it) */

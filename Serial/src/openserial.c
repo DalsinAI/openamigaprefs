@@ -18,7 +18,6 @@
 #include <intuition/intuition.h>
 #include <libraries/gadtools.h>
 #include <prefs/prefhdr.h>
-#include <prefs/serial.h>
 #include <proto/exec.h>
 #include <proto/dos.h>
 #include <proto/intuition.h>
@@ -31,12 +30,45 @@
 
 static const char version[] __attribute__((used)) = "$VER: OpenSerial 0.1 (10.10.2026) OpenPrefs, MIT, Copyright (c) 2026 Dalsin Limited";
 
+/* sp_SerialFlags' bits, as the OS's Serial editor sets them (not in every NDK's prefs/serial.h) */
+#ifndef SERIALFLAG_XDISABLED
+#define SERIALFLAG_XDISABLED (1 << 0)
+#endif
+#ifndef SERIALFLAG_SHARED
+#define SERIALFLAG_SHARED (1 << 1)
+#endif
+
 #define SERIAL_ENV "ENV:Sys/serial.prefs"
 #define SERIAL_ENVARC "ENVARC:Sys/serial.prefs"
 
 /* ---- serial.prefs ------------------------------------------------------------- */
 
-static struct SerialPrefs sp;
+/* serial.prefs' SERL chunk as the OS writes it (34 bytes), declared here: the NDK's prefs/serial.h is older
+ * than the file. The values are the OS's: HSHAKE_XON 0, RTS 1, NONE 2; PARITY_NONE 0 .. SPACE 4; BITS_7 0,
+ * BITS_8 1; SBITS_1 0, SBITS_2 1. */
+struct sp_prefs {
+    LONG sp_Reserved[3];
+    ULONG sp_Unit0Map;
+    ULONG sp_BaudRate;
+    ULONG sp_InputBuffer;
+    ULONG sp_OutputBuffer;
+    UBYTE sp_InputHandshake;
+    UBYTE sp_OutputHandshake;
+    UBYTE sp_SerialFlags;
+    UBYTE sp_BitsPerChar;
+    UBYTE sp_Parity;
+    UBYTE sp_StopBits;
+};
+#define HSHAKE_XON 0
+#define HSHAKE_RTS 1
+#define HSHAKE_NONE 2
+#define PARITY_NONE 0
+#define PARITY_SPACE 4
+#define BITS_7 0
+#define BITS_8 1
+#define SBITS_1 0
+#define SBITS_2 1
+static struct sp_prefs sp;
 static UBYTE *file_data;                        /* the whole file read, to keep its other chunks */
 static LONG file_len;
 
@@ -139,7 +171,7 @@ static int save_serial(const char *path)
 
 /* ---- the window ------------------------------------------------------------------ */
 
-enum { G_BAUD = 1, G_INBUF, G_OUTBUF, G_HANDSHAKE, G_PARITY, G_BITS, G_STOP, G_SHARED, G_7WIRE, G_STATUS, G_SAVE, G_USE, G_CANCEL, G_COUNT };
+enum { G_BAUD = 1, G_INBUF, G_OUTBUF, G_HANDSHAKE, G_PARITY, G_BITS, G_STOP, G_SHARED, G_STATUS, G_SAVE, G_USE, G_CANCEL, G_COUNT };
 
 static const ULONG bauds[] = { 300, 1200, 2400, 4800, 9600, 19200, 31250, 38400, 57600, 115200 };
 static const char *const baud_labels[] = { "300", "1200", "2400", "4800", "9600", "19200", "31250", "38400", "57600", "115200", NULL };
@@ -153,7 +185,7 @@ static const char *const stop_labels[] = { "1", "2", NULL };                    
 static struct Window *win;
 static struct Gadget *gad[G_COUNT];
 static char status_text[80];
-static int sel_baud, sel_hs, sel_parity, sel_bits, sel_stop, shared, wire7;
+static int sel_baud, sel_hs, sel_parity, sel_bits, sel_stop, shared;
 
 static void status(const char *s)
 {
@@ -197,7 +229,7 @@ static int put_in_place(int save)
     sp.sp_Parity = sel_parity;
     sp.sp_BitsPerChar = sel_bits;
     sp.sp_StopBits = sel_stop;
-    sp.sp_SerialFlags = (shared ? SERIALFLAG_SHARED : 0) | (wire7 ? SERIALFLAG_7WIRE : 0);
+    sp.sp_SerialFlags = (sp.sp_SerialFlags & ~SERIALFLAG_SHARED) | (shared ? SERIALFLAG_SHARED : 0);
     if (save && !save_serial(SERIAL_ENVARC)) { status("Couldn't write ENVARC:Sys/serial.prefs."); return 0; }
     if (!save_serial(SERIAL_ENV)) { status("Couldn't write ENV:Sys/serial.prefs."); return 0; }
     return 1;
@@ -227,7 +259,6 @@ static int gui(void)
     sel_bits = sp.sp_BitsPerChar == BITS_7 ? 0 : 1;
     sel_stop = sp.sp_StopBits == SBITS_2 ? 1 : 0;
     shared = (sp.sp_SerialFlags & SERIALFLAG_SHARED) != 0;
-    wire7 = (sp.sp_SerialFlags & SERIALFLAG_7WIRE) != 0;
 
     fh = scr->Font->ta_YSize;
     lh = fh + 6;
@@ -263,8 +294,6 @@ static int gui(void)
     G(CYCLE_KIND, G_STOP, X, row, cw, lh, "Stop bits", PLACETEXT_LEFT, GTCY_Labels, (ULONG)stop_labels, GTCY_Active, sel_stop);
     row += lh + 10;
     G(CHECKBOX_KIND, G_SHARED, X, row, 26, lh, "Shared port", PLACETEXT_LEFT, GTCB_Checked, shared, GTCB_Scaled, TRUE);
-    row += lh + 4;
-    G(CHECKBOX_KIND, G_7WIRE, X, row, 26, lh, "7-wire cable", PLACETEXT_LEFT, GTCB_Checked, wire7, GTCB_Scaled, TRUE);
     row += lh + 10;
     G(TEXT_KIND, G_STATUS, 12, row, W - 24, lh, NULL, 0, GTTX_Text, (ULONG)status_text, GTTX_Border, TRUE);
     row += lh + 6;
@@ -318,7 +347,6 @@ static int gui(void)
                 case G_BITS: sel_bits = code; break;
                 case G_STOP: sel_stop = code; break;
                 case G_SHARED: shared = (gg->Flags & GFLG_SELECTED) != 0; break;
-                case G_7WIRE: wire7 = (gg->Flags & GFLG_SELECTED) != 0; break;
                 case G_SAVE: if (put_in_place(1)) quit = 1; break;
                 case G_USE: if (put_in_place(0)) quit = 1; break;
                 case G_CANCEL: quit = 1; break;
