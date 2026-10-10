@@ -239,7 +239,9 @@ refusals, entities and UTF-8, and a full dock. The ToolManager sample was
 made from the format, because no real file could be fetched here. A real
 ToolManager 2 file is the first thing to try on an instance.
 
-### OpenPrefs Dock (`SYS:Prefs/Dock`)
+### OpenPrefs Dock (`SYS:Prefs/OpenDock`)
+
+Since 10 October 2026 every editor of ours in SYS:Prefs is named Open... (OpenLook, OpenDock, OpenSound, OpenDateTime, OpenInput, OpenSerial, OpenGamepads, OpenTypes, OpenTata, OpenUp-Setup); the OS's own editors we replace go to SYS:Prefs/Classic. The user: "the preferences need consistent naming: either all are Open x or none are".
 
 A GadTools prefs editor like the others: Save, Use, Test (15 seconds),
 Cancel, and Ctrl-F to the `OpenDock` port.
