@@ -23,7 +23,7 @@
 #include <intuition/intuition.h>
 #include <libraries/gadtools.h>
 #include <prefs/prefhdr.h>
-#include <prefs/input.h>
+#include <devices/timer.h>
 #include <proto/exec.h>
 #include <proto/dos.h>
 #include <proto/intuition.h>
@@ -46,7 +46,21 @@ struct Library *UtilityBase;
 
 /* ---- input.prefs ------------------------------------------------------------- */
 
-static struct InputPrefs ip;
+/* input.prefs' ICTL chunk as OS 3.1.4 and 3.2 write it (116 bytes). Declared here: the NDK's struct InputPrefs
+ * stops short of the last fields. */
+struct ip_prefs {
+    char ip_Keymap[16];
+    UWORD ip_PointerTicks;
+    struct timeval ip_DoubleClick;
+    struct timeval ip_KeyRptDelay;
+    struct timeval ip_KeyRptSpeed;
+    WORD ip_MouseAccel;
+    ULONG ip_ClassicKeyboard;
+    char ip_KeymapName[64];
+    UBYTE ip_SwitchMouseButtons;
+    UBYTE ip_Reserved[3];
+};
+static struct ip_prefs ip;
 static UBYTE *file_data;
 static LONG file_len;
 
