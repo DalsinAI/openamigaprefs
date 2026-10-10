@@ -659,13 +659,7 @@ static int gui(void)
         if (wy + tall > scr->Height) wy = scr->Height - tall > 0 ? scr->Height - tall : 0;
         if (wx + wide > scr->Width) wx = scr->Width - wide > 0 ? scr->Width - wide : 0;
     }
-    win = OpenWindowTags(NULL, WA_Title, (ULONG)"OpenLook", WA_ScreenTitle, (ULONG)"OpenPrefs Menus 0.1", WA_PubScreen, (ULONG)scr,
-                         WA_Left, wx, WA_Top, wy, WA_InnerWidth, W, WA_InnerHeight, inner,
-                         WA_Gadgets, (ULONG)glist, WA_DragBar, TRUE, WA_DepthGadget, TRUE, WA_CloseGadget, TRUE, WA_Activate, TRUE,
-                         WA_SmartRefresh, TRUE, WA_NewLookMenus, TRUE,
-                         WA_IDCMP, IDCMP_CLOSEWINDOW | IDCMP_REFRESHWINDOW | IDCMP_VANILLAKEY | IDCMP_MENUPICK | BUTTONIDCMP | CYCLEIDCMP |
-                                   STRINGIDCMP | CHECKBOXIDCMP | SLIDERIDCMP,
-                         TAG_DONE);
+    win = lt_open(scr, wx, wy, W, inner, glist, IDCMP_CLOSEWINDOW | IDCMP_REFRESHWINDOW | IDCMP_VANILLAKEY | IDCMP_MENUPICK | BUTTONIDCMP | CYCLEIDCMP | STRINGIDCMP | CHECKBOXIDCMP | SLIDERIDCMP, "OpenPrefs Menus 0.1");
     if (!win) { rc = RETURN_FAIL; goto out; }
     SetMenuStrip(win, menus);
     GT_RefreshWindow(win, NULL);
@@ -804,7 +798,7 @@ static int gui(void)
             wx = win->LeftEdge; wy = win->TopEdge;
             ClearMenuStrip(win);
             free_pens(win->WScreen);
-            CloseWindow(win); win = NULL;
+            lt_detach(win, glist); win = NULL;        /* the window stays for the other view (LT_ONE) */
             FreeGadgets(glist); glist = NULL;
             FreeMenus(menus); menus = NULL;
             goto reopen;
@@ -814,7 +808,7 @@ out:
     if (timer) CloseDevice((struct IORequest *)tr);
     if (tr) DeleteIORequest((struct IORequest *)tr);
     if (tport) DeleteMsgPort(tport);
-    if (win) { ClearMenuStrip(win); free_pens(win->WScreen); CloseWindow(win); }
+    if (win) { ClearMenuStrip(win); free_pens(win->WScreen); lt_close(win, glist); }
     FreeMenus(menus);
     FreeGadgets(glist);
     FreeVisualInfo(vi);
