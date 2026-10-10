@@ -18,7 +18,6 @@
 #include <intuition/intuition.h>
 #include <libraries/gadtools.h>
 #include <prefs/prefhdr.h>
-#include <prefs/serial.h>
 #include <proto/exec.h>
 #include <proto/dos.h>
 #include <proto/intuition.h>
@@ -44,7 +43,32 @@ static const char version[] __attribute__((used)) = "$VER: OpenSerial 0.1 (10.10
 
 /* ---- serial.prefs ------------------------------------------------------------- */
 
-static struct SerialPrefs sp;
+/* serial.prefs' SERL chunk as the OS writes it (34 bytes), declared here: the NDK's prefs/serial.h is older
+ * than the file. The values are the OS's: HSHAKE_XON 0, RTS 1, NONE 2; PARITY_NONE 0 .. SPACE 4; BITS_7 0,
+ * BITS_8 1; SBITS_1 0, SBITS_2 1. */
+struct sp_prefs {
+    LONG sp_Reserved[3];
+    ULONG sp_Unit0Map;
+    ULONG sp_BaudRate;
+    ULONG sp_InputBuffer;
+    ULONG sp_OutputBuffer;
+    UBYTE sp_InputHandshake;
+    UBYTE sp_OutputHandshake;
+    UBYTE sp_SerialFlags;
+    UBYTE sp_BitsPerChar;
+    UBYTE sp_Parity;
+    UBYTE sp_StopBits;
+};
+#define HSHAKE_XON 0
+#define HSHAKE_RTS 1
+#define HSHAKE_NONE 2
+#define PARITY_NONE 0
+#define PARITY_SPACE 4
+#define BITS_7 0
+#define BITS_8 1
+#define SBITS_1 0
+#define SBITS_2 1
+static struct sp_prefs sp;
 static UBYTE *file_data;                        /* the whole file read, to keep its other chunks */
 static LONG file_len;
 
