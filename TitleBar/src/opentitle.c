@@ -33,6 +33,8 @@
  * pointer, shows their help under them and tells the program of a click.
  * Tata is the first.
  *
+ * 0.6.5 (10 October 2026): the cog's list has Date and time (OpenDateTime)
+ *   and Printers (OpenPrint's Printers and Queue), each when it is there.
  * 0.6.4 (10 October 2026): a double-click on the date and time opens
  * OpenDateTime, the date, time and region editor (the OS's Time editor until
  * it is installed).
@@ -84,7 +86,7 @@
 #include "wbclose.h"
 #include "popuptheme.h"
 
-const char version[] __attribute__((used)) = "$VER: OpenTitle 0.6.4 (10.10.2026) OpenPrefs, Dalsin Limited";
+const char version[] __attribute__((used)) = "$VER: OpenTitle 0.6.5 (10.10.2026) OpenPrefs, Dalsin Limited";
 
 struct IntuitionBase *IntuitionBase;
 struct GfxBase *GfxBase;
@@ -743,6 +745,8 @@ static const struct { const char *label, *path, *needs; } cog_items[] = {
     { "Menus",        "SYS:Prefs/Menus",        NULL },
     { "Title bar",    "SYS:Prefs/TitleBar",     NULL },
     { "Sound",        "SYS:Prefs/Sound",        "SYS:C/OpenSpeaker" },    /* OS 3.2's own until OpenUp's Sound replaces it */
+    { "Date and time", "SYS:Prefs/OpenDateTime", NULL },                 /* 0.6.5: OpenDateTime (date, time, zone, country, language) */
+    { "Printers",     "SYS:Utilities/OpenPrint/Printers and Queue", NULL },  /* 0.6.5: OpenPrint's printers, the user, 10 Oct 2026 */
     { "OpenTypes",    "SYS:Prefs/OpenTypes",    NULL },
     { "OpenUp Setup", "SYS:Prefs/OpenUp-Setup", NULL },
     { "Tata",         "SYS:Prefs/Tata",         NULL },                   /* 0.6: Tata's window, when Tata is installed */
