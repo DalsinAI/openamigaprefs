@@ -148,8 +148,11 @@ static void program_of(const od_button *b, char *out, int size)
     out[n] = 0;
 }
 
+static int icons_ok;                                /* the icons are loaded for these buttons: a copy of the background alone needn't load them again */
+
 static void free_icons(void)
 {
+    icons_ok = 0;
     for (int i = 0; i < OD_MAX; i++) {
         free_small(i);
         if (icons[i]) { FreeDiskObject(icons[i]); icons[i] = NULL; }
@@ -1201,8 +1204,13 @@ static int covered(int x, int y, int w, int h)
 static int open_dock(struct Menu *menus)
 {
     int w, h, x, y, depth = GetBitMapAttr(scr->RastPort.BitMap, BMA_DEPTH);
-    load_icons();
-    for (int i = 0; i < dock.n; i++) make_small(i);
+    /* Loaded again only when the buttons or settings changed: icon.library gave wrong colours back for icons
+     * freed and fetched again while the same screen was up (0.5) */
+    if (!icons_ok) {
+        load_icons();
+        for (int i = 0; i < dock.n; i++) make_small(i);
+        icons_ok = 1;
+    }
     choose_colours();
     layout(&w, &h);
     place_of(w, h, &x, &y);
@@ -1398,7 +1406,7 @@ int main(void)
             }
         }
         if (wb_down) continue;
-        if (got & SIGBREAKF_CTRL_F) { load(); relayout(menus); check_running(); }
+        if (got & SIGBREAKF_CTRL_F) { load(); free_icons(); relayout(menus); check_running(); }
         if (timer && CheckIO((struct IORequest *)tr)) {
             WaitIO((struct IORequest *)tr);
             check_hover();
@@ -1413,7 +1421,7 @@ int main(void)
             struct AppMessage *am;
             int any = 0;
             while ((am = (struct AppMessage *)GetMsg(appport))) { dropped(am); ReplyMsg((struct Message *)am); any = 1; }
-            if (any) { relayout(menus); check_running(); }
+            if (any) { free_icons(); relayout(menus); check_running(); }
         }
         while (win && (m = (struct IntuiMessage *)GetMsg(win->UserPort))) {
             ULONG cls = m->Class;
@@ -1429,7 +1437,7 @@ int main(void)
                 pressed = -1;
                 if (was >= 0) draw();
                 if (i >= 0 && i == was) {
-                    if (removing) { removing = 0; remove_button(i); relayout(menus); check_running(); }
+                    if (removing) { removing = 0; remove_button(i); free_icons(); relayout(menus); check_running(); }
                     else if (!(running[i] && to_front(running[i]))) { start(&dock.b[i]); hop(i); }
                 }
             } else if (cls == IDCMP_MENUPICK) {
