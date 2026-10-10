@@ -31,6 +31,14 @@
 
 static const char version[] __attribute__((used)) = "$VER: OpenSerial 0.1 (10.10.2026) OpenPrefs, MIT, Copyright (c) 2026 Dalsin Limited";
 
+/* sp_SerialFlags' bits, as the OS's Serial editor sets them (not in every NDK's prefs/serial.h) */
+#ifndef SERIALFLAG_XDISABLED
+#define SERIALFLAG_XDISABLED (1 << 0)
+#endif
+#ifndef SERIALFLAG_SHARED
+#define SERIALFLAG_SHARED (1 << 1)
+#endif
+
 #define SERIAL_ENV "ENV:Sys/serial.prefs"
 #define SERIAL_ENVARC "ENVARC:Sys/serial.prefs"
 
