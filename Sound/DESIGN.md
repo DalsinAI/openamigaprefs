@@ -108,7 +108,7 @@ bar" is off. Sound prefs starts it when that is switched on.
 
 - Testing on an instance and on the real 68040 (Main Discourse has the 68k
   build and the instance tests).
-- OpenUp: `SYS:Prefs/Sound` in place of the old two (moved to
+- OpenUp: `SYS:Prefs/OpenSound` (named Sound until 10 October 2026) in place of the old two (moved to
   `SYS:Prefs/Classic`), `C:OpenSpeaker`, and `Sound USE` in the startup.
 - Phase 2 of the menu bar, the start pop-up from OpenDock, may carry the
   speaker too.
