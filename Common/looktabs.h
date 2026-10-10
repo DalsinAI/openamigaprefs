@@ -3,7 +3,7 @@
  * should live under here too"; then "the tab option is weird and should be closer to MUI").
  *
  * The tabs are drawn as MUI's Register class draws them: each tab a raised shape on a line, as wide as its
- * name; the open page's tab stands taller, in bold, with no line under it, joined to a raised frame round
+ * name; the open page's tab stands taller, with no line under it, joined to a raised frame round
  * the page, so the tab and its page read as one. A click on another tab keeps what was changed (as Use
  * does), opens that editor where this window is, and closes this one. Each editor is still its own
  * program, so each still opens alone from the cog, the menu or Workbench.
@@ -46,6 +46,7 @@ static const char *const lt_path[LT_N] = { "SYS:Prefs/Look", "SYS:Prefs/Windows"
 /* where the row is: x and y of its top left, its width, a tab's height, which tab is this editor's,
  * and each tab's left edge and width */
 static int lt_x, lt_y, lt_w, lt_h, lt_me = -1, lt_tx[LT_N], lt_tw[LT_N];
+static struct TextAttr *lt_ta;             /* the font the tabs were measured in: drawn in it too */
 
 /* The tabs' click areas, x..x+w at y, lh high, from the left, each as wide as its name (screen font)
  * plus its padding. Returns the last gadget (NULL when one could not be made). */
@@ -57,9 +58,10 @@ static struct Gadget *lt_make(struct Gadget *g, struct NewGadget *ng, int x, int
     int i, at = x;
     InitRastPort(&rp);
     if (tf) SetFont(&rp, tf);
+    lt_ta = ta;
     lt_x = x; lt_y = y; lt_w = w; lt_h = lh; lt_me = me;
     for (i = 0; i < LT_N; i++) {
-        lt_tw[i] = TextLength(&rp, (STRPTR)lt_label[i], strlen(lt_label[i])) + 2 * LT_PAD + 1;   /* +1: the bold */
+        lt_tw[i] = TextLength(&rp, (STRPTR)lt_label[i], strlen(lt_label[i])) + 2 * LT_PAD;
         lt_tx[i] = at;
         at += lt_tw[i] - 1;                                          /* neighbours share an edge, as MUI's do */
     }
@@ -90,8 +92,14 @@ static void lt_draw(struct Window *win, int page_bottom)
     UWORD shine, shadow, text, fill;
     int i, base, left, right, bottom;
     UBYTE apen, drmd;
+    struct TextFont *tf, *was;
     if (!win || lt_me < 0 || !(dri = GetScreenDrawInfo(win->WScreen))) return;
     rp = win->RPort;
+    /* the font the tabs were measured in (the screen's): a window's RastPort starts in Topaz, wider, and the
+     * names ran into each other (the user, 10 October 2026: "tabs are awful") */
+    was = rp->Font;
+    tf = lt_ta ? OpenFont(lt_ta) : NULL;
+    if (tf) SetFont(rp, tf);
     shine = dri->dri_Pens[SHINEPEN]; shadow = dri->dri_Pens[SHADOWPEN]; text = dri->dri_Pens[TEXTPEN];
     fill = dri->dri_Pens[BACKGROUNDPEN];
     apen = rp->FgPen; drmd = rp->DrawMode;
@@ -117,10 +125,9 @@ static void lt_draw(struct Window *win, int page_bottom)
         SetAPen(rp, shadow);                                           /* right */
         Move(rp, x1 - 1, y0 + 1); Draw(rp, x1, y0 + 2); Draw(rp, x1, base - (open ? 0 : 1));
         SetAPen(rp, text);
-        ty = y0 + (lt_h + (open ? LT_LIFT : 0) - rp->TxHeight) / 2 + rp->TxBaseline + 1;
+        ty = y0 + (lt_h + (open ? LT_LIFT : 0) - rp->TxHeight) / 2 + rp->TxBaseline + (open ? 1 : 0);
         Move(rp, x0 + LT_PAD, ty);
         Text(rp, (STRPTR)lt_label[t], strlen(lt_label[t]));
-        if (open) { Move(rp, x0 + LT_PAD + 1, ty); Text(rp, (STRPTR)lt_label[t], strlen(lt_label[t])); }   /* bold */
     }
     /* the line under the tabs, but not under the open one; then the page's frame */
     SetAPen(rp, shine);
@@ -130,6 +137,7 @@ static void lt_draw(struct Window *win, int page_bottom)
     SetAPen(rp, shadow);
     Move(rp, left + 1, bottom); Draw(rp, right, bottom); Draw(rp, right, base + 1);
     SetAPen(rp, apen); SetDrMd(rp, drmd);
+    if (tf) { SetFont(rp, was); CloseFont(tf); }
     FreeScreenDrawInfo(win->WScreen, dri);
 }
 

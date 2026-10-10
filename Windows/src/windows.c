@@ -31,7 +31,7 @@
 #include <stdlib.h>
 #include "../../Common/looktabs.h"
 
-static const char version[] __attribute__((used)) = "$VER: Windows 0.6.2 (10.10.2026) OpenPrefs, MIT, Copyright (c) 2026 Dalsin Limited";
+static const char version[] __attribute__((used)) = "$VER: Windows 0.6.3 (10.10.2026) OpenPrefs, MIT, Copyright (c) 2026 Dalsin Limited";
 
 #define PREFS_ENV "ENV:OpenPrefs/Windows"
 #define PREFS_ENVARC "ENVARC:OpenPrefs/Windows"
