@@ -25,6 +25,9 @@
  *   drive.title   (0.6) a drive's window is titled with the drive's name only:
  *                 Workbench's "Work  70% full, 453MB free, 62.0MB in use"
  *                 loses its usage part. On by default
+ *   drag.solid    (0.8, off unless asked for) a window is dragged by its title
+ *                 bar with its contents, not as an outline: OpenWindows takes
+ *                 the press and moves the window as the pointer moves
  *   edges.pointer while one is, the pointer shows the edge held. Off unless
  *                 asked for: a window's own pointer (WA_Pointer, a busy
  *                 pointer) can't be read back, so it would come back as the
@@ -64,7 +67,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-static const char version[] __attribute__((used)) = "$VER: OpenWindows 0.7 (10.10.2026) MIT, Copyright (c) 2026 Dalsin Limited";
+static const char version[] __attribute__((used)) = "$VER: OpenWindows 0.8 (10.10.2026) MIT, Copyright (c) 2026 Dalsin Limited";
 
 #define PREFS_ENV "ENV:OpenPrefs/Windows"
 #define PLACES_ENV "ENV:OpenPrefs/WindowPlaces"
@@ -81,7 +84,7 @@ struct GfxBase *GfxBase;
 /* ---- settings ------------------------------------------------------------ */
 
 static struct {
-    int snap, snap_dist, halves, switcher, wheel, places, places_wb, drawer_w, drawer_h, dblfront, edges, edge_ptr, drive_title;
+    int snap, snap_dist, halves, switcher, wheel, places, places_wb, drawer_w, drawer_h, dblfront, edges, edge_ptr, drive_title, solid;
     char key[48];
     char never[MAX_NEVER][32];
     int nnever;
@@ -130,6 +133,7 @@ static void read_prefs(void)
         else if (!strcmp(line, "edges")) cfg.edges = on_off(v);
         else if (!strcmp(line, "edges.pointer")) cfg.edge_ptr = on_off(v);
         else if (!strcmp(line, "drive.title")) cfg.drive_title = on_off(v);
+        else if (!strcmp(line, "drag.solid")) cfg.solid = on_off(v);
         else if (!strcmp(line, "places")) cfg.places = on_off(v);
         else if (!strcmp(line, "places.drawers")) cfg.places_wb = on_off(v);
         else if (!strcmp(line, "never") && cfg.nnever < MAX_NEVER) strncpy(cfg.never[cfg.nnever++], v, 31);
@@ -162,6 +166,7 @@ static volatile int click_in, click_out;
 #define EDGE_L 1
 #define EDGE_R 2
 #define EDGE_B 4
+#define EDGE_MOVE 8                             /* 0.8: not an edge: the title bar, dragging the window solid */
 #define ZONE_OUT 4                              /* a side: this many pixels outside the frame grab it (0.6.1; nothing is drawn) */
 #define ZONE_IN 1                               /* and the frame's own line (a one pixel edge) */
 #define ZONE_CORNER 2                           /* a bottom corner: a square 5 x 5 centred on it, two pixels each way */
@@ -219,6 +224,42 @@ static struct Window *edge_at(struct Screen *s, WORD x, WORD y, int *edges)
     return found;
 }
 
+/* 0.8: the window whose drag bar (x, y) is on, for dragging it solid, or NULL. Read as edge_at reads: the
+ * layers front to back under their lock (AttemptSemaphore: never waiting in the input task), the frontmost
+ * window under the point; then its title bar, on its drag gadget and on no other gadget. */
+static struct Window *drag_bar_at(struct Screen *s, WORD x, WORD y)
+{
+    struct Layer *l;
+    struct Window *found = NULL;
+    if (!AttemptSemaphore(&s->LayerInfo.Lock))
+        return NULL;
+    for (l = s->LayerInfo.top_layer; l; l = l->back) {
+        struct Window *w = (struct Window *)l->Window;
+        if (x < l->bounds.MinX || x > l->bounds.MaxX || y < l->bounds.MinY || y > l->bounds.MaxY) continue;
+        if (!w || l == s->BarLayer) break;                  /* the screen's title bar, a menu */
+        if (!(w->Flags & WFLG_DRAGBAR) || (w->Flags & WFLG_BACKDROP)) break;
+        {
+            WORD wx = x - w->LeftEdge, wy = y - w->TopEdge;
+            struct Gadget *g;
+            int drag = 0, other = 0;
+            if (wy < 0 || wy >= w->BorderTop) break;          /* not its title bar */
+            for (g = w->FirstGadget; g; g = g->NextGadget) {
+                WORD gl = g->LeftEdge + ((g->Flags & GFLG_RELRIGHT) ? w->Width - 1 : 0);
+                WORD gt = g->TopEdge + ((g->Flags & GFLG_RELBOTTOM) ? w->Height - 1 : 0);
+                WORD gw = g->Width + ((g->Flags & GFLG_RELWIDTH) ? w->Width : 0);
+                WORD gh = g->Height + ((g->Flags & GFLG_RELHEIGHT) ? w->Height : 0);
+                if (wx < gl || wx >= gl + gw || wy < gt || wy >= gt + gh) continue;
+                if ((g->GadgetType & GTYP_SYSTYPEMASK) == GTYP_WDRAGGING && (g->GadgetType & GTYP_SYSGADGET)) drag = 1;
+                else other = 1;
+            }
+            if (drag && !other) found = w;
+        }
+        break;
+    }
+    ReleaseSemaphore(&s->LayerInfo.Lock);
+    return found;
+}
+
 static int over_active(void)
 {
     struct Window *w = IntuitionBase->ActiveWindow;
@@ -247,10 +288,20 @@ static void custom(CxMsg *msg, CxObj *co)
                 Signal(me, sig_grab);              /* the main task reads where the pointer is */
                 continue;
             }
-            if (ie->ie_Code == IECODE_LBUTTON && cfg.edges && s && !(ie->ie_Qualifier & (IEQUALIFIER_LSHIFT | IEQUALIFIER_RSHIFT |
+            if (ie->ie_Code == IECODE_LBUTTON && (cfg.edges || cfg.solid) && s && !(ie->ie_Qualifier & (IEQUALIFIER_LSHIFT | IEQUALIFIER_RSHIFT |
                 IEQUALIFIER_CONTROL | IEQUALIFIER_LALT | IEQUALIFIER_RALT | IEQUALIFIER_LCOMMAND | IEQUALIFIER_RCOMMAND))) {
                 int edges = 0;
-                struct Window *gw = edge_at(s, s->MouseX, s->MouseY, &edges);
+                struct Window *gw = cfg.edges ? edge_at(s, s->MouseX, s->MouseY, &edges) : NULL;
+                if (!gw && cfg.solid && (gw = drag_bar_at(s, s->MouseX, s->MouseY))) {
+                    edges = EDGE_MOVE;
+                    if (cfg.dblfront && ((click_in + 1) & (CLICK_RING - 1)) != click_out) {   /* a double-click still counts */
+                        struct click *c = &click_ring[click_in];
+                        c->secs = ie->ie_TimeStamp.tv_secs; c->micro = ie->ie_TimeStamp.tv_micro;
+                        c->x = s->MouseX; c->y = s->MouseY; c->s = s;
+                        click_in = (click_in + 1) & (CLICK_RING - 1);
+                        Signal(me, sig_button);
+                    }
+                }
                 if (gw) {
                     grab_win = gw; grab_edges = edges; grab_x0 = s->MouseX; grab_y0 = s->MouseY;
                     grab_end = 0; grab_on = 1; grab_last = ie->ie_TimeStamp.tv_secs;
@@ -648,7 +699,7 @@ static void resize(void)
         rs_l = w->LeftEdge; rs_t = w->TopEdge; rs_w = w->Width; rs_h = w->Height;
         { ULONG micro; CurrentTime(&rs_start, &micro); }
         if (w != IntuitionBase->ActiveWindow) ActivateWindow(w);
-        {
+        if (!(rs_edges & EDGE_MOVE)) {          /* a solid move keeps the window's own pointer */
             int k = !(rs_edges & EDGE_B) ? PTR_H : (rs_edges & EDGE_R) ? PTR_D1 : (rs_edges & EDGE_L) ? PTR_D2 : PTR_V;
             /* only when asked for: the window's own pointer can't be read, so
              * the end of the drag gives it the default one */
@@ -660,6 +711,23 @@ static void resize(void)
     s = w->WScreen;
     dx = s->MouseX - rs_x0;
     dy = s->MouseY - rs_y0;
+    if (rs_edges & EDGE_MOVE) {                 /* 0.8: the window itself follows the pointer, contents and all */
+        l = rs_l + dx; t = rs_t + dy;
+        if (l < 0) l = 0;
+        if (t < 0) t = 0;
+        if (l + w->Width > s->Width) l = s->Width - w->Width;
+        if (t + w->Height > s->Height) t = s->Height - w->Height;
+        if (l != w->LeftEdge || t != w->TopEdge) MoveWindow(w, l - w->LeftEdge, t - w->TopEdge);
+        if (grab_end) {
+            WORD px = s->MouseX;
+            grab_end = 0;
+            grab_win = NULL;
+            resize_end();
+            if (cfg.halves && (px <= 1 || px >= s->Width - 2)) halves(w, px);
+            else if (cfg.snap) { Delay(1); if (is_window(w)) snap(w); }   /* after the last move has been done */
+        }
+        return;
+    }
     l = rs_l; t = rs_t; wd = rs_w; ht = rs_h;
     maxw = w->MaxWidth == 0 || w->MaxWidth > (UWORD)s->Width ? s->Width : (WORD)w->MaxWidth;
     maxh = w->MaxHeight == 0 || w->MaxHeight > (UWORD)s->Height ? s->Height : (WORD)w->MaxHeight;
