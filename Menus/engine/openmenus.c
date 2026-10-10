@@ -68,7 +68,7 @@
 #include "om_kbd.h"
 #include "ogt_theme.h"
 
-static const char version[] __attribute__((used)) = "$VER: OpenMenus 0.4.1 (10.10.2026) MIT, Copyright (c) 2026 Dalsin Limited";
+static const char version[] __attribute__((used)) = "$VER: OpenMenus 0.4.2 (10.10.2026) MIT, Copyright (c) 2026 Dalsin Limited";
 
 #define PREFS_ENV "ENV:OpenMenus/Menus"
 #define TRAY_DIR "ENV:OpenMenus/Tray"     /* one file per tray program: "width order" (OpenSpeaker, the clock) */
@@ -718,11 +718,30 @@ static int hit_entry(struct panel *p, WORD sx, WORD sy)
     return -1;
 }
 
+/* One entry of an item panel (kind 2 or 3) drawn again, highlighted or not. */
+static void draw_entry(struct panel *p, int i)
+{
+    const struct citem *items = p->kind == 2 ? cmenus[p->menu].items : cmenus[p->menu].items[p->item].subs;
+    int n = p->kind == 2 ? cmenus[p->menu].nitems : cmenus[p->menu].items[p->item].nsubs;
+    if (i < 0 || i >= n) return;
+    SetFont(p->win->RPort, font);
+    draw_item(p->win->RPort, &items[i], p->ox + items[i].left, p->oy + items[i].top, i == p->hot,
+              item_enabled(p->menu, &items[i]) && (p->kind == 2 || item_enabled(p->menu, &cmenus[p->menu].items[p->item])));
+}
+
+/* The highlight moves to entry e: only the entry it leaves and the one it lands on are drawn again
+ * (0.4.2; the whole panel was, on every move, which flickered as the pointer crossed the items:
+ * the user, 10 October 2026). The bar and the pop-up list are small: drawn whole, as before. */
 static void set_hot(int k, int e)
 {
-    if (panels[k].hot == e) return;
+    int was = panels[k].hot;
+    if (was == e) return;
     panels[k].hot = e;
-    draw_panel(&panels[k]);
+    if (panels[k].kind >= 2 && panels[k].win) {
+        draw_entry(&panels[k], was);
+        draw_entry(&panels[k], e);
+    } else
+        draw_panel(&panels[k]);
 }
 
 /* Moves the highlight to where the pointer is, opening and closing what follows from it. */
