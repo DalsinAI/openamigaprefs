@@ -15,7 +15,11 @@
  *   drawers       Workbench drawer windows open at least this big
  *   edges         a resizable window is resized by dragging any edge but
  *                 its title bar: the sides, the bottom and the bottom
- *                 corners, from a few pixels outside the frame (0.5)
+ *                 corners, from a few pixels outside the frame (0.5); a
+ *                 wider grip, and corners that reach along the edges (0.6)
+ *   drive.title   (0.6) a drive's window is titled with the drive's name only:
+ *                 Workbench's "Work  70% full, 453MB free, 62.0MB in use"
+ *                 loses its usage part. On by default
  *   edges.pointer while one is, the pointer shows the edge held. Off unless
  *                 asked for: a window's own pointer (WA_Pointer, a busy
  *                 pointer) can't be read back, so it would come back as the
@@ -52,7 +56,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-static const char version[] __attribute__((used)) = "$VER: OpenWindows 0.5 (8.10.2026) MIT, Copyright (c) 2026 Dalsin Limited";
+static const char version[] __attribute__((used)) = "$VER: OpenWindows 0.6 (10.10.2026) MIT, Copyright (c) 2026 Dalsin Limited";
 
 #define PREFS_ENV "ENV:OpenPrefs/Windows"
 #define PLACES_ENV "ENV:OpenPrefs/WindowPlaces"
@@ -69,7 +73,7 @@ struct GfxBase *GfxBase;
 /* ---- settings ------------------------------------------------------------ */
 
 static struct {
-    int snap, snap_dist, halves, switcher, wheel, places, places_wb, drawer_w, drawer_h, dblfront, edges, edge_ptr;
+    int snap, snap_dist, halves, switcher, wheel, places, places_wb, drawer_w, drawer_h, dblfront, edges, edge_ptr, drive_title;
     char key[48];
     char never[MAX_NEVER][32];
     int nnever;
@@ -98,7 +102,7 @@ static void read_prefs(void)
 {
     char *text = read_file(PREFS_ENV), *p, *line;
     memset(&cfg, 0, sizeof cfg);
-    cfg.snap = 1; cfg.snap_dist = 12; cfg.halves = 0; cfg.switcher = 1; cfg.wheel = 1; cfg.places = 1; cfg.dblfront = 1; cfg.edges = 1; cfg.edge_ptr = 0;
+    cfg.snap = 1; cfg.snap_dist = 12; cfg.halves = 0; cfg.switcher = 1; cfg.wheel = 1; cfg.places = 1; cfg.dblfront = 1; cfg.edges = 1; cfg.edge_ptr = 0; cfg.drive_title = 1;
     strcpy(cfg.key, "lcommand tab");
     if (!text) return;
     for (p = text; *p; ) {
@@ -117,6 +121,7 @@ static void read_prefs(void)
         else if (!strcmp(line, "doubleclick.front")) cfg.dblfront = on_off(v);
         else if (!strcmp(line, "edges")) cfg.edges = on_off(v);
         else if (!strcmp(line, "edges.pointer")) cfg.edge_ptr = on_off(v);
+        else if (!strcmp(line, "drive.title")) cfg.drive_title = on_off(v);
         else if (!strcmp(line, "places")) cfg.places = on_off(v);
         else if (!strcmp(line, "places.drawers")) cfg.places_wb = on_off(v);
         else if (!strcmp(line, "never") && cfg.nnever < MAX_NEVER) strncpy(cfg.never[cfg.nnever++], v, 31);
@@ -149,8 +154,9 @@ static volatile int click_in, click_out;
 #define EDGE_L 1
 #define EDGE_R 2
 #define EDGE_B 4
-#define ZONE_OUT 4                              /* pixels outside the frame that grab it */
-#define ZONE_IN 2                               /* and inside it, the frame's own line among them */
+#define ZONE_OUT 7                              /* pixels outside the frame that grab it (0.6: was 4) */
+#define ZONE_IN 3                               /* and inside it, the frame's own line among them (was 2) */
+#define ZONE_CORNER 16                          /* a bottom corner: this far along either edge from it, both edges are held */
 static ULONG sig_grab;
 static struct Window *volatile grab_win;        /* the window being resized, set by the handler */
 static volatile int grab_edges, grab_on, grab_end;
@@ -187,9 +193,14 @@ static struct Window *edge_at(struct Screen *s, WORD x, WORD y, int *edges)
             continue;
         }
         if (x >= L - ZONE_OUT && x <= R + ZONE_OUT && y >= T + w->BorderTop && y <= B + ZONE_OUT) {
-            if (x <= L + ZONE_IN - 1) e |= EDGE_L;
-            if (x >= R - ZONE_IN + 1) e |= EDGE_R;
-            if (y >= B - ZONE_IN + 1) e |= EDGE_B;
+            int nl = x <= L + ZONE_IN - 1, nr = x >= R - ZONE_IN + 1, nb = y >= B - ZONE_IN + 1;
+            if (nl) e |= EDGE_L;
+            if (nr) e |= EDGE_R;
+            if (nb) e |= EDGE_B;
+            /* a corner reaches along both edges: the bottom edge's last stretch holds the side too, and a side's last stretch the bottom */
+            if (nb && x <= L + ZONE_CORNER) e |= EDGE_L;
+            if (nb && x >= R - ZONE_CORNER) e |= EDGE_R;
+            if ((nl || nr) && y >= B - ZONE_CORNER) e |= EDGE_B;
         }
         if (e) { *edges = e; found = w; break; }
         if (in) break;                          /* inside it, off its edges: an ordinary press */
@@ -736,6 +747,39 @@ static int placeable(const int *wb, int drawer, const char *prog)
     return drawer && cfg.places_wb;
 }
 
+/* ---- drive windows: the name only (0.6) --------------------------------------------------------- */
+
+/* Workbench titles a drive's window "Work  70% full, 453MB free, 62.0MB in use"
+ * (workbench.library's format; the two spaces, the percentage and its
+ * percent sign are the part to find). Cut in place, at the first of the two
+ * spaces, in the string Workbench made: its memory is its own and stays so.
+ * 1 when something was cut. */
+static int cut_usage(char *t)
+{
+    char *p;
+    for (p = t; *p; p++) {
+        char *q = p + 2;
+        if (p[0] != ' ' || p[1] != ' ' || *q < '0' || *q > '9') continue;
+        while (*q >= '0' && *q <= '9') q++;
+        if (*q == '%' && p > t) { *p = 0; return 1; }
+    }
+    return 0;
+}
+
+static void drive_titles(void)
+{
+    struct Window *fix[8], *w;
+    struct Screen *s;
+    int n = 0, i;
+    ULONG lock = LockIBase(0);
+    for (s = IntuitionBase->FirstScreen; s; s = s->NextScreen)
+        for (w = s->FirstWindow; w && n < 8; w = w->NextWindow)
+            if ((w->Flags & WFLG_WBENCHWINDOW) && w->Title && cut_usage((char *)w->Title)) fix[n++] = w;
+    UnlockIBase(lock);
+    for (i = 0; i < n; i++)
+        if (is_window(fix[i])) SetWindowTitles(fix[i], fix[i]->Title, (STRPTR)-1);      /* the same string: drawn again */
+}
+
 /* Once a second: new windows go to their places (or, Workbench drawers, at
    least the drawer size); every known window's place is noted. */
 static void watch(void)
@@ -746,6 +790,7 @@ static void watch(void)
     struct Screen *s;
     struct Window *w;
     ULONG lock;
+    if (cfg.drive_title) drive_titles();
     if (!cfg.places && !cfg.drawer_w) return;
     lock = LockIBase(0);
     for (s = IntuitionBase->FirstScreen; s; s = s->NextScreen)
@@ -827,7 +872,7 @@ static void watch(void)
 /* ---- the commodity --------------------------------------------------------------------------- */
 
 static struct NewBroker nb = {
-    NB_VERSION, (STRPTR)"OpenWindows", (STRPTR)"OpenWindows 0.5", (STRPTR)"Snapping, edges, Amiga+Tab, wheel and window places",
+    NB_VERSION, (STRPTR)"OpenWindows", (STRPTR)"OpenWindows 0.6", (STRPTR)"Snapping, edges, Amiga+Tab, wheel and window places",
     NBU_UNIQUE | NBU_NOTIFY, 0, 0, NULL, 0
 };
 static CxObj *broker, *hot_fwd, *hot_back;
