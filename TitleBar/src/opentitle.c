@@ -11,7 +11,9 @@
  *
  * The free memory is Workbench's own: its title format (the WBTF chunk of
  * Sys/Workbench.prefs, as Prefs/Workbench writes it) becomes
- *   "Workbench %r  Chip %mcek KB  Fast %mfem MB"
+ *   "Workbench %r  Chip %mcek KB  Fast %mfek KB - 1 CPU + 8 cores"
+ * (both in whole KB, as the Amiga always showed them: the user, 10 October
+ * 2026; the earlier "Fast %mfem MB" is still known as ours and replaced)
  * in ENV:, so IPrefs shows it and it updates as Workbench does; spaces
  * before it leave room for the logo.
  *
@@ -30,6 +32,10 @@
  * port (include/taskspace.h); OpenTitle draws them, lights them under the
  * pointer, shows their help under them and tells the program of a click.
  * Tata is the first.
+ *
+ * 0.6.3 (10 October 2026): fast memory in whole KB like chip memory, as the
+ * Amiga always showed it, and the processors after it: " - 1 CPU + 8 cores"
+ * (openmulticore.library's board), or " - 1 CPU".
  *
  * 0.6.2 (10 October 2026): the bar's icons sit under windows that overlap the
  * bar (they are windows of their own and are no longer raised over the
@@ -74,7 +80,7 @@
 #include "wbclose.h"
 #include "popuptheme.h"
 
-const char version[] __attribute__((used)) = "$VER: OpenTitle 0.6.2 (10.10.2026) OpenPrefs, Dalsin Limited";
+const char version[] __attribute__((used)) = "$VER: OpenTitle 0.6.3 (10.10.2026) OpenPrefs, Dalsin Limited";
 
 struct IntuitionBase *IntuitionBase;
 struct GfxBase *GfxBase;
@@ -89,7 +95,8 @@ struct Library *LayersBase, *UtilityBase, *SocketBase, *WorkbenchBase, *CyberGfx
 #define WIFI_DEVICE "opensocketwifi.device"    /* OpenSocket's: the PC's (or the card's) Wi-Fi */
 #define WIFI_STATUS 2
 #define WB_ENV     "ENV:Sys/Workbench.prefs"
-#define TITLE_MEM  "Workbench %r  Chip %mcek KB  Fast %mfem MB"
+#define TITLE_MEM  "Workbench %r  Chip %mcek KB  Fast %mfek KB"
+#define TITLE_MEM_062 "Workbench %r  Chip %mcek KB  Fast %mfem MB"   /* OpenTitle 0.6.2 and before */
 #define TITLE_PLAIN "Amiga Workbench %r"
 #define LOGO_PAD   "    "                      /* room for the logo before Workbench's title */
 
@@ -285,16 +292,43 @@ static void wb_set_title(const char *fmt)
     FreeVec(d);
 }
 
+/* How many processors the machine has, after the memory (the user, 10 October 2026: "a - with number of
+ * cpus / cores"): the main CPU, and the cores openmulticore.library's board gives (OMC_CoreCount, its first
+ * call, -30; 0 without a board or without the library). Written into the title once, at the start and on
+ * Ctrl-F, as Workbench's title format has no token for it. */
+static ULONG omc_cores(void)
+{
+    struct Library *omc = OpenLibrary((STRPTR)"openmulticore.library", 0);
+    ULONG n = 0;
+    if (omc) {
+        register ULONG d0 __asm("d0");
+        register struct Library *a6 __asm("a6") = omc;
+        __asm volatile ("jsr -30(%%a6)" : "=r" (d0) : "r" (a6) : "d1", "a0", "a1", "cc", "memory");
+        n = d0;
+        CloseLibrary(omc);
+    }
+    return n > 1024 ? 0 : n;
+}
+
+static void cpus_text(char *buf, int size)
+{
+    ULONG n = omc_cores();
+    if (n) snprintf(buf, size, " - 1 CPU + %lu core%s", (unsigned long)n, n == 1 ? "" : "s");
+    else snprintf(buf, size, " - 1 CPU");
+}
+
 static int ours(const char *fmt)
 {
     const char *f = fmt;
+    size_t m = strlen(TITLE_MEM);
     while (*f == ' ') f++;
-    return !strcmp(f, TITLE_MEM) || !strcmp(f, TITLE_PLAIN);
+    if (!strncmp(f, TITLE_MEM, m) && (!f[m] || !strncmp(f + m, " - ", 3))) return 1;   /* with or without the CPUs */
+    return !strcmp(f, TITLE_MEM_062) || !strcmp(f, TITLE_PLAIN);
 }
 
 static void apply_title(void)
 {
-    char now[160], want[160];
+    char now[160], want[160], cpus[32];
     int have = wb_title(now, sizeof now);
     if (!prefs.memory && !prefs.logo) {
         if (have && ours(now)) wb_set_title(NULL);       /* back to Workbench's own */
@@ -304,7 +338,11 @@ static void apply_title(void)
         /* someone's own title format: keep it, only make room for the logo */
         if (!prefs.logo || !strncmp(now, LOGO_PAD, strlen(LOGO_PAD))) return;
         snprintf(want, sizeof want, LOGO_PAD "%s", now);
-    } else snprintf(want, sizeof want, "%s%s", prefs.logo ? LOGO_PAD : "", prefs.memory ? TITLE_MEM : TITLE_PLAIN);
+    } else {
+        cpus[0] = 0;
+        if (prefs.memory) cpus_text(cpus, sizeof cpus);
+        snprintf(want, sizeof want, "%s%s%s", prefs.logo ? LOGO_PAD : "", prefs.memory ? TITLE_MEM : TITLE_PLAIN, cpus);
+    }
     if (!have || strcmp(now, want)) wb_set_title(want);
 }
 
