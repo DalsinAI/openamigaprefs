@@ -20,6 +20,7 @@
 #include <exec/memory.h>
 #include <dos/dos.h>
 #include <dos/dostags.h>
+#include <dos/dosextens.h>
 #include <dos/exall.h>
 #include <intuition/intuition.h>
 #include <libraries/gadtools.h>
@@ -204,7 +205,9 @@ static int list_dir(const char *dir, const char *ext, char *names, int width)
 static void make_list(struct List *list, struct Node *nodes, char *names, int width, int n)
 {
     int i;
-    NewList(list);
+    list->lh_Head = (struct Node *)&list->lh_Tail;      /* NewList, which is amiga.lib's */
+    list->lh_Tail = NULL;
+    list->lh_TailPred = (struct Node *)&list->lh_Head;
     for (i = 0; i < n; i++) {
         nodes[i].ln_Name = names + i * width;
         AddTail(list, &nodes[i]);
