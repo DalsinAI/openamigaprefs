@@ -15,8 +15,10 @@
  *   drawers       Workbench drawer windows open at least this big
  *   edges         a resizable window is resized by dragging any edge but
  *                 its title bar: the sides, the bottom and the bottom
- *                 corners, from a few pixels outside the frame (0.5); a
- *                 wider grip, and corners that reach along the edges (0.6)
+ *                 corners, from a few pixels outside the frame (0.5);
+ *                 0.6.1: a strip 4 pixels outside the frame, a 5 x 5 square
+ *                 on each bottom corner, an outline while the button is held
+ *                 and one size at the button-up
  *   drive.title   (0.6) a drive's window is titled with the drive's name only:
  *                 Workbench's "Work  70% full, 453MB free, 62.0MB in use"
  *                 loses its usage part. On by default
@@ -56,7 +58,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-static const char version[] __attribute__((used)) = "$VER: OpenWindows 0.6 (10.10.2026) MIT, Copyright (c) 2026 Dalsin Limited";
+static const char version[] __attribute__((used)) = "$VER: OpenWindows 0.6.1 (10.10.2026) MIT, Copyright (c) 2026 Dalsin Limited";
 
 #define PREFS_ENV "ENV:OpenPrefs/Windows"
 #define PLACES_ENV "ENV:OpenPrefs/WindowPlaces"
@@ -154,13 +156,14 @@ static volatile int click_in, click_out;
 #define EDGE_L 1
 #define EDGE_R 2
 #define EDGE_B 4
-#define ZONE_OUT 7                              /* pixels outside the frame that grab it (0.6: was 4) */
-#define ZONE_IN 3                               /* and inside it, the frame's own line among them (was 2) */
-#define ZONE_CORNER 16                          /* a bottom corner: this far along either edge from it, both edges are held */
+#define ZONE_OUT 4                              /* a side: this many pixels outside the frame grab it (0.6.1; nothing is drawn) */
+#define ZONE_IN 1                               /* and the frame's own line (a one pixel edge) */
+#define ZONE_CORNER 2                           /* a bottom corner: a square 5 x 5 centred on it, two pixels each way */
 static ULONG sig_grab;
 static struct Window *volatile grab_win;        /* the window being resized, set by the handler */
 static volatile int grab_edges, grab_on, grab_end;
 static volatile WORD grab_x0, grab_y0;          /* the pointer at the press, screen relative */
+static volatile ULONG grab_last;                /* the time stamp (seconds) of the drag's latest event, from the handler */
 
 /* The window whose edge (x, y) is on, and which edges, or NULL. The screen's
  * layers are read front to back under their lock, so none goes while we look;
@@ -192,15 +195,16 @@ static struct Window *edge_at(struct Screen *s, WORD x, WORD y, int *edges)
             if (in) break;                      /* a window that keeps its size */
             continue;
         }
-        if (x >= L - ZONE_OUT && x <= R + ZONE_OUT && y >= T + w->BorderTop && y <= B + ZONE_OUT) {
-            int nl = x <= L + ZONE_IN - 1, nr = x >= R - ZONE_IN + 1, nb = y >= B - ZONE_IN + 1;
-            if (nl) e |= EDGE_L;
-            if (nr) e |= EDGE_R;
-            if (nb) e |= EDGE_B;
-            /* a corner reaches along both edges: the bottom edge's last stretch holds the side too, and a side's last stretch the bottom */
-            if (nb && x <= L + ZONE_CORNER) e |= EDGE_L;
-            if (nb && x >= R - ZONE_CORNER) e |= EDGE_R;
-            if ((nl || nr) && y >= B - ZONE_CORNER) e |= EDGE_B;
+        if (x >= L - ZONE_OUT && x <= R + ZONE_OUT && y >= T + w->BorderTop && y <= B + ZONE_CORNER + ZONE_OUT) {
+            /* the sides: a strip outside the frame and its own line, below the title bar; the bottom: the same along it */
+            if (x >= L - ZONE_OUT && x <= L + ZONE_IN - 1 && y <= B) e |= EDGE_L;
+            if (x <= R + ZONE_OUT && x >= R - ZONE_IN + 1 && y <= B) e |= EDGE_R;
+            if (y >= B - ZONE_IN + 1 && y <= B + ZONE_OUT && x >= L && x <= R) e |= EDGE_B;
+            /* a bottom corner: a square centred on it holds both edges (it reaches a little outside and inside) */
+            if (y >= B - ZONE_CORNER && y <= B + ZONE_CORNER) {
+                if (x >= L - ZONE_CORNER && x <= L + ZONE_CORNER) e |= EDGE_L | EDGE_B;
+                if (x >= R - ZONE_CORNER && x <= R + ZONE_CORNER) e |= EDGE_R | EDGE_B;
+            }
         }
         if (e) { *edges = e; found = w; break; }
         if (in) break;                          /* inside it, off its edges: an ordinary press */
@@ -233,6 +237,7 @@ static void custom(CxMsg *msg, CxObj *co)
                     grab_on = 0; grab_end = 1;
                     ie->ie_Code = IECODE_NOBUTTON;     /* the pointer's last move still goes on */
                 }
+                grab_last = ie->ie_TimeStamp.tv_secs;
                 Signal(me, sig_grab);              /* the main task reads where the pointer is */
                 continue;
             }
@@ -242,7 +247,7 @@ static void custom(CxMsg *msg, CxObj *co)
                 struct Window *gw = edge_at(s, s->MouseX, s->MouseY, &edges);
                 if (gw) {
                     grab_win = gw; grab_edges = edges; grab_x0 = s->MouseX; grab_y0 = s->MouseY;
-                    grab_end = 0; grab_on = 1;
+                    grab_end = 0; grab_on = 1; grab_last = ie->ie_TimeStamp.tv_secs;
                     ie->ie_Code = IECODE_NOBUTTON;     /* Intuition sees a move, not the press */
                     Signal(me, sig_grab);
                     continue;
@@ -261,6 +266,9 @@ static void custom(CxMsg *msg, CxObj *co)
                 ev_up = 1; up_x = s ? s->MouseX : 0; up_y = s ? s->MouseY : 0;
                 Signal(me, sig_button);
             }
+        } else if (grab_on && ie->ie_Class == IECLASS_POINTERPOS) {
+            grab_last = ie->ie_TimeStamp.tv_secs;     /* a pointer put somewhere (not a mouse): it moves the outline too */
+            Signal(me, sig_grab);
         } else if (cfg.wheel && (ie->ie_Class == IECLASS_RAWKEY || ie->ie_Class == IECLASS_NEWMOUSE_) &&
                    (ie->ie_Code & 0x7F) >= RAWKEY_WHEEL_UP && (ie->ie_Code & 0x7F) <= RAWKEY_WHEEL_RIGHT) {
             if (pass_wheel) { pass_wheel--; continue; }
@@ -540,17 +548,88 @@ static void pointers_off(void)
 static struct Window *rs_win;                   /* the window the main task is resizing */
 static int rs_edges, rs_ptr;
 static WORD rs_l, rs_t, rs_w, rs_h, rs_x0, rs_y0;
+static ULONG rs_start;                          /* when the press came (seconds), for the time limit */
+
+/* The size outline (0.6.1): while the button is held only a rectangle is drawn
+ * (two pixels, inverted, straight in the screen's bitmap, as Intuition's own
+ * sizing does), and the window is sized once, when the button comes up. 0.6
+ * called ChangeWindowBox for every move of the pointer: dozens of NEWSIZE and
+ * REFRESHWINDOW a second to the program, each one a full redraw of the frame
+ * in the look, all through the input task. A program could not keep up and
+ * the whole input stream stopped behind it. */
+static int ol_on;
+static struct Screen *ol_scr;
+static WORD ol_l, ol_t, ol_w, ol_h;
+
+static int screen_alive(struct Screen *sc)
+{
+    struct Screen *x;
+    ULONG lock = LockIBase(0);
+    int found = 0;
+    for (x = IntuitionBase->FirstScreen; x; x = x->NextScreen)
+        if (x == sc) { found = 1; break; }
+    UnlockIBase(lock);
+    return found;
+}
+
+static void ol_xor(struct Screen *sc, WORD l, WORD t, WORD w, WORD h)
+{
+    struct RastPort *rp = &sc->RastPort;
+    UBYTE dm = rp->DrawMode;
+    WORD th = w < 6 || h < 6 ? 1 : 2;
+    SetDrMd(rp, COMPLEMENT);
+    RectFill(rp, l, t, l + w - 1, t + th - 1);                      /* top */
+    RectFill(rp, l, t + h - th, l + w - 1, t + h - 1);              /* bottom */
+    if (h > 2 * th) {
+        RectFill(rp, l, t + th, l + th - 1, t + h - th - 1);        /* left */
+        RectFill(rp, l + w - th, t + th, l + w - 1, t + h - th - 1); /* right */
+    }
+    SetDrMd(rp, dm);
+}
+
+static void ol_clear(void)
+{
+    if (ol_on && screen_alive(ol_scr)) ol_xor(ol_scr, ol_l, ol_t, ol_w, ol_h);
+    ol_on = 0;
+}
+
+static void ol_show(struct Screen *sc, WORD l, WORD t, WORD w, WORD h)
+{
+    if (ol_on && ol_l == l && ol_t == t && ol_w == w && ol_h == h) return;
+    ol_clear();
+    ol_xor(sc, l, t, w, h);
+    ol_scr = sc; ol_l = l; ol_t = t; ol_w = w; ol_h = h; ol_on = 1;
+}
 
 static void resize_end(void)
 {
+    ol_clear();
     if (rs_win && rs_ptr && is_window(rs_win)) SetWindowPointer(rs_win, WA_Pointer, (ULONG)NULL, TAG_DONE);
     rs_win = NULL;
     rs_ptr = 0;
 }
 
-/* The pointer has moved, or the button has come up: the window follows. The
- * edge or corner held follows the pointer, the others stay; the window keeps
- * to its own limits and to the screen. */
+/* The drag is over without a button-up (the release never came): the
+ * outline goes and the window is left as it is. The handler always ends a
+ * drag at the button-up; this is for the one that never arrives. */
+#define DRAG_IDLE_SECS 8
+#define DRAG_MAX_SECS 120
+static void resize_watch(void)
+{
+    ULONG secs, micro;
+    if (!rs_win || !grab_on) return;
+    CurrentTime(&secs, &micro);
+    if (secs - rs_start > DRAG_MAX_SECS || (secs - grab_last > DRAG_IDLE_SECS && grab_last <= secs)) {
+        grab_on = 0; grab_end = 0; grab_win = NULL;
+        resize_end();
+    }
+}
+
+/* The pointer has moved, or the button has come up. The box the window
+ * would have: the edge or corner held follows the pointer, the others stay;
+ * it keeps to the window's own limits (a MaxWidth of 0 or 65535 is the
+ * screen's size) and to the screen. While the button is held the outline
+ * shows it; at the button-up the window is sized, once. */
 static void resize(void)
 {
     struct Window *w;
@@ -561,6 +640,7 @@ static void resize(void)
         if (!is_window(w)) { grab_win = NULL; grab_on = 0; grab_end = 0; return; }
         rs_win = w; rs_edges = grab_edges; rs_x0 = grab_x0; rs_y0 = grab_y0;
         rs_l = w->LeftEdge; rs_t = w->TopEdge; rs_w = w->Width; rs_h = w->Height;
+        { ULONG micro; CurrentTime(&rs_start, &micro); }
         if (w != IntuitionBase->ActiveWindow) ActivateWindow(w);
         {
             int k = !(rs_edges & EDGE_B) ? PTR_H : (rs_edges & EDGE_R) ? PTR_D1 : (rs_edges & EDGE_L) ? PTR_D2 : PTR_V;
@@ -570,7 +650,7 @@ static void resize(void)
         }
     }
     if (!(w = rs_win)) return;
-    if (!is_window(w)) { rs_win = NULL; rs_ptr = 0; grab_win = NULL; grab_on = 0; grab_end = 0; return; }
+    if (!is_window(w)) { ol_on = 0; rs_win = NULL; rs_ptr = 0; grab_win = NULL; grab_on = 0; grab_end = 0; return; }
     s = w->WScreen;
     dx = s->MouseX - rs_x0;
     dy = s->MouseY - rs_y0;
@@ -588,13 +668,17 @@ static void resize(void)
     if (l < 0) { wd += l; l = 0; }
     if (l + wd > s->Width) wd = s->Width - l;
     if (t + ht > s->Height) ht = s->Height - t;
-    if (wd >= w->MinWidth && ht >= w->MinHeight && (wd != w->Width || ht != w->Height || l != w->LeftEdge))
-        ChangeWindowBox(w, l, t, wd, ht);
+    if (wd < w->MinWidth || ht < w->MinHeight) { wd = w->Width; ht = w->Height; l = w->LeftEdge; }   /* nothing sensible: no change */
     if (grab_end) {
         grab_end = 0;
         grab_win = NULL;
+        ol_clear();                                          /* the outline goes first, then the one size */
+        if (wd != w->Width || ht != w->Height || l != w->LeftEdge)
+            ChangeWindowBox(w, l, t, wd, ht);
         resize_end();
+        return;
     }
+    ol_show(s, l, t, wd, ht);
 }
 
 /* A window Amiga+Tab offers: not a backdrop, not tiny, and not Workbench's
@@ -872,7 +956,7 @@ static void watch(void)
 /* ---- the commodity --------------------------------------------------------------------------- */
 
 static struct NewBroker nb = {
-    NB_VERSION, (STRPTR)"OpenWindows", (STRPTR)"OpenWindows 0.6", (STRPTR)"Snapping, edges, Amiga+Tab, wheel and window places",
+    NB_VERSION, (STRPTR)"OpenWindows", (STRPTR)"OpenWindows 0.6.1", (STRPTR)"Snapping, edges, Amiga+Tab, wheel and window places",
     NBU_UNIQUE | NBU_NOTIFY, 0, 0, NULL, 0
 };
 static CxObj *broker, *hot_fwd, *hot_back;
@@ -965,6 +1049,7 @@ int main(void)
         }
         if (timer && CheckIO((struct IORequest *)tr)) {
             WaitIO((struct IORequest *)tr);
+            resize_watch();
             if (on) watch();
             tr->tr_node.io_Command = TR_ADDREQUEST; tr->tr_time.tv_secs = 1; tr->tr_time.tv_micro = 0;
             SendIO((struct IORequest *)tr);
