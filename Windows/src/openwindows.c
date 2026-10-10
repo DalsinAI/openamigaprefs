@@ -68,7 +68,7 @@
 #include <stdlib.h>
 #include "../../Common/cogplace.h"
 
-static const char version[] __attribute__((used)) = "$VER: OpenWindows 0.8.1 (10.10.2026) MIT, Copyright (c) 2026 Dalsin Limited";
+static const char version[] __attribute__((used)) = "$VER: OpenWindows 0.8.2 (10.10.2026) MIT, Copyright (c) 2026 Dalsin Limited";
 
 #define PREFS_ENV "ENV:OpenPrefs/Windows"
 #define PLACES_ENV "ENV:OpenPrefs/WindowPlaces"
@@ -86,6 +86,7 @@ struct GfxBase *GfxBase;
 
 static struct {
     int snap, snap_dist, halves, switcher, wheel, places, places_wb, drawer_w, drawer_h, dblfront, edges, edge_ptr, drive_title, solid;
+    int taller;                                  /* 0.8.2: extra rows in every window's title bar (default 4) */
     char key[48];
     char never[MAX_NEVER][32];
     int nnever;
@@ -114,7 +115,7 @@ static void read_prefs(void)
 {
     char *text = read_file(PREFS_ENV), *p, *line;
     memset(&cfg, 0, sizeof cfg);
-    cfg.snap = 1; cfg.snap_dist = 12; cfg.halves = 0; cfg.switcher = 1; cfg.wheel = 1; cfg.places = 1; cfg.dblfront = 1; cfg.edges = 1; cfg.edge_ptr = 0; cfg.drive_title = 1;
+    cfg.snap = 1; cfg.snap_dist = 12; cfg.halves = 0; cfg.switcher = 1; cfg.wheel = 1; cfg.places = 1; cfg.dblfront = 1; cfg.edges = 1; cfg.edge_ptr = 0; cfg.drive_title = 1; cfg.taller = 4;
     strcpy(cfg.key, "lcommand tab");
     if (!text) return;
     for (p = text; *p; ) {
@@ -135,6 +136,7 @@ static void read_prefs(void)
         else if (!strcmp(line, "edges.pointer")) cfg.edge_ptr = on_off(v);
         else if (!strcmp(line, "drive.title")) cfg.drive_title = on_off(v);
         else if (!strcmp(line, "drag.solid")) cfg.solid = on_off(v);
+        else if (!strcmp(line, "title.taller")) cfg.taller = atoi(v);
         else if (!strcmp(line, "places")) cfg.places = on_off(v);
         else if (!strcmp(line, "places.drawers")) cfg.places_wb = on_off(v);
         else if (!strcmp(line, "never") && cfg.nnever < MAX_NEVER) strncpy(cfg.never[cfg.nnever++], v, 31);
@@ -142,7 +144,43 @@ static void read_prefs(void)
     }
     if (cfg.snap_dist < 2) cfg.snap_dist = 2;
     if (cfg.snap_dist > 64) cfg.snap_dist = 64;
+    if (cfg.taller < 0) cfg.taller = 0;
+    if (cfg.taller > 16) cfg.taller = 16;
     FreeVec(text);
+}
+
+/* ---- taller title bars (0.8.2) ---------------------------------------------------
+ *
+ * Intuition gives a window's title bar scr->WBorTop + the screen font's height + 1 rows,
+ * reading WBorTop from the screen each time a window opens. So the Workbench screen's
+ * WBorTop is raised by cfg.taller (4: 2 rows above the text, 2 below, once OpenLook
+ * centres the title), and every window opened after that has a taller bar. The screen's
+ * own bar was laid out when the screen opened and is not changed here. Put back on exit
+ * if nothing else has changed it since. */
+static struct Screen *tall_scr;
+static WORD tall_was, tall_now;
+
+static void taller_on(void)
+{
+    struct Screen *s = LockPubScreen((STRPTR)"Workbench");
+    if (!s) return;
+    Forbid();
+    if (tall_scr == s && s->WBorTop == tall_now) s->WBorTop = tall_was;     /* the old extra off first */
+    else if (tall_scr != s) { tall_scr = s; tall_was = s->WBorTop; }
+    tall_now = tall_was + cfg.taller;
+    s->WBorTop = tall_now;
+    Permit();
+    UnlockPubScreen(NULL, s);
+}
+
+static void taller_off(void)
+{
+    struct Screen *s;
+    if (!tall_scr) return;
+    s = LockPubScreen((STRPTR)"Workbench");
+    if (s == tall_scr) { Forbid(); if (s->WBorTop == tall_now) s->WBorTop = tall_was; Permit(); }
+    if (s) UnlockPubScreen(NULL, s);
+    tall_scr = NULL;
 }
 
 /* ---- the input stream (input.device's task: no waiting, no DOS) ------------- */
@@ -1352,6 +1390,7 @@ int main(void)
     InitSemaphore(&places_sem);
     read_prefs();
     read_places();
+    taller_on();                                       /* 0.8.2: taller title bars from here on */
     places_patch_on();                                 /* 0.8.1: always: the cog's placing goes through it too */
     cog.sem.ss_Link.ln_Name = (char *)COGPLACE_NAME;
     cog.sem.ss_Link.ln_Pri = 0;
@@ -1371,7 +1410,7 @@ int main(void)
         CxMsg *m;
         if (got & SIGBREAKF_CTRL_C) quit = 1;
         if (got & SIGBREAKF_CTRL_F) {
-            read_prefs(); hotkeys(port);
+            read_prefs(); hotkeys(port); taller_on();
             places_patch_on();                   /* 0.8.1: always on: the kept places follow cfg.places inside it */
         }
         if (got & sig_wheel) wheel();
@@ -1388,7 +1427,7 @@ int main(void)
                 case CXCMD_ENABLE: ActivateCxObj(broker, 1); on = 1; break;
                 case CXCMD_KILL: quit = 1; break;
                 case CXCMD_UNIQUE:                    /* started again: read the settings again, stay */
-                    read_prefs(); hotkeys(port);
+                    read_prefs(); hotkeys(port); taller_on();
                     places_patch_on();               /* 0.8.1: always on */
                     break;
                 }
@@ -1413,6 +1452,7 @@ int main(void)
     }
     if (places_dirty) { write_places(PLACES_ENV); write_places(PLACES_ENVARC); }
 out:
+    taller_off();
     if (cog.sem.ss_Link.ln_Name) { Forbid(); cog.armed = 0; RemSemaphore(&cog.sem); Permit(); }
     if (broker) ActivateCxObj(broker, 0);           /* no new presses on an edge */
     grab_on = 0;
