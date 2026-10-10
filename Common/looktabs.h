@@ -51,7 +51,7 @@ static int lt_x, lt_y, lt_w, lt_h, lt_me = -1, lt_tx[LT_N], lt_tw[LT_N];
  * plus its padding. Returns the last gadget (NULL when one could not be made). */
 static struct Gadget *lt_make(struct Gadget *g, struct NewGadget *ng, int x, int y, int w, int lh, int me)
 {
-    struct TextAttr *ta = ng->ng_TextAttr;
+    struct TextAttr *ta = (struct TextAttr *)ng->ng_TextAttr;       /* NewGadget's is const */
     struct TextFont *tf = ta ? OpenFont(ta) : NULL;
     struct RastPort rp;
     int i, at = x;
