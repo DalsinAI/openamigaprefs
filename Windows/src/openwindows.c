@@ -1,6 +1,8 @@
-/* OpenWindows: the commodity behind OpenPrefs Windows. No Intuition patches:
- * it watches the input stream and moves, sizes and activates windows with
- * the OS's own calls.
+/* OpenWindows: the commodity behind OpenPrefs Windows. It watches the input
+ * stream and moves, sizes and activates windows with the OS's own calls. One
+ * patch (0.7): OpenWindowTagList and OpenWindow, so a window whose place is
+ * kept opens there instead of opening where it asked and jumping a second
+ * later; stacked with OpenLook's patch of the same calls.
  *
  *   snapping      a window dropped near a screen edge or another window's
  *                 edge lines up with it; dropped with the pointer at the
@@ -11,7 +13,8 @@
  *                 brings it to the front, as ClickToFront does for a
  *                 double-click anywhere; one already in front stays
  *   wheel         the mouse wheel goes to the window under the pointer
- *   places        a program's window opens where it was last left
+ *   places        a program's window opens where it was last left (0.7: it
+ *                 opens there, placed before Intuition draws it)
  *   drawers       Workbench drawer windows open at least this big
  *   edges         a resizable window is resized by dragging any edge but
  *                 its title bar: the sides, the bottom and the bottom
@@ -53,12 +56,15 @@
 #include <proto/layers.h>
 #include <proto/graphics.h>
 #include <proto/commodities.h>
+#include <proto/utility.h>
+#include <utility/tagitem.h>
+#include <exec/semaphores.h>
 
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
 
-static const char version[] __attribute__((used)) = "$VER: OpenWindows 0.6.1 (10.10.2026) MIT, Copyright (c) 2026 Dalsin Limited";
+static const char version[] __attribute__((used)) = "$VER: OpenWindows 0.7 (10.10.2026) MIT, Copyright (c) 2026 Dalsin Limited";
 
 #define PREFS_ENV "ENV:OpenPrefs/Windows"
 #define PLACES_ENV "ENV:OpenPrefs/WindowPlaces"
@@ -722,15 +728,16 @@ struct place { char key[64]; WORD l, t, w, h; ULONG used; };
 static struct place places[MAX_PLACES];
 static int nplaces, places_dirty;
 static ULONG places_clock;
+static struct SignalSemaphore places_sem;   /* the places, between this task and the patch's callers */
 static struct { struct Window *w; WORD l, t, wd, ht; int idx; } seen[MAX_SEEN];
 static int nseen;
 
-/* The program behind a window: its task's name, or the command a Shell runs. */
-static void program_of(struct Window *w, char *out, int size)
+/* The program behind a task: its name, or the command a Shell runs. NULL: a
+   window with no IDCMP (a console, say), known by its title as "window". */
+static void program_of_task(struct Task *t, char *out, int size)
 {
-    struct Task *t = w->UserPort ? (struct Task *)w->UserPort->mp_SigTask : NULL;
     *out = 0;
-    if (!t) { strncpy(out, "window", size - 1); return; }     /* no IDCMP (a console, say): known by its title */
+    if (!t) { strncpy(out, "window", size - 1); return; }
     Forbid();
     if (t->tc_Node.ln_Type == NT_PROCESS && ((struct Process *)t)->pr_CLI) {
         struct CommandLineInterface *cli = BADDR(((struct Process *)t)->pr_CLI);
@@ -745,6 +752,12 @@ static void program_of(struct Window *w, char *out, int size)
     }
     if (!*out && t->tc_Node.ln_Name) { strncpy(out, t->tc_Node.ln_Name, size - 1); out[size - 1] = 0; }
     Permit();
+}
+
+/* The program behind a window: the task its IDCMP port signals. */
+static void program_of(struct Window *w, char *out, int size)
+{
+    program_of_task(w->UserPort ? (struct Task *)w->UserPort->mp_SigTask : NULL, out, size);
 }
 
 static int never(const char *prog)
@@ -808,17 +821,41 @@ static int place_index(const char *key, int make)
     return i;
 }
 
-static void make_key(struct Window *w, const char *prog, char *key, int size)
+static void make_key_title(const char *s, const char *prog, char *key, int size)
 {
     /* the program and the window's title up to its first digit or bracket, so a
        title with a changing count or file name still matches */
     char title[40];
-    const char *s = (const char *)w->Title;
     int n = 0;
     if (s) while (*s && n < 30 && !(*s >= '0' && *s <= '9') && *s != '(' && *s != '[' && *s != '"') title[n++] = *s++;
     while (n && title[n - 1] == ' ') n--;
     title[n] = 0;
     snprintf(key, size, "%s:%s", prog, title);
+}
+
+static void make_key(struct Window *w, const char *prog, char *key, int size)
+{
+    make_key_title((const char *)w->Title, prog, key, size);
+}
+
+/* Where a window with a kept place goes: the place's corner, and its size when
+   the window can be sized and the size is within the window's limits, kept on
+   the screen. The patch (before a window opens) and the once-a-second look
+   (after) both ask here, so they always agree and a placed window never moves
+   again. wd and ht come in as the window's own size (0 when not known). */
+static void fit_place(const struct place *pl, int sizeable, WORD minw, WORD minh, WORD maxw, WORD maxh,
+                      WORD sw, WORD sh, WORD *l, WORD *t, WORD *wd, WORD *ht)
+{
+    *l = pl->l; *t = pl->t;
+    if (sizeable && pl->w >= minw && pl->h >= minh &&
+        (!maxw || (UWORD)maxw == 0xffff || pl->w <= (UWORD)maxw) &&
+        (!maxh || (UWORD)maxh == 0xffff || pl->h <= (UWORD)maxh)) { *wd = pl->w; *ht = pl->h; }
+    if (sw > 0 && *wd > sw) *wd = sw;
+    if (sh > 0 && *ht > sh) *ht = sh;
+    if (*l < 0) *l = 0;
+    if (*t < 0) *t = 0;
+    if (sw > 0 && *wd > 0 && *l + *wd > sw) *l = sw - *wd;
+    if (sh > 0 && *ht > 0 && *t + *ht > sh) *t = sh - *ht;
 }
 
 /* A window whose place is kept: a program's (not one never to be touched),
@@ -829,6 +866,198 @@ static int placeable(const int *wb, int drawer, const char *prog)
     if (!prog[0] || never(prog)) return 0;
     if (!*wb) return 1;
     return drawer && cfg.places_wb;
+}
+
+/* ---- placed before they open (0.7) ---------------------------------------------------------- */
+
+/* Up to 0.6 a new window was moved to its place at the next once-a-second
+ * look, so it opened where it asked and then jumped. From 0.7 OpenWindowTagList
+ * and OpenWindow are patched, as OpenLook patches them and stacked with it
+ * whichever loads first: a window whose place is kept opens there, with
+ * WA_Left and WA_Top (and WA_Width and WA_Height when it can be sized) put in
+ * front of the program's own tags, and the same corner and size in a copy of
+ * its NewWindow. The once-a-second look stays for what the patch leaves (it
+ * asks fit_place too, so a placed window doesn't move again).
+ *
+ * The patch runs on the opening program's task. It never waits: when this
+ * task holds the places, the window opens as asked and the look places it.
+ * It places nothing while the commodity is disabled, for OpenWindows' own
+ * windows, or once it has been told to pass everything through (quitting
+ * while another program has patched on top of it). */
+
+static APTR old_owtl, old_ow;           /* what the patch replaced */
+static volatile UWORD patch_in;         /* callers inside the patch now */
+static volatile UBYTE patch_pass;       /* 1: place nothing */
+
+static ULONG tag_or(struct TagItem *tags, struct TagItem *ext, ULONG tag, ULONG dflt)
+{
+    struct TagItem *ti = tags ? FindTagItem(tag, tags) : NULL;
+    if (!ti && ext) ti = FindTagItem(tag, ext);
+    return ti ? ti->ti_Data : dflt;
+}
+
+/* The width and height of the screen a window is about to open on; 0 0 when
+   it can't be told (then the window opens as asked). */
+static void opening_screen(struct NewWindow *nw, struct TagItem *tags, struct TagItem *ext, WORD *sw, WORD *sh)
+{
+    struct Screen *s = (struct Screen *)tag_or(tags, ext, WA_CustomScreen, 0), *locked = NULL;
+    *sw = *sh = 0;
+    if (!s) s = (struct Screen *)tag_or(tags, ext, WA_PubScreen, 0);
+    if (!s && nw && (nw->Type & SCREENTYPE) == CUSTOMSCREEN) s = nw->Screen;
+    if (!s) {
+        STRPTR name = (STRPTR)tag_or(tags, ext, WA_PubScreenName, 0);
+        locked = LockPubScreen(name);           /* NULL: the default public screen */
+        s = locked;
+    }
+    if (s) { *sw = s->Width; *sh = s->Height; }
+    if (locked) UnlockPubScreen(NULL, locked);
+}
+
+/* The kept place for a window this program is opening, keyed as the look keys
+   it; 1 when there is one. A window opened without IDCMP is keyed later by the
+   task whose port the program attaches (Workbench and many programs share one
+   port that way), or as "window" when it never gets one: both are tried. */
+static int place_for(const char *title, int has_idcmp, struct place *pl)
+{
+    char prog[32], key[64];
+    int pass, found = 0;
+    for (pass = 0; pass < 2 && !found; pass++) {
+        int wb, drawer;
+        if (pass == 1 && has_idcmp) break;
+        program_of_task(pass == 0 ? FindTask(NULL) : NULL, prog, sizeof prog);
+        wb = !stricmp(prog, "Workbench");
+        drawer = wb && title && strncmp(title, "Workbench", 9);
+        if (!placeable(&wb, drawer, prog)) continue;
+        make_key_title(title, prog, key, sizeof key);
+        if (!AttemptSemaphoreShared(&places_sem)) return 0;     /* being changed: the look places it */
+        {
+            int i = place_index(key, 0);
+            if (i >= 0) { *pl = places[i]; found = 1; }
+        }
+        ReleaseSemaphore(&places_sem);
+    }
+    return found;
+}
+
+/* OpenWindowTagList(nw, tags) with the window's kept place, when it has one. */
+static struct Window *__attribute__((used)) ow_open_window(struct NewWindow *nw, struct TagItem *tags, APTR fn)
+{
+    struct TagItem more[5], *use = tags, *ext = NULL;
+    struct ExtNewWindow copy;
+    struct NewWindow *pass_nw = nw;
+    struct Window *win;
+    patch_in++;
+    if (!patch_pass && on && cfg.places && FindTask(NULL) != me) {
+        ULONG flags, idcmp;
+        const char *title;
+        struct place pl;
+        int found = 0, sizeable, inner;
+        memset(&pl, 0, sizeof pl);
+        if (nw && (nw->Flags & WFLG_NW_EXTENDED)) ext = ((struct ExtNewWindow *)nw)->Extension;
+        flags = tag_or(tags, ext, WA_Flags, nw ? nw->Flags : 0);
+        if (tag_or(tags, ext, WA_Backdrop, 0)) flags |= WFLG_BACKDROP;
+        if (tag_or(tags, ext, WA_GimmeZeroZero, 0)) flags |= WFLG_GIMMEZEROZERO;
+        if (tag_or(tags, ext, WA_SizeGadget, 0)) flags |= WFLG_SIZEGADGET;
+        if (tag_or(tags, ext, WA_DragBar, 0)) flags |= WFLG_DRAGBAR;
+        title = (const char *)tag_or(tags, ext, WA_Title, nw ? (ULONG)nw->Title : 0);
+        idcmp = tag_or(tags, ext, WA_IDCMP, nw ? nw->IDCMPFlags : 0);
+        /* the same windows the look places: not backdrops, not GZZ, a drag bar or a title */
+        if (!(flags & (WFLG_BACKDROP | WFLG_GIMMEZEROZERO)) && ((flags & WFLG_DRAGBAR) || title))
+            found = place_for(title, idcmp != 0, &pl);
+        if (found) {
+            WORD sw, sh, l, t;
+            WORD wd = (WORD)tag_or(tags, ext, WA_Width, nw ? (ULONG)(LONG)nw->Width : 0);
+            WORD ht = (WORD)tag_or(tags, ext, WA_Height, nw ? (ULONG)(LONG)nw->Height : 0);
+            WORD minw = (WORD)tag_or(tags, ext, WA_MinWidth, nw ? (ULONG)(LONG)nw->MinWidth : 0);
+            WORD minh = (WORD)tag_or(tags, ext, WA_MinHeight, nw ? (ULONG)(LONG)nw->MinHeight : 0);
+            WORD maxw = (WORD)tag_or(tags, ext, WA_MaxWidth, nw ? (ULONG)nw->MaxWidth : 0);
+            WORD maxh = (WORD)tag_or(tags, ext, WA_MaxHeight, nw ? (ULONG)nw->MaxHeight : 0);
+            int n = 0;
+            /* a program that asks by its inner size is only moved: a whole size would fight it */
+            inner = tag_or(tags, ext, WA_InnerWidth, 0) || tag_or(tags, ext, WA_InnerHeight, 0);
+            sizeable = (flags & WFLG_SIZEGADGET) && !inner;
+            opening_screen(nw, tags, ext, &sw, &sh);
+            if (sw > 0 && sh > 0) {
+                fit_place(&pl, sizeable, minw, minh, maxw, maxh, sw, sh, &l, &t, &wd, &ht);
+                more[n].ti_Tag = WA_Left; more[n++].ti_Data = (ULONG)(LONG)l;
+                more[n].ti_Tag = WA_Top; more[n++].ti_Data = (ULONG)(LONG)t;
+                if (sizeable && wd > 0 && ht > 0) {
+                    more[n].ti_Tag = WA_Width; more[n++].ti_Data = (ULONG)(LONG)wd;
+                    more[n].ti_Tag = WA_Height; more[n++].ti_Data = (ULONG)(LONG)ht;
+                }
+                more[n].ti_Tag = use ? TAG_MORE : TAG_DONE; more[n].ti_Data = (ULONG)use;
+                use = more;
+                if (nw) {
+                    /* the same corner and size in a copy of the program's NewWindow; its own stays as it gave it */
+                    memcpy(&copy, nw, (nw->Flags & WFLG_NW_EXTENDED) ? sizeof(struct ExtNewWindow) : sizeof(struct NewWindow));
+                    copy.LeftEdge = l; copy.TopEdge = t;
+                    if (sizeable && wd > 0 && ht > 0) { copy.Width = wd; copy.Height = ht; }
+                    pass_nw = (struct NewWindow *)&copy;
+                }
+            }
+        }
+    }
+    {
+        /* the registers are set here, after every other call */
+        register struct Window *res __asm("d0");
+        register struct NewWindow *a0 __asm("a0") = pass_nw;
+        register struct TagItem *a1 __asm("a1") = use;
+        register APTR a6 __asm("a6") = IntuitionBase;
+        __asm volatile ("jsr (%4)" : "=r"(res), "+r"(a0), "+r"(a1), "+r"(a6) : "a"(fn) : "d1", "memory", "cc");
+        win = res;
+    }
+    patch_in--;
+    return win;
+}
+
+__asm(
+"_ow_owtl:\n"
+"   movem.l d2-d7/a2-a6,-(sp)\n"
+"   move.l _old_owtl,-(sp)\n move.l a1,-(sp)\n move.l a0,-(sp)\n"
+"   jsr _ow_open_window\n"
+"   lea 12(sp),sp\n"
+"   movem.l (sp)+,d2-d7/a2-a6\n"
+"   rts\n"
+/* OpenWindow(nw a0): as OpenWindowTagList(nw, NULL), through what OpenWindowTagList was */
+"_ow_ow:\n"
+"   movem.l d2-d7/a2-a6,-(sp)\n"
+"   move.l _old_owtl,-(sp)\n clr.l -(sp)\n move.l a0,-(sp)\n"
+"   jsr _ow_open_window\n"
+"   lea 12(sp),sp\n"
+"   movem.l (sp)+,d2-d7/a2-a6\n"
+"   rts\n");
+void ow_owtl(void), ow_ow(void);
+
+static void places_patch_on(void)
+{
+    patch_pass = 0;                         /* also after a switch-off that couldn't take the calls back */
+    if (old_owtl) return;
+    Forbid();
+    old_owtl = SetFunction((struct Library *)IntuitionBase, -606, (APTR)ow_owtl);
+    old_ow = SetFunction((struct Library *)IntuitionBase, -204, (APTR)ow_ow);
+    Permit();
+}
+
+/* 1 when Intuition has its own calls back and nobody is still inside ours; 0
+   when another program patched on top (ours must stay, passing through). */
+static int places_patch_off(void)
+{
+    int ok = 1, i;
+    if (!old_owtl) return 1;
+    Forbid();
+    if (SetFunction((struct Library *)IntuitionBase, -606, old_owtl) != (APTR)ow_owtl) {
+        SetFunction((struct Library *)IntuitionBase, -606, (APTR)ow_owtl);
+        ok = 0;
+    } else if (SetFunction((struct Library *)IntuitionBase, -204, old_ow) != (APTR)ow_ow) {
+        SetFunction((struct Library *)IntuitionBase, -204, (APTR)ow_ow);
+        SetFunction((struct Library *)IntuitionBase, -606, (APTR)ow_owtl);
+        ok = 0;
+    }
+    Permit();
+    if (!ok) { patch_pass = 1; return 0; }
+    old_owtl = old_ow = NULL;
+    for (i = 0; i < 250 && patch_in; i++) Delay(1);      /* a window opening now finishes in our code */
+    return patch_in == 0;
 }
 
 /* ---- drive windows: the name only (0.6) --------------------------------------------------------- */
@@ -897,6 +1126,8 @@ static void watch(void)
             n++;
         }
     UnlockIBase(lock);
+    /* the patch reads the places from other tasks; it never waits for this */
+    ObtainSemaphore(&places_sem);
     places_clock++;
     for (i = 0; i < n; i++) {
         int known = -1;
@@ -920,16 +1151,9 @@ static void watch(void)
                 int p = place_index(now[i].key, 0);
                 if (p >= 0) {
                     struct place *pl = &places[p];
-                    WORD l = pl->l, t = pl->t, wd = now[i].wd, ht = now[i].ht;
-                    if ((now[i].flags & WFLG_SIZEGADGET) && pl->w >= now[i].minw && pl->h >= now[i].minh &&
-                        (!now[i].maxw || (UWORD)now[i].maxw == 0xffff || pl->w <= (UWORD)now[i].maxw) &&
-                        (!now[i].maxh || (UWORD)now[i].maxh == 0xffff || pl->h <= (UWORD)now[i].maxh)) { wd = pl->w; ht = pl->h; }
-                    if (wd > now[i].sw) wd = now[i].sw;
-                    if (ht > now[i].sh) ht = now[i].sh;
-                    if (l < 0) l = 0;
-                    if (t < 0) t = 0;
-                    if (l + wd > now[i].sw) l = now[i].sw - wd;
-                    if (t + ht > now[i].sh) t = now[i].sh - ht;
+                    WORD l, t, wd = now[i].wd, ht = now[i].ht;
+                    fit_place(pl, (now[i].flags & WFLG_SIZEGADGET) != 0, now[i].minw, now[i].minh, now[i].maxw, now[i].maxh,
+                              now[i].sw, now[i].sh, &l, &t, &wd, &ht);
                     if ((l != now[i].l || t != now[i].t || wd != now[i].wd || ht != now[i].ht) && is_window(now[i].w)) {
                         if (wd != now[i].wd || ht != now[i].ht) ChangeWindowBox(now[i].w, l, t, wd, ht);
                         else MoveWindow(now[i].w, l - now[i].l, t - now[i].t);
@@ -951,12 +1175,13 @@ static void watch(void)
     for (i = 0; i < n; i++) { seen[nseen].w = now[i].w; seen[nseen].l = now[i].l; seen[nseen].t = now[i].t; seen[nseen].wd = now[i].wd; seen[nseen].ht = now[i].ht; nseen++; }
     if (places_dirty && places_clock % 2 == 0) write_places(PLACES_ENV);
     if (places_dirty && places_clock % 10 == 0) { write_places(PLACES_ENV); write_places(PLACES_ENVARC); places_dirty = 0; }
+    ReleaseSemaphore(&places_sem);
 }
 
 /* ---- the commodity --------------------------------------------------------------------------- */
 
 static struct NewBroker nb = {
-    NB_VERSION, (STRPTR)"OpenWindows", (STRPTR)"OpenWindows 0.6.1", (STRPTR)"Snapping, edges, Amiga+Tab, wheel and window places",
+    NB_VERSION, (STRPTR)"OpenWindows", (STRPTR)"OpenWindows 0.7", (STRPTR)"Snapping, edges, Amiga+Tab, wheel and window places",
     NBU_UNIQUE | NBU_NOTIFY, 0, 0, NULL, 0
 };
 static CxObj *broker, *hot_fwd, *hot_back;
@@ -1013,8 +1238,10 @@ int main(void)
     port->mp_Node.ln_Name = (char *)"OpenWindows";    /* OpenPrefs Windows finds this task by it */
     port->mp_Node.ln_Pri = 0;
     AddPort(port);
+    InitSemaphore(&places_sem);
     read_prefs();
     read_places();
+    if (cfg.places) places_patch_on();
     cust = CxCustom(custom, 0);
     if (!cust) goto out;
     AttachCxObj(broker, cust);
@@ -1029,7 +1256,11 @@ int main(void)
                          (timer ? 1UL << tport->mp_SigBit : 0));
         CxMsg *m;
         if (got & SIGBREAKF_CTRL_C) quit = 1;
-        if (got & SIGBREAKF_CTRL_F) { read_prefs(); hotkeys(port); }
+        if (got & SIGBREAKF_CTRL_F) {
+            read_prefs(); hotkeys(port);
+            if (cfg.places) places_patch_on();
+            else (void)places_patch_off();       /* patched over: it stays, passing through */
+        }
         if (got & sig_wheel) wheel();
         if (got & sig_grab) resize();
         if (got & sig_button) { clicks(); buttons(); }
@@ -1043,9 +1274,22 @@ int main(void)
                 case CXCMD_DISABLE: ActivateCxObj(broker, 0); on = 0; break;
                 case CXCMD_ENABLE: ActivateCxObj(broker, 1); on = 1; break;
                 case CXCMD_KILL: quit = 1; break;
-                case CXCMD_UNIQUE: read_prefs(); hotkeys(port); break;   /* started again: read the settings again, stay */
+                case CXCMD_UNIQUE:                    /* started again: read the settings again, stay */
+                    read_prefs(); hotkeys(port);
+                    if (cfg.places) places_patch_on();
+                    else (void)places_patch_off();
+                    break;
                 }
             }
+        }
+        if (quit && !places_patch_off()) {
+            /* Another program patched OpenWindowTagList or OpenWindow after us: our
+               code must stay. Everything passes through it; the rest of OpenWindows stops. */
+            quit = 0;
+            on = 0;
+            ActivateCxObj(broker, 0);
+            PutStr((STRPTR)"OpenWindows: another program has patched the same Intuition calls; "
+                           "OpenWindows stays loaded, passing every window through\n");
         }
         if (timer && CheckIO((struct IORequest *)tr)) {
             WaitIO((struct IORequest *)tr);
