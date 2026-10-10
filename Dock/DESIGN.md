@@ -8,6 +8,31 @@ over the docks people already have. MIT, Copyright (c) 2026 Dalsin Limited.
 
 ![OpenDock 0.3, the dark look](docs/screenshot-dark.png)
 
+## 0.6 (10 October 2026): the settings do what they say
+
+The user: "most of the dock's settings do nothing", and Glass, Solid and
+Clear "change nothing on screen". Tested in a lab (a copy of Instance-32,
+the Dock editor's `USE` with a settings file each time): the running dock
+does re-read its settings when the editor signals it (Ctrl-F, `load()`,
+then the window is closed and opened again, the icons made again, the shelf
+drawn from a fresh copy of what is behind it): place, Items, labels, borders
+and the shelf's colour changed at once. What did nothing was the settings
+themselves:
+
+- **Size** only set a *minimum* cell, and a cell grew to its largest icon, so
+  with the 64-pixel icons Small, Medium and Large drew the same dock. It is
+  now the icons' size, 32, 48 or 64 pixels (`compute_fit()`); a larger icon
+  shrinks to it, never grows. A new dock starts at Large, which is how the
+  dock has always looked; an existing file that says `size medium` now gets
+  48-pixel icons.
+- **Clear** and **Glass** were the same shelf (a tint over the desktop),
+  and Solid differed from them by a few grey levels. Now: Solid is opaque in
+  the look's colour; Glass is the desktop frosted (a box of `big / 10`
+  pixels, 6 at 64), tinted by the opacity, with a faint sheen on its upper
+  half and the edge; Clear is no shelf at all, only the icons on the desktop,
+  with the running dot and names in a colour that stands out from it. The
+  editor's slider is only for Glass; Solid and Clear grey it.
+
 ## 0.4 (8 October 2026): the look approved on the canvas
 
 The dock of the OpenLook mock-ups ("OpenLook default theme candidates"),
@@ -155,11 +180,11 @@ Each line is `key value`, and a `;` starts a comment. Unknown lines are
 skipped. Save writes `ENVARC:` too.
 
     place bottom|top|left|right
-    size small|medium|large            ; 40, 56 or 72 pixel cells; a cell grows to its largest icon
+    size small|medium|large            ; the icons' size: 32, 48 or 64 pixels (the cell 8 more); a larger icon shrinks to it, never grows (0.6; large if not given)
     labels on|off                      ; names under the icons
     running on|off                     ; the running marks
-    background glass|see-through|solid ; the shelf (glass if not given)
-    opacity 35                         ; 0 (clear) to 100 (solid); 35 if not given (60 before 0.4), 100 with background solid
+    background glass|see-through|solid ; the shelf: glass, frosted and see-through by `opacity`; see-through, no shelf at all (0.6); solid, opaque (glass if not given)
+    opacity 35                         ; glass only: 0 to 100; 35 if not given (60 before 0.4); solid is 100, see-through 0
     names-on-hover on|off              ; the name above the icon under the pointer (on)
     hop on|off                         ; a started program's icon hops (on)
     magnify off                        ; kept for later; never with Lite

@@ -51,7 +51,7 @@
 #include "od_dock.h"
 #include "wbclose.h"
 
-const char version[] __attribute__((used)) = "$VER: OpenDock 0.5.1 (10.10.2026) OpenPrefs, Dalsin Limited";
+const char version[] __attribute__((used)) = "$VER: OpenDock 0.6 (10.10.2026) OpenPrefs, Dalsin Limited";
 
 #define PREFS_ENV "ENV:OpenDock/Dock"
 #define PREFS_ENVARC "ENVARC:OpenDock/Dock"
@@ -71,6 +71,8 @@ static int wb_down;                                /* Workbench is shutting down
 /* An icon at an item size under 100%, both looks ([0] as it is, [1] pressed). */
 typedef struct { int w, h; ULONG *argb[2]; UWORD *pen[2]; } small_icon;
 static small_icon small[OD_MAX];
+static int fit = 100;                              /* 0.6: per cent the icons shrink to fit the size's cell (Small 40, Medium 56, Large 72 pixels, 8 of them room) */
+static int eff_scale = 100;                        /* the icons' size on the dock: the Items setting times fit */
 static void free_small(int i);
 
 /* ---- files -------------------------------------------------------------------------------- */
@@ -234,9 +236,9 @@ static void make_small(int i)
     ULONG *black = NULL, *white = NULL;
     int iw, ih, w, h, depth, card = truecolour();
     free_small(i);
-    if (!icons[i] || dock.scale >= 100 || !GetIconRectangleA(&scr->RastPort, icons[i], NULL, &r, NULL)) return;
+    if (!icons[i] || eff_scale >= 100 || !GetIconRectangleA(&scr->RastPort, icons[i], NULL, &r, NULL)) return;
     iw = r.MaxX - r.MinX + 1; ih = r.MaxY - r.MinY + 1;
-    w = od_scaled(iw, dock.scale); h = od_scaled(ih, dock.scale);
+    w = od_scaled(iw, eff_scale); h = od_scaled(ih, eff_scale);
     depth = GetBitMapAttr(scr->RastPort.BitMap, BMA_DEPTH);
     if (!(bm = AllocBitMap(iw, ih, depth, BMF_CLEAR, scr->RastPort.BitMap))) return;
     InitRastPort(&trp);
@@ -469,6 +471,24 @@ static struct Window *bubble;
 static int bubble_for = -1;
 static void bubble_off(void);
 
+/* 0.6: Size is the icons' size, as its label says: Small 32, Medium 48, Large 64 pixels (the cell is 8 more),
+ * an icon larger than that shrinks to it, never grows. Before, a cell grew to its largest icon, so on 64-pixel
+ * icons Small, Medium and Large looked the same. The Items setting shrinks them further. */
+static void compute_fit(void)
+{
+    struct Rectangle r;
+    int largest = 0, room = od_cell(dock.size) - 8;
+    for (int i = 0; i < dock.n; i++)
+        if (icons[i] && GetIconRectangleA(&scr->RastPort, icons[i], NULL, &r, NULL)) {
+            int w = r.MaxX - r.MinX + 1, h = r.MaxY - r.MinY + 1, m = w > h ? w : h;
+            if (m > largest) largest = m;
+        }
+    fit = largest > room ? room * 100 / largest : 100;
+    if (fit < 10) fit = 10;
+    eff_scale = dock.scale * fit / 100;
+    if (eff_scale < 1) eff_scale = 1;
+}
+
 static int item_size(int i) { return dock.b[i].kind == OD_SEPARATOR ? sepw : (standing ? cellh : cellw); }
 
 /* The button under a point in the window, or -1. */
@@ -491,10 +511,10 @@ static void layout(int *w, int *h)
     int label = dock.labels ? scr->RastPort.TxHeight + 2 : 0, thick, most = 0, margin, rows, trim, below;
     big = od_cell(dock.size);
     standing = dock.place == OD_LEFT || dock.place == OD_RIGHT;
-    /* a cell fits the largest icon */
+    /* a cell fits the largest icon (0.6: the icons were shrunk by fit to fit the size's cell first) */
     for (int i = 0; i < dock.n; i++)
         if (icons[i] && GetIconRectangleA(&scr->RastPort, icons[i], NULL, &r, NULL)) {
-            int iw = r.MaxX - r.MinX + 1 + 8, ih = r.MaxY - r.MinY + 1 + 8, a = standing ? iw : ih;
+            int iw = od_scaled(r.MaxX - r.MinX + 1, fit) + 8, ih = od_scaled(r.MaxY - r.MinY + 1, fit) + 8, a = standing ? iw : ih;
             if (iw > big) big = iw;
             if (ih > big) big = ih;
             if (a > most) most = a;                /* the largest across the shelf, with its 8 */
@@ -647,11 +667,16 @@ static void choose_colours(void)
     else if (mode == 0) tint = luma(bg_c) >= 150 ? mix(bg_c, white, 160) : (colour){ 236, 236, 240 };
     else tint = (colour){ 150, 150, 154 };
     dark = luma(tint) < 128;
-    /* a slightly lighter edge; a group's line a step from the tint; the dot in the text's colour where it shows */
+    /* a slightly lighter edge; a group's line a step from the tint; the dot in the text's colour where it shows
+     * (0.6, Clear: it shows on the desktop, so the screen's background is what it must stand out from) */
     rim = mix(tint, white, dark ? 72 : 150);
     sep_c = dark ? mix(tint, white, 48) : mix(tint, black, 64);
-    dot_c = (luma(text) > luma(tint) ? luma(text) - luma(tint) : luma(tint) - luma(text)) >= 100 ? text :
-            dark ? (colour){ 236, 236, 236 } : (colour){ 28, 28, 30 };
+    {
+        colour under = dock.background == OD_BG_CLEAR ? bg_c : tint;
+        int under_dark = luma(under) < 128;
+        dot_c = (luma(text) > luma(under) ? luma(text) - luma(under) : luma(under) - luma(text)) >= 100 ? text :
+                under_dark ? (colour){ 236, 236, 236 } : (colour){ 28, 28, 30 };
+    }
     free_pens();
     card = truecolour();
     dot_pen = best_pen(dot_c);
@@ -699,7 +724,12 @@ static void cover(int x, int y, int w, int h, int *in, int *on_rim)
     *on_rim = x == 0 || y == 0 || x == w - 1 || y == h - 1 ? 255 : 0;
 }
 
-static int opacity(void) { return dock.background == OD_BG_SOLID ? 100 : dock.opacity; }
+/* The shelf's three looks (0.6: Clear and Glass looked alike, Solid hardly differed from Glass):
+ *   Solid  an opaque shelf in the look's colour
+ *   Glass  see-through by the opacity setting, the desktop behind it frosted, an edge and a faint sheen
+ *   Clear  no shelf at all: the icons on the desktop, the dot and the names with them */
+static int opacity(void) { return dock.background == OD_BG_SOLID ? 100 : dock.background == OD_BG_CLEAR ? 0 : dock.opacity; }
+static int bodyless(void) { return dock.background == OD_BG_CLEAR; }
 
 /* Calls fn for each separator with where its line goes. */
 static void each_separator(int W, int H, void (*fn)(void *, int, int, int, int), void *ctx)
@@ -790,12 +820,17 @@ static int make_shelf_card(struct RastPort *rp, int W, int H)
         InitRastPort(&brp2);
         brp2.BitMap = behind;
         ReadPixelArray(px, 0, 0, W * 4, &brp2, 0, 0, W, H, RECTFMT_ARGB);
-        if (dock.background == OD_BG_GLASS && a < 255) frost(px, W, x0, y0, x1, y1, big / 24 < 2 ? 2 : big / 24);   /* 0.4: a lighter frost */
+        if (dock.background == OD_BG_GLASS && a < 255) frost(px, W, x0, y0, x1, y1, big / 10 < 3 ? 3 : big / 10);   /* 0.6: frosted so that it shows on a smooth desktop (0.4's was big / 24) */
     } else {
         /* nothing seen through: the screen's background */
         ULONG c = 0xff000000UL | (ULONG)bg_c.r << 16 | (ULONG)bg_c.g << 8 | (ULONG)bg_c.b;
         for (int n = 0; n < W * H; n++) px[n] = c;
         a = 255;
+    }
+    if (bodyless()) {                              /* Clear: what is behind, as it is, and nothing else */
+        WritePixelArray(px, 0, 0, W * 4, rp, 0, 0, W, H, RECTFMT_ARGB);
+        FreeVec(px);
+        return 1;
     }
     for (int y = 0; y < sh; y++)
         for (int x = 0; x < sw; x++) {
@@ -804,6 +839,8 @@ static int make_shelf_card(struct RastPort *rp, int W, int H)
             cover(x, y, sw, sh, &in, &on_rim);
             if (!in) continue;
             if (a) *p = blend(*p, tint, a * in / 255);
+            /* glass: a faint sheen on the upper half, lighter at the top */
+            if (dock.background == OD_BG_GLASS && y < sh / 2) *p = blend(*p, white, (sh / 2 - y) * 40 / (sh / 2) * in / 255);
             /* the edge: a little lighter than the shelf as it shows */
             if (dock.border && on_rim) *p = blend(*p, white, ra * on_rim / 255);
         }
@@ -858,6 +895,7 @@ static void make_shelf_pens(struct RastPort *rp, int W, int H)
         }
         SetAfPt(rp, NULL, 0);
     }
+    if (bodyless()) return;                        /* Clear: the desktop behind it, and nothing else */
     if (dock.border && rim_pen >= 0) {
         /* the edge: the straight lines, and the corners' outermost pixels inside */
         SetAPen(rp, rim_pen);
@@ -1212,6 +1250,7 @@ static int open_dock(struct Menu *menus)
      * freed and fetched again while the same screen was up (0.5) */
     if (!icons_ok) {
         load_icons();
+        compute_fit();
         for (int i = 0; i < dock.n; i++) make_small(i);
         icons_ok = 1;
     }
@@ -1249,7 +1288,7 @@ static int open_dock(struct Menu *menus)
     }
     win = OpenWindowTags(NULL, WA_PubScreen, (ULONG)scr, WA_Left, x, WA_Top, y, WA_Width, w, WA_Height, h,
                          WA_Borderless, TRUE, WA_SmartRefresh, TRUE, WA_NewLookMenus, TRUE,
-                         WA_ScreenTitle, (ULONG)"OpenDock 0.5.1",
+                         WA_ScreenTitle, (ULONG)"OpenDock 0.6",
                          WA_IDCMP, IDCMP_MOUSEBUTTONS | IDCMP_MENUPICK | IDCMP_REFRESHWINDOW | IDCMP_INACTIVEWINDOW |
                                    IDCMP_ACTIVEWINDOW, TAG_DONE);
     if (!win) { free_bitmaps(); return 0; }
