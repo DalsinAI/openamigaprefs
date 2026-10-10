@@ -33,6 +33,8 @@
  * pointer, shows their help under them and tells the program of a click.
  * Tata is the first.
  *
+ * 0.6.6 (10 October 2026): the editor the cog starts opens at the screen's top right, 20 pixels in (with
+ *   OpenWindows 0.8.1); Network (OpenSocketControl) in the cog's list.
  * 0.6.5 (10 October 2026): the cog's list has Date and time (OpenDateTime)
  *   and Printers (OpenPrint's Printers and Queue), each when it is there.
  * 0.6.4 (10 October 2026): a double-click on the date and time opens
@@ -85,8 +87,9 @@
 #include "barpaint.h"
 #include "wbclose.h"
 #include "popuptheme.h"
+#include "cogplace.h"
 
-const char version[] __attribute__((used)) = "$VER: OpenTitle 0.6.5 (10.10.2026) OpenPrefs, Dalsin Limited";
+const char version[] __attribute__((used)) = "$VER: OpenTitle 0.6.6 (10.10.2026) OpenPrefs, Dalsin Limited";
 
 struct IntuitionBase *IntuitionBase;
 struct GfxBase *GfxBase;
@@ -747,6 +750,7 @@ static const struct { const char *label, *path, *needs; } cog_items[] = {
     { "Sound",        "SYS:Prefs/Sound",        "SYS:C/OpenSpeaker" },    /* OS 3.2's own until OpenUp's Sound replaces it */
     { "Date and time", "SYS:Prefs/OpenDateTime", NULL },                 /* 0.6.5: OpenDateTime (date, time, zone, country, language) */
     { "Printers",     "SYS:Utilities/OpenPrint/Printers and Queue", NULL },  /* 0.6.5: OpenPrint's printers, the user, 10 Oct 2026 */
+    { "Network",      "SYS:Tools/Commodities/OpenSocketControl", NULL },     /* 0.6.6: OpenSocket's settings and status */
     { "OpenTypes",    "SYS:Prefs/OpenTypes",    NULL },
     { "OpenUp Setup", "SYS:Prefs/OpenUp-Setup", NULL },
     { "Tata",         "SYS:Prefs/Tata",         NULL },                   /* 0.6: Tata's window, when Tata is installed */
@@ -943,10 +947,27 @@ static void menu_open(void)
 }
 
 /* starts an editor as a double-click on its icon does (its icon's stack and tool types count) */
+/* 0.6.6: the window the editor opens goes to the screen's top right, by the cog (OpenWindows 0.8.1, cogplace.h) */
+static void cog_arm(void)
+{
+    struct cogplace *cp;
+    ULONG secs, micros;
+    CurrentTime(&secs, &micros);
+    Forbid();
+    if ((cp = (struct cogplace *)FindSemaphore((STRPTR)COGPLACE_NAME))) {
+        cp->until = secs + COGPLACE_SECS;
+        cp->from = FindTask(NULL);
+        cp->right = cp->top = COGPLACE_GAP;
+        cp->armed = 1;
+    }
+    Permit();
+}
+
 static void cog_start(const char *path)
 {
     BPTR in, out;
     char cmd[80];
+    cog_arm();
     if (!WorkbenchBase) WorkbenchBase = OpenLibrary((STRPTR)"workbench.library", 44);
     if (WorkbenchBase && OpenWorkbenchObjectA((STRPTR)path, NULL)) return;
     if (!strcmp(path, "SYS:Prefs")) return;             /* a drawer needs Workbench */

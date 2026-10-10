@@ -66,8 +66,9 @@
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include "../../Common/cogplace.h"
 
-static const char version[] __attribute__((used)) = "$VER: OpenWindows 0.8 (10.10.2026) MIT, Copyright (c) 2026 Dalsin Limited";
+static const char version[] __attribute__((used)) = "$VER: OpenWindows 0.8.1 (10.10.2026) MIT, Copyright (c) 2026 Dalsin Limited";
 
 #define PREFS_ENV "ENV:OpenPrefs/Windows"
 #define PLACES_ENV "ENV:OpenPrefs/WindowPlaces"
@@ -147,6 +148,7 @@ static void read_prefs(void)
 /* ---- the input stream (input.device's task: no waiting, no DOS) ------------- */
 
 static struct Task *me;
+static struct cogplace cog;                      /* 0.8.1: the cog's request, public by name (cogplace.h) */
 static ULONG sig_button, sig_wheel;
 static volatile int ev_down, ev_up;             /* left button down / up seen */
 static volatile WORD down_x, down_y, up_x, up_y; /* the pointer, screen relative, at that moment */
@@ -1015,6 +1017,46 @@ static struct Window *__attribute__((used)) ow_open_window(struct NewWindow *nw,
     struct NewWindow *pass_nw = nw;
     struct Window *win;
     patch_in++;
+    /* 0.8.1: a window the cog asked for: at the screen's top right, COGPLACE_GAP from its top and right */
+    if (!patch_pass && FindTask(NULL) != me && cog.armed) {
+        ULONG flags = 0, secs, micros;
+        int take = 0;
+        if (nw && (nw->Flags & WFLG_NW_EXTENDED)) ext = ((struct ExtNewWindow *)nw)->Extension;
+        flags = tag_or(tags, ext, WA_Flags, nw ? nw->Flags : 0);
+        if (tag_or(tags, ext, WA_DragBar, 0)) flags |= WFLG_DRAGBAR;
+        if (tag_or(tags, ext, WA_Backdrop, 0)) flags |= WFLG_BACKDROP;
+        CurrentTime(&secs, &micros);
+        Forbid();
+        if (cog.armed && FindTask(NULL) != cog.from && (flags & WFLG_DRAGBAR) && !(flags & WFLG_BACKDROP)) {
+            if (secs <= cog.until) take = 1;
+            cog.armed = 0;
+        }
+        Permit();
+        if (take) {
+            WORD sw, sh, wd, n = 0;
+            struct Screen *ps = (struct Screen *)tag_or(tags, ext, WA_CustomScreen, 0);
+            opening_screen(nw, tags, ext, &sw, &sh);
+            if (!ps) ps = IntuitionBase->FirstScreen;
+            wd = (WORD)tag_or(tags, ext, WA_Width, nw ? (ULONG)(LONG)nw->Width : 0);
+            if (tag_or(tags, ext, WA_InnerWidth, 0))
+                wd = (WORD)tag_or(tags, ext, WA_InnerWidth, 0) + (ps ? ps->WBorLeft + ps->WBorRight : 8) +
+                     ((flags & WFLG_SIZEGADGET) || tag_or(tags, ext, WA_SizeGadget, 0) ? 14 : 0);
+            if (sw > 0 && wd > 0) {
+                WORD l = sw - wd - COGPLACE_GAP, t = COGPLACE_GAP;
+                if (l < 0) l = 0;
+                more[n].ti_Tag = WA_Left; more[n++].ti_Data = (ULONG)(LONG)l;
+                more[n].ti_Tag = WA_Top; more[n++].ti_Data = (ULONG)(LONG)t;
+                more[n].ti_Tag = use ? TAG_MORE : TAG_DONE; more[n].ti_Data = (ULONG)use;
+                use = more;
+                if (nw) {
+                    memcpy(&copy, nw, (nw->Flags & WFLG_NW_EXTENDED) ? sizeof(struct ExtNewWindow) : sizeof(struct NewWindow));
+                    copy.LeftEdge = l; copy.TopEdge = t;
+                    pass_nw = (struct NewWindow *)&copy;
+                }
+                goto open;
+            }
+        }
+    }
     if (!patch_pass && on && cfg.places && FindTask(NULL) != me) {
         ULONG flags, idcmp;
         const char *title;
@@ -1065,6 +1107,7 @@ static struct Window *__attribute__((used)) ow_open_window(struct NewWindow *nw,
             }
         }
     }
+open:
     {
         /* the registers are set here, after every other call */
         register struct Window *res __asm("d0");
@@ -1309,7 +1352,10 @@ int main(void)
     InitSemaphore(&places_sem);
     read_prefs();
     read_places();
-    if (cfg.places) places_patch_on();
+    places_patch_on();                                 /* 0.8.1: always: the cog's placing goes through it too */
+    cog.sem.ss_Link.ln_Name = (char *)COGPLACE_NAME;
+    cog.sem.ss_Link.ln_Pri = 0;
+    AddSemaphore(&cog.sem);
     cust = CxCustom(custom, 0);
     if (!cust) goto out;
     AttachCxObj(broker, cust);
@@ -1326,8 +1372,7 @@ int main(void)
         if (got & SIGBREAKF_CTRL_C) quit = 1;
         if (got & SIGBREAKF_CTRL_F) {
             read_prefs(); hotkeys(port);
-            if (cfg.places) places_patch_on();
-            else (void)places_patch_off();       /* patched over: it stays, passing through */
+            places_patch_on();                   /* 0.8.1: always on: the kept places follow cfg.places inside it */
         }
         if (got & sig_wheel) wheel();
         if (got & sig_grab) resize();
@@ -1344,8 +1389,7 @@ int main(void)
                 case CXCMD_KILL: quit = 1; break;
                 case CXCMD_UNIQUE:                    /* started again: read the settings again, stay */
                     read_prefs(); hotkeys(port);
-                    if (cfg.places) places_patch_on();
-                    else (void)places_patch_off();
+                    places_patch_on();               /* 0.8.1: always on */
                     break;
                 }
             }
@@ -1369,6 +1413,7 @@ int main(void)
     }
     if (places_dirty) { write_places(PLACES_ENV); write_places(PLACES_ENVARC); }
 out:
+    if (cog.sem.ss_Link.ln_Name) { Forbid(); cog.armed = 0; RemSemaphore(&cog.sem); Permit(); }
     if (broker) ActivateCxObj(broker, 0);           /* no new presses on an edge */
     grab_on = 0;
     resize_end();
