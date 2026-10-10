@@ -31,7 +31,7 @@
 #include <stdlib.h>
 #include "../../Common/looktabs.h"
 
-static const char version[] __attribute__((used)) = "$VER: Windows 0.6.1 (10.10.2026) OpenPrefs, MIT, Copyright (c) 2026 Dalsin Limited";
+static const char version[] __attribute__((used)) = "$VER: Windows 0.6.2 (10.10.2026) OpenPrefs, MIT, Copyright (c) 2026 Dalsin Limited";
 
 #define PREFS_ENV "ENV:OpenPrefs/Windows"
 #define PREFS_ENVARC "ENVARC:OpenPrefs/Windows"
@@ -341,6 +341,7 @@ static int gui_once(void)
     if (!win) { rc = -1; goto out; }
     if ((menu = CreateMenus(menus, TAG_DONE)) && LayoutMenus(menu, vi, GTMN_NewLookMenus, TRUE, TAG_DONE)) SetMenuStrip(win, menu);
     GT_RefreshWindow(win, NULL);
+    lt_draw(win, gad[G_STATUS] ? gad[G_STATUS]->TopEdge - 6 : -1);
     show();
 
     while (!quit) {
@@ -365,7 +366,7 @@ static int gui_once(void)
                     code = it->NextSelect;
                 }
             }
-            else if (cls == IDCMP_REFRESHWINDOW) { GT_BeginRefresh(win); GT_EndRefresh(win, TRUE); }
+            else if (cls == IDCMP_REFRESHWINDOW) { GT_BeginRefresh(win); lt_draw(win, gad[G_STATUS] ? gad[G_STATUS]->TopEdge - 6 : -1); GT_EndRefresh(win, TRUE); }
             else if (cls == IDCMP_GADGETUP) {
                 int sel = (gg->Flags & GFLG_SELECTED) != 0;
                 LONG num = ((struct StringInfo *)gg->SpecialInfo) ? ((struct StringInfo *)gg->SpecialInfo)->LongInt : 0;
