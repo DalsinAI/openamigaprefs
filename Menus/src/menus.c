@@ -50,8 +50,9 @@
 
 #include "om_prefs.h"
 #include "ogt_theme.h"
+#include "../../Common/looktabs.h"
 
-const char version[] __attribute__((used)) = "$VER: Menus 0.1 (6.10.2026) OpenPrefs, Dalsin Limited";
+const char version[] __attribute__((used)) = "$VER: Menus 0.2 (10.10.2026) OpenPrefs, Dalsin Limited";
 
 #define PREFS_ENV "ENV:OpenMenus/Menus"
 #define PREFS_ENVARC "ENVARC:OpenMenus/Menus"
@@ -511,6 +512,8 @@ static int make_gadgets(struct Screen *scr, APTR vi, struct Gadget **glist, int 
     (ng.ng_LeftEdge = (x), ng.ng_TopEdge = (y), ng.ng_Width = (w), ng.ng_Height = (h), ng.ng_GadgetText = (STRPTR)(text), \
      ng.ng_Flags = (flags), ng.ng_GadgetID = (id), g = gad[id] = CreateGadget(kind, g, &ng, __VA_ARGS__, TAG_DONE))
 
+    g = lt_make(g, &ng, bl + 8, top, W - 16, lh, LT_MENUS);
+    top += lh + 8;                                   /* below the tabs (looktabs.h) */
     /* the right column: the preview, in both views */
     px = rx0; py = top; pw = rx + rg - rx0; ph = 6 * (fh + 3) + (gp < 4 ? 8 : 22);
     row = row2 = top;
@@ -637,6 +640,7 @@ static int gui(void)
     int timer = 0;
     if (!vi) { if (scr) UnlockPubScreen(NULL, scr); return RETURN_FAIL; }
     wy = scr->BarHeight + 10;
+    lt_place(&wx, &wy);
     strcpy(status_text, "Choose how menus open and look. Test shows it for 15 seconds.");
     if ((tport = CreateMsgPort()) && (tr = (struct timerequest *)CreateIORequest(tport, sizeof *tr)))
         timer = !OpenDevice((STRPTR)TIMERNAME, UNIT_VBLANK, (struct IORequest *)tr, 0);
@@ -655,7 +659,7 @@ static int gui(void)
         if (wy + tall > scr->Height) wy = scr->Height - tall > 0 ? scr->Height - tall : 0;
         if (wx + wide > scr->Width) wx = scr->Width - wide > 0 ? scr->Width - wide : 0;
     }
-    win = OpenWindowTags(NULL, WA_Title, (ULONG)"Menus", WA_ScreenTitle, (ULONG)"OpenPrefs Menus 0.1", WA_PubScreen, (ULONG)scr,
+    win = OpenWindowTags(NULL, WA_Title, (ULONG)"OpenLook", WA_ScreenTitle, (ULONG)"OpenPrefs Menus 0.1", WA_PubScreen, (ULONG)scr,
                          WA_Left, wx, WA_Top, wy, WA_InnerWidth, W, WA_InnerHeight, inner,
                          WA_Gadgets, (ULONG)glist, WA_DragBar, TRUE, WA_DepthGadget, TRUE, WA_CloseGadget, TRUE, WA_Activate, TRUE,
                          WA_SmartRefresh, TRUE, WA_NewLookMenus, TRUE,
@@ -715,6 +719,10 @@ static int gui(void)
                 }
             }
             if (id < 0) continue;
+            if (LT_IS(id)) {                                  /* another tab: keep, as Use, and hand over */
+                if (id != LT_ID + LT_MENUS && put_in_place(0)) { test_until = 0; lt_go(win, id - LT_ID); quit = 1; }
+                continue;
+            }
             /* settings kept for a later engine: OpenMenus 0.3 doesn't use them yet (DESIGN.md) */
             if (id == G_PDDELAY || id == G_PUDELAY || id == G_LAST ||
                 id == G_IMAGE || id == G_CHOOSE || (id == G_BG && code != OM_BG_SOLID))
