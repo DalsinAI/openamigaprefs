@@ -187,10 +187,11 @@ static int list_dir(const char *dir, const char *ext, char *names, int width)
     if ((fib = AllocDosObject(DOS_FIB, NULL))) {
         if (Examine(lock, fib)) {
             while (n < MAX_NAMES && ExNext(lock, fib)) {
-                int l = strlen(fib->fib_FileName);
+                const char *fn = (const char *)fib->fib_FileName;
+                int l = strlen(fn);
                 if (fib->fib_DirEntryType > 0 || l <= el || l - el >= width) continue;
-                if (same_name(fib->fib_FileName + l - el, ext)) continue;
-                memcpy(names + n * width, fib->fib_FileName, l - el);
+                if (same_name(fn + l - el, ext)) continue;
+                memcpy(names + n * width, fn, l - el);
                 names[n * width + l - el] = 0;
                 n++;
             }
