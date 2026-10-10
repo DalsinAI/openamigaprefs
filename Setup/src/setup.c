@@ -43,7 +43,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 
-const char version[] __attribute__((used)) = "$VER: OpenUp-Setup 0.1.1 (10.10.2026) OpenPrefs, Dalsin Limited";
+const char version[] __attribute__((used)) = "$VER: OpenUp-Setup 0.1.2 (10.10.2026) OpenPrefs, Dalsin Limited";
 
 #define USER_STARTUP "S:User-Startup"
 #define BLOCK_BEGIN ";BEGIN OpenUp"
@@ -52,7 +52,7 @@ const char version[] __attribute__((used)) = "$VER: OpenUp-Setup 0.1.1 (10.10.20
 #define OFF_LIST "ENVARC:OpenAmiga/Startup.off"
 #define DONE_FILE "ENVARC:OpenAmiga/Setup.done"
 #define PROFILE_DIR "SYS:Prefs/Presets/OpenPrefs"
-#define LOOK_TOOL "SYS:Prefs/Look"
+#define LOOK_TOOL "SYS:Prefs/OpenLook"           /* 0.1.2: the one-window editor takes FROM ... SAVE as Look did */
 #define LOOK_TEMP "T:OpenUp-Setup.profile"
 #define VIEW_ENV "ENV:OpenAmiga/PrefsView"
 #define VIEW_ENVARC "ENVARC:OpenAmiga/PrefsView"
@@ -109,10 +109,10 @@ static const char *found(const char *path)
     return exists(classic) ? classic : path;
 }
 
-static void run_tool(const char *path)
+static void run_tool(const char *path, const char *args)
 {
     char cmd[160];
-    snprintf(cmd, sizeof cmd, "Run >NIL: <NIL: \"%s\"", found(path));
+    snprintf(cmd, sizeof cmd, "Run >NIL: <NIL: \"%s\" %s", found(path), args ? args : "");
     SystemTags((STRPTR)cmd, TAG_DONE);
 }
 
@@ -373,11 +373,11 @@ static const char *const page_titles[P_COUNT] = {
     "Welcome to the Open family", "Your desktop", "Screen, printer and network", "What starts with the machine", "All set"
 };
 
-static const struct { int id; const char *label, *path; } editors[] = {
-    { G_ED_LOOK, "Look...", "SYS:Prefs/Look" },
-    { G_ED_MENUS, "Menus...", "SYS:Prefs/Menus" },
-    { G_ED_WINDOWS, "Windows...", "SYS:Prefs/Windows" },
-    { G_ED_DOCK, "Dock...", "SYS:Prefs/Dock" },
+static const struct { int id; const char *label, *path, *args; } editors[] = {     /* 0.1.2: OpenLook's pages; every editor of ours is Open... */
+    { G_ED_LOOK, "Look...", "SYS:Prefs/OpenLook", "LOOK" },
+    { G_ED_MENUS, "Menus...", "SYS:Prefs/OpenLook", "MENUS" },
+    { G_ED_WINDOWS, "Windows...", "SYS:Prefs/OpenLook", "WINDOWS" },
+    { G_ED_DOCK, "Dock...", "SYS:Prefs/OpenDock", NULL },
     { G_ED_TYPES, "File types...", "SYS:Prefs/OpenTypes" },
     { G_SCREENMODE, "Screen mode...", "SYS:Prefs/ScreenMode" },
     { G_PRINTER, "Printer...", "SYS:Prefs/Printer" },
@@ -669,7 +669,7 @@ static int gui(void)
                 break;
             default:
                 for (i = 0; i < (int)(sizeof editors / sizeof editors[0]); i++)
-                    if (editors[i].id == id) run_tool(editors[i].path);
+                    if (editors[i].id == id) run_tool(editors[i].path, editors[i].args);
             }
         }
     }

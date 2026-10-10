@@ -154,7 +154,7 @@ void od_starter(od_dock *d)
     add_program(d, NULL, OD_WB, "Clock", "SYS:Utilities/Clock");
     add_program(d, NULL, OD_WB, "Calculator", "SYS:Tools/Calculator");
     add_program(d, NULL, OD_WB, "Prefs", "SYS:Prefs");
-    add_program(d, NULL, OD_WB, "Look", "SYS:Prefs/Look");
+    add_program(d, NULL, OD_WB, "Look", "SYS:Prefs/OpenLook");   /* the one-window editor (0.6.3) */
     add_separator(d);                                        /* 0.4: the trashcan stands apart, as on the Mac */
     add_program(d, NULL, OD_WB, "Trashcan", "SYS:Trashcan");
 }

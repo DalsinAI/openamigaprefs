@@ -68,7 +68,7 @@
 #include "om_kbd.h"
 #include "ogt_theme.h"
 
-static const char version[] __attribute__((used)) = "$VER: OpenMenus 0.4.2 (10.10.2026) MIT, Copyright (c) 2026 Dalsin Limited";
+static const char version[] __attribute__((used)) = "$VER: OpenMenus 0.4.3 (10.10.2026) MIT, Copyright (c) 2026 Dalsin Limited";
 
 #define PREFS_ENV "ENV:OpenMenus/Menus"
 #define TRAY_DIR "ENV:OpenMenus/Tray"     /* one file per tray program: "width order" (OpenSpeaker, the clock) */
@@ -1626,7 +1626,7 @@ static int rc_build(int hit)
             /* an OS editor that OpenUp's RECONCILE moved to SYS:Prefs/Classic is still offered from there */
             if (exists_file("SYS:Prefs/WBPattern")) ITEM("Backdrop picture...", A_RUN, "SYS:Prefs/WBPattern");
             else if (exists_file("SYS:Prefs/Classic/WBPattern")) ITEM("Backdrop picture...", A_RUN, "SYS:Prefs/Classic/WBPattern");
-            if (exists_file("SYS:Prefs/Look")) ITEM("Look...", A_RUN, "SYS:Prefs/Look");
+            if (exists_file("SYS:Prefs/OpenLook")) ITEM("Look...", A_RUN, "SYS:Prefs/OpenLook");
             if (exists_file("SYS:Prefs/ScreenMode")) ITEM("Screen mode...", A_RUN, "SYS:Prefs/ScreenMode");
             else if (exists_file("SYS:Prefs/Classic/ScreenMode")) ITEM("Screen mode...", A_RUN, "SYS:Prefs/Classic/ScreenMode");
             SEP();

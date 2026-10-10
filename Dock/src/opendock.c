@@ -51,11 +51,11 @@
 #include "od_dock.h"
 #include "wbclose.h"
 
-const char version[] __attribute__((used)) = "$VER: OpenDock 0.6.2 (10.10.2026) OpenPrefs, Dalsin Limited";
+const char version[] __attribute__((used)) = "$VER: OpenDock 0.6.3 (10.10.2026) OpenPrefs, Dalsin Limited";
 
 #define PREFS_ENV "ENV:OpenDock/Dock"
 #define PREFS_ENVARC "ENVARC:OpenDock/Dock"
-#define DOCK_PREFS "SYS:Prefs/Dock"
+#define DOCK_PREFS "SYS:Prefs/OpenDock"       /* 0.6.3: the editor is OpenDock in Prefs, as every editor of ours */
 #define PORT_NAME "OpenDock"
 
 struct Library *IconBase, *WorkbenchBase, *CyberGfxBase;

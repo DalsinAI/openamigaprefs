@@ -58,7 +58,7 @@
 #include "popuptheme.h"
 #include "barpaint.h"
 
-const char version[] __attribute__((used)) = "$VER: OpenSpeaker 0.1.1 (10.10.2026) OpenPrefs, Dalsin Limited";
+const char version[] __attribute__((used)) = "$VER: OpenSpeaker 0.1.2 (10.10.2026) OpenPrefs, Dalsin Limited";
 
 struct IntuitionBase *IntuitionBase;
 struct Library *CyberGfxBase;
@@ -70,7 +70,7 @@ struct Library *GadToolsBase, *LayersBase, *CxBase;
 #define TRAY_DIR  "ENV:OpenMenus/Tray"        /* the tray: a file per program on the menu bar's end, "width order" */
 #define TRAY_MINE "ENV:OpenMenus/Tray/Speaker"
 #define MY_ORDER  0                           /* lower is nearer the bar's end: OpenTitle's cog (-5) is rightmost, then the speaker, the clock (10) left of it */
-#define SOUND_PREFS "SYS:Prefs/Sound"
+#define SOUND_PREFS "SYS:Prefs/OpenSound"     /* 0.1.2: the editor is OpenSound in Prefs (the OS's Sound is in Classic) */
 #define NM_WHEEL_UP   0x7A                   /* the mouse wheel, as NewMouse and OS 3.2 send it */
 #define NM_WHEEL_DOWN 0x7B
 #define IECLASS_NEWMOUSE_ 0x16

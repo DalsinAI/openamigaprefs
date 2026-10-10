@@ -52,7 +52,7 @@
 #include "ogt_theme.h"
 #include "../../Common/looktabs.h"
 
-const char version[] __attribute__((used)) = "$VER: Menus 0.2.2 (10.10.2026) OpenPrefs, Dalsin Limited";
+const char version[] __attribute__((used)) = "$VER: Menus 0.2.3 (10.10.2026) OpenPrefs, Dalsin Limited";
 
 #define PREFS_ENV "ENV:OpenMenus/Menus"
 #define PREFS_ENVARC "ENVARC:OpenMenus/Menus"
@@ -63,7 +63,7 @@ const char version[] __attribute__((used)) = "$VER: Menus 0.2.2 (10.10.2026) Ope
 #define TEST_SECONDS 15
 #define VIEW_ENV "ENV:OpenAmiga/PrefsView"
 #define VIEW_ENVARC "ENVARC:OpenAmiga/PrefsView"
-#define LOOK_TOOL "SYS:Prefs/Look"
+#define LOOK_TOOL "SYS:Prefs/OpenLook"   /* the one-window editor (10 Oct 2026) */
 
 struct Library *AslBase;
 
@@ -769,7 +769,7 @@ static int gui(void)
                 strncpy(cur.image, (const char *)((struct StringInfo *)gg->SpecialInfo)->Buffer, sizeof cur.image - 1);
                 break;
             case G_CHOOSE: choose_image(); break;
-            case G_LOOK: SystemTags((STRPTR)"Run >NIL: <NIL: SYS:Prefs/Look", TAG_DONE); redraw = 0; break;
+            case G_LOOK: SystemTags((STRPTR)"Run >NIL: <NIL: SYS:Prefs/OpenLook", TAG_DONE); redraw = 0; break;
             case G_ENABLED: cur.enabled = (gg->Flags & GFLG_SELECTED) != 0; break;
             case G_BAR: cur.bar = code; break;
             case G_HIDE: cur.bar_autohide = (gg->Flags & GFLG_SELECTED) != 0; redraw = 0; break;

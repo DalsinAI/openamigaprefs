@@ -8,7 +8,7 @@
  *     time
  *   - the keyboard: the key repeat delay and rate, in milliseconds
  *   - the keymap, from DEVS:Keymaps
- *   - Gamepads... opens the Gamepads editor (SYS:Prefs/Gamepads), so pads live
+ *   - Gamepads... opens the Gamepads editor (SYS:Prefs/OpenGamepads), so pads live
  *     under Input (the user, 10 October 2026)
  *
  * Save writes ENV:Sys/input.prefs and ENVARC:; Use writes ENV: only (IPrefs
@@ -35,13 +35,13 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-static const char version[] __attribute__((used)) = "$VER: OpenInput 0.1 (10.10.2026) OpenPrefs, MIT, Copyright (c) 2026 Dalsin Limited";
+static const char version[] __attribute__((used)) = "$VER: OpenInput 0.1.1 (10.10.2026) OpenPrefs, MIT, Copyright (c) 2026 Dalsin Limited";
 
 struct Library *UtilityBase;
 
 #define INPUT_ENV "ENV:Sys/input.prefs"
 #define INPUT_ENVARC "ENVARC:Sys/input.prefs"
-#define GAMEPADS "SYS:Prefs/Gamepads"
+#define GAMEPADS "SYS:Prefs/OpenGamepads"      /* 0.1.1: no icon of its own; this editor's Gamepads... opens it */
 #define MAX_NAMES 64
 
 /* ---- input.prefs ------------------------------------------------------------- */
@@ -269,7 +269,7 @@ static void gamepads(void)
                                   SYS_UserShell, TRUE, NP_StackSize, 16384, TAG_DONE) == -1) {
         if (in) Close(in);
         if (out) Close(out);
-        status("Couldn't start SYS:Prefs/Gamepads.");
+        status("Couldn't start SYS:Prefs/OpenGamepads.");
     }
 }
 
