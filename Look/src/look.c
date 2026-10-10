@@ -51,7 +51,7 @@
 #include "ogt_theme.h"
 #include "../../Common/looktabs.h"
 
-const char version[] __attribute__((used)) = "$VER: Look 0.4 (10.10.2026) OpenPrefs, Dalsin Limited";
+const char version[] __attribute__((used)) = "$VER: Look 0.4.1 (10.10.2026) OpenPrefs, Dalsin Limited";
 
 #define PREFS_ENV "ENV:OpenGadTools/Look"
 #define PREFS_ENVARC "ENVARC:OpenGadTools/Look"
@@ -751,6 +751,7 @@ static int gui_once(void)
     if (!win) { rc = RETURN_FAIL; goto out; }
     if ((menu = CreateMenus(menus, TAG_DONE)) && LayoutMenus(menu, vi, GTMN_NewLookMenus, TRUE, TAG_DONE)) SetMenuStrip(win, menu);
     GT_RefreshWindow(win, NULL);
+    lt_draw(win, gad[G_STATUS] ? gad[G_STATUS]->TopEdge - 6 : -1);
     show(&cur);
     SET(G_LABELS, GTCY_Active, label_now);
     SET(G_CTF, GTCB_Checked, ctf_on);
@@ -800,7 +801,7 @@ static int gui_once(void)
                     mc = it->NextSelect;
                 }
             }
-            else if (cls == IDCMP_REFRESHWINDOW) { GT_BeginRefresh(win); GT_EndRefresh(win, TRUE); draw_preview(win, px, py, pw, ph, &cur); }
+            else if (cls == IDCMP_REFRESHWINDOW) { GT_BeginRefresh(win); lt_draw(win, gad[G_STATUS] ? gad[G_STATUS]->TopEdge - 6 : -1); GT_EndRefresh(win, TRUE); draw_preview(win, px, py, pw, ph, &cur); }
             else if (cls == IDCMP_GADGETUP || cls == IDCMP_GADGETDOWN) {
                 int redraw = 1;
                 switch (gg->GadgetID) {

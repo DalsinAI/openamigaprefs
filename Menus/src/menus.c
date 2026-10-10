@@ -52,7 +52,7 @@
 #include "ogt_theme.h"
 #include "../../Common/looktabs.h"
 
-const char version[] __attribute__((used)) = "$VER: Menus 0.2 (10.10.2026) OpenPrefs, Dalsin Limited";
+const char version[] __attribute__((used)) = "$VER: Menus 0.2.1 (10.10.2026) OpenPrefs, Dalsin Limited";
 
 #define PREFS_ENV "ENV:OpenMenus/Menus"
 #define PREFS_ENVARC "ENVARC:OpenMenus/Menus"
@@ -669,6 +669,7 @@ static int gui(void)
     if (!win) { rc = RETURN_FAIL; goto out; }
     SetMenuStrip(win, menus);
     GT_RefreshWindow(win, NULL);
+    lt_draw(win, gad[G_STATUS] ? gad[G_STATUS]->TopEdge - 6 : -1);
     show(&cur);
     opening_hint();
 
@@ -702,7 +703,7 @@ static int gui(void)
             int id = -1, redraw = 1;
             GT_ReplyIMsg(m);
             if (cls == IDCMP_CLOSEWINDOW) id = G_CANCEL;
-            else if (cls == IDCMP_REFRESHWINDOW) { GT_BeginRefresh(win); GT_EndRefresh(win, TRUE); draw_preview(win, px, py, pw, ph, &cur); }
+            else if (cls == IDCMP_REFRESHWINDOW) { GT_BeginRefresh(win); lt_draw(win, gad[G_STATUS] ? gad[G_STATUS]->TopEdge - 6 : -1); GT_EndRefresh(win, TRUE); draw_preview(win, px, py, pw, ph, &cur); }
             else if (cls == IDCMP_VANILLAKEY) id = handle_key(code);
             else if (cls == IDCMP_GADGETUP || cls == IDCMP_GADGETDOWN || cls == IDCMP_MOUSEMOVE) id = gg->GadgetID;
             else if (cls == IDCMP_MENUPICK) {
