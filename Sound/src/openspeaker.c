@@ -54,10 +54,12 @@
 #include "sp_core.h"
 #include "sp_amiga.h"
 #include "om_prefs.h"
+#include "popuptheme.h"
 
 const char version[] __attribute__((used)) = "$VER: OpenSpeaker 0.1 (6.10.2026) OpenPrefs, Dalsin Limited";
 
 struct IntuitionBase *IntuitionBase;
+struct Library *CyberGfxBase;
 struct GfxBase *GfxBase;
 struct Library *GadToolsBase, *LayersBase, *CxBase;
 
@@ -256,6 +258,7 @@ static void place(void)
 static void close_speaker(void)
 {
     hscr = NULL;
+    pt_free();
     if (spk) { CloseWindow(spk); spk = NULL; }
     if (dri) { FreeScreenDrawInfo(scr, dri); dri = NULL; }
     scr = NULL;
@@ -268,6 +271,7 @@ static int open_speaker(void)
     scr = s;
     if ((dri = GetScreenDrawInfo(s))) {
         bar_edge = read_bar_edge();
+        pt_load(s);
         place();
         spk = OpenWindowTags(NULL, WA_CustomScreen, (ULONG)s, WA_Left, sx, WA_Top, sy, WA_Width, sw, WA_Height, sh,
                              WA_Borderless, TRUE, WA_Activate, FALSE, WA_RMBTrap, TRUE, WA_SmartRefresh, TRUE,
@@ -317,10 +321,15 @@ static void pop_draw_frame(void)
 {
     struct RastPort *rp = pop->RPort;
     WORD w = pop->Width, h = pop->Height, fh = dri->dri_Font->tf_YSize;
-    SetAPen(rp, dri->dri_Pens[BACKGROUNDPEN]);
-    RectFill(rp, 1, 1, w - 2, h - 2);
-    DrawBevelBox(rp, 0, 0, w, h, GT_VisualInfo, (ULONG)vi, TAG_DONE);
-    SetAPen(rp, dri->dri_Pens[TEXTPEN]);
+    if (pt_ok) {
+        pt_panel(rp, w, h);                  /* the theme's menu colour and a slim frame, as OpenMenus' menus */
+        SetAPen(rp, pt_text_pen());
+    } else {
+        SetAPen(rp, dri->dri_Pens[BACKGROUNDPEN]);
+        RectFill(rp, 1, 1, w - 2, h - 2);
+        DrawBevelBox(rp, 0, 0, w, h, GT_VisualInfo, (ULONG)vi, TAG_DONE);
+        SetAPen(rp, dri->dri_Pens[TEXTPEN]);
+    }
     SetDrMd(rp, JAM1);
     Move(rp, 10, 6 + rp->TxBaseline);
     Text(rp, (STRPTR)"Sound", 5);
@@ -503,6 +512,7 @@ int main(void)
     GfxBase = (struct GfxBase *)OpenLibrary((STRPTR)"graphics.library", 39);
     GadToolsBase = OpenLibrary((STRPTR)"gadtools.library", 39);
     LayersBase = OpenLibrary((STRPTR)"layers.library", 39);
+    CyberGfxBase = OpenLibrary((STRPTR)"cybergraphics.library", 41);   /* the panel's exact colours */
     CxBase = OpenLibrary((STRPTR)"commodities.library", 39);
     if (!IntuitionBase || !GfxBase || !GadToolsBase || !LayersBase || !CxBase) goto out;
     me = FindTask(NULL);
@@ -598,6 +608,7 @@ out:
         DeleteMsgPort(port);
     }
     if (s1 >= 0) FreeSignal(s1);
+    if (CyberGfxBase) CloseLibrary(CyberGfxBase);
     if (CxBase) CloseLibrary(CxBase);
     if (LayersBase) CloseLibrary(LayersBase);
     if (GadToolsBase) CloseLibrary(GadToolsBase);
