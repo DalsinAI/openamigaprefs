@@ -28,7 +28,12 @@
  *   drag.solid    (0.8, off unless asked for) a window is dragged by its title
  *                 bar with its contents, not as an outline: OpenWindows takes
  *                 the press and moves the window as the pointer moves
- *   edges.pointer while one is, the pointer shows the edge held. Off unless
+ *                 0.8.4: every grip inside the window, none outside (a near miss
+ *                 no longer lands on the desktop): 3 pixels in from the sides
+ *                 and the bottom, 8 x 8 at the bottom corners; a window with
+ *                 a sizing gadget of its own counts as one that can be sized
+ *   edges.pointer while one is, the pointer shows the edge held (0.8.4: and
+ *                 while it is over one of the active window's grips). Off unless
  *                 asked for: a window's own pointer (WA_Pointer, a busy
  *                 pointer) can't be read back, so it would come back as the
  *                 default one
@@ -68,7 +73,7 @@
 #include <stdlib.h>
 #include "../../Common/cogplace.h"
 
-static const char version[] __attribute__((used)) = "$VER: OpenWindows 0.8.3 (10.10.2026) MIT, Copyright (c) 2026 Dalsin Limited";
+static const char version[] __attribute__((used)) = "$VER: OpenWindows 0.8.4 (11.10.2026) MIT, Copyright (c) 2026 Dalsin Limited";
 
 #define PREFS_ENV "ENV:OpenPrefs/Windows"
 #define PLACES_ENV "ENV:OpenPrefs/WindowPlaces"
@@ -210,11 +215,16 @@ static volatile int click_in, click_out;
 /* 0.8.3 (the user, 10 October 2026: "mouse behaviour at window edges and corner is odd and inconsistent"): the
  * same reach outside and inside on every side, a corner square big enough to find, and the corner takes in
  * Intuition's own size gadget, so a press there resizes the same way (solid, from here) as a press on an edge. */
-#define ZONE_OUT 5                              /* a side: this many pixels outside the frame grab it (nothing is drawn) */
-#define ZONE_IN 3                               /* and this many inside it: the frame's line and the border beside it */
-#define ZONE_CORNER 6                           /* a bottom corner: a square 13 x 13 centred on it */
+/* 0.8.4 (the Team, 11 October 2026: "a mis click outside it removes active status ... an invisible 3 pixel
+ * boundary around the two sides and bottom where the mouse pointer changes, and lets us drag"): every grip is
+ * inside the window, none outside it, and the pointer shows the grip while it is over one (the window active). */
+#define ZONE_IN 3                               /* a side or the bottom: this many pixels inside the frame */
+#define ZONE_CORNER 8                           /* a bottom corner: an 8 x 8 square inside it */
 #define SIZE_GADGET_W 18                        /* Intuition's size gadget at the bottom right: its box is the corner's too */
 static ULONG sig_grab;
+static ULONG sig_hover;                         /* 0.8.4: the grip under the pointer changed */
+static struct Window *volatile hover_win;       /* the active window whose grip the pointer is over, or NULL */
+static volatile int hover_edges;
 static struct Window *volatile grab_win;        /* the window being resized, set by the handler */
 static volatile int grab_edges, grab_on, grab_end;
 static volatile WORD grab_x0, grab_y0;          /* the pointer at the press, screen relative */
@@ -230,6 +240,17 @@ static volatile ULONG grab_last;                /* the time stamp (seconds) of t
  * GimmeZeroZero window's inner layer and a requester's are inside it. The
  * title bar's height never resizes (it moves the window), nor does a window
  * that can't be resized, a backdrop or a borderless one. */
+/* 0.8.4: a window the user may size: Intuition's size gadget, or a sizing gadget of its own (OpenBench's
+ * drawers have one in place of Intuition's, so their frame stays thin). */
+static int resizable(struct Window *w)
+{
+    struct Gadget *g;
+    if (w->Flags & WFLG_SIZEGADGET) return 1;
+    for (g = w->FirstGadget; g; g = g->NextGadget)
+        if ((g->GadgetType & GTYP_SYSTYPEMASK) == GTYP_SIZING) return 1;
+    return 0;
+}
+
 static struct Window *edge_at(struct Screen *s, WORD x, WORD y, int *edges)
 {
     struct Layer *l;
@@ -246,19 +267,19 @@ static struct Window *edge_at(struct Screen *s, WORD x, WORD y, int *edges)
         }
         L = w->LeftEdge; T = w->TopEdge; R = L + w->Width - 1; B = T + w->Height - 1;
         in = x >= L && x <= R && y >= T && y <= B;
-        if ((w->Flags & (WFLG_BACKDROP | WFLG_BORDERLESS)) || !(w->Flags & WFLG_SIZEGADGET)) {
+        if ((w->Flags & (WFLG_BACKDROP | WFLG_BORDERLESS)) || !resizable(w)) {
             if (in) break;                      /* a window that keeps its size */
             continue;
         }
-        if (x >= L - ZONE_OUT && x <= R + ZONE_OUT && y >= T + w->BorderTop && y <= B + ZONE_CORNER) {
-            /* the sides: a strip outside the frame and its own line, below the title bar; the bottom: the same along it */
-            if (x >= L - ZONE_OUT && x <= L + ZONE_IN - 1 && y <= B) e |= EDGE_L;
-            if (x <= R + ZONE_OUT && x >= R - ZONE_IN + 1 && y <= B) e |= EDGE_R;
-            if (y >= B - ZONE_IN + 1 && y <= B + ZONE_OUT && x >= L && x <= R) e |= EDGE_B;
-            /* a bottom corner: a square centred on it holds both edges (it reaches a little outside and inside) */
-            if (y >= B - ZONE_CORNER && y <= B + ZONE_CORNER) {
-                if (x >= L - ZONE_CORNER && x <= L + ZONE_CORNER) e |= EDGE_L | EDGE_B;
-                if (x >= R - ZONE_CORNER && x <= R + ZONE_CORNER) e |= EDGE_R | EDGE_B;
+        if (in && y >= T + w->BorderTop) {
+            /* the sides and the bottom: a strip inside the frame, below the title bar */
+            if (x <= L + ZONE_IN - 1) e |= EDGE_L;
+            if (x >= R - ZONE_IN + 1) e |= EDGE_R;
+            if (y >= B - ZONE_IN + 1) e |= EDGE_B;
+            /* a bottom corner: a square inside it holds both edges */
+            if (y >= B - ZONE_CORNER + 1) {
+                if (x <= L + ZONE_CORNER - 1) e |= EDGE_L | EDGE_B;
+                if (x >= R - ZONE_CORNER + 1) e |= EDGE_R | EDGE_B;
             }
             /* Intuition's size gadget (bottom right, in the bottom border): ours, so both corners feel the same */
             if (x >= R - SIZE_GADGET_W && x <= R && y >= B - (w->BorderBottom > 2 ? w->BorderBottom : 2) - 1 && y <= B)
@@ -334,6 +355,13 @@ static void custom(CxMsg *msg, CxObj *co)
                 grab_last = ie->ie_TimeStamp.tv_secs;
                 Signal(me, sig_grab);              /* the main task reads where the pointer is */
                 continue;
+            }
+            if (ie->ie_Code == IECODE_NOBUTTON && cfg.edges && cfg.edge_ptr && s && sig_hover) {
+                /* 0.8.4: a move: the pointer shows the grip of the active window it is over */
+                int e = 0;
+                struct Window *hw = edge_at(s, s->MouseX, s->MouseY, &e);
+                if (hw != IntuitionBase->ActiveWindow) { hw = NULL; e = 0; }
+                if (hw != hover_win || e != hover_edges) { hover_win = hw; hover_edges = e; Signal(me, sig_hover); }
             }
             if (ie->ie_Code == IECODE_LBUTTON && (cfg.edges || cfg.solid) && s && !(ie->ie_Qualifier & (IEQUALIFIER_LSHIFT | IEQUALIFIER_RSHIFT |
                 IEQUALIFIER_CONTROL | IEQUALIFIER_LALT | IEQUALIFIER_RALT | IEQUALIFIER_LCOMMAND | IEQUALIFIER_RCOMMAND))) {
@@ -734,6 +762,26 @@ static void resize_watch(void)
  * it keeps to the window's own limits (a MaxWidth of 0 or 65535 is the
  * screen's size) and to the screen. While the button is held the outline
  * shows it; at the button-up the window is sized, once. */
+/* 0.8.4: the pointer over a grip of the active window shows which way it sizes. A window's own pointer can't
+ * be read back, so leaving the grip gives the window the default one. */
+static struct Window *ptr_win;
+static int ptr_k = -1;
+
+static void hover(void)
+{
+    struct Window *hw = hover_win;
+    int e = hover_edges, k = -1;
+    if (rs_win) return;                          /* a drag shows its own */
+    if (hw && e && is_window(hw)) k = !(e & EDGE_B) ? PTR_H : (e & EDGE_R) ? PTR_D1 : (e & EDGE_L) ? PTR_D2 : PTR_V;
+    if (k >= 0 && hw == ptr_win && k == ptr_k) return;
+    if (ptr_win && (ptr_win != hw || k < 0) && is_window(ptr_win)) SetWindowPointer(ptr_win, TAG_DONE);
+    ptr_win = NULL; ptr_k = -1;
+    if (k >= 0 && ptr_obj[k]) {
+        SetWindowPointer(hw, WA_Pointer, (ULONG)ptr_obj[k], TAG_DONE);
+        ptr_win = hw; ptr_k = k;
+    }
+}
+
 static void resize(void)
 {
     struct Window *w;
@@ -1001,6 +1049,11 @@ static int placeable(const int *wb, int drawer, const char *prog)
  * while another program has patched on top of it). */
 
 static APTR old_owtl, old_ow;           /* what the patch replaced */
+/* 0.8.4: windows the cog placed: the look leaves them where they opened (it moved them on to their kept place
+ * a second later, the window jumping). Written by the patch on the opening task, read by the look. */
+#define COG_WINS 4
+static struct Window *volatile cog_wins[COG_WINS];
+static volatile UBYTE cog_next;
 static volatile UWORD patch_in;         /* callers inside the patch now */
 static volatile UBYTE patch_pass;       /* 1: place nothing */
 
@@ -1061,6 +1114,7 @@ static struct Window *__attribute__((used)) ow_open_window(struct NewWindow *nw,
     struct ExtNewWindow copy;
     struct NewWindow *pass_nw = nw;
     struct Window *win;
+    int cogged = 0;
     patch_in++;
     /* 0.8.1: a window the cog asked for: at the screen's top right, COGPLACE_GAP from its top and right */
     if (!patch_pass && FindTask(NULL) != me && cog.armed) {
@@ -1098,6 +1152,7 @@ static struct Window *__attribute__((used)) ow_open_window(struct NewWindow *nw,
                     copy.LeftEdge = l; copy.TopEdge = t;
                     pass_nw = (struct NewWindow *)&copy;
                 }
+                cogged = 1;
                 goto open;
             }
         }
@@ -1161,6 +1216,12 @@ open:
         register APTR a6 __asm("a6") = IntuitionBase;
         __asm volatile ("jsr (%4)" : "=r"(res), "+r"(a0), "+r"(a1), "+r"(a6) : "a"(fn) : "d1", "memory", "cc");
         win = res;
+    }
+    if (cogged && win) {
+        Forbid();
+        cog_wins[cog_next] = win;
+        cog_next = (UBYTE)((cog_next + 1) % COG_WINS);
+        Permit();
     }
     patch_in--;
     return win;
@@ -1290,8 +1351,13 @@ static void watch(void)
         for (j = 0; j < nseen; j++) if (seen[j].w == now[i].w) { known = j; break; }
         if (known < 0 && places_clock > 1) {
             /* a new window (the first look only notes the windows already open) */
-            int placed = 0;
-            if (cfg.places && placeable(&now[i].wb, now[i].drawer, now[i].prog) && place_index(now[i].key, 0) >= 0) placed = 1;
+            int placed = 0, k, cogged = 0;
+            Forbid();
+            for (k = 0; k < COG_WINS; k++)
+                if (cog_wins[k] == now[i].w) { cog_wins[k] = NULL; cogged = 1; }
+            Permit();
+            if (cogged) {                            /* 0.8.4: where the cog put it: noted, not moved */
+            } else if (cfg.places && placeable(&now[i].wb, now[i].drawer, now[i].prog) && place_index(now[i].key, 0) >= 0) placed = 1;
             if (!placed && now[i].wb && cfg.drawer_w && (now[i].flags & WFLG_SIZEGADGET) && now[i].prog[0] && !stricmp(now[i].prog, "Workbench")) {
                 WORD wd = now[i].wd < cfg.drawer_w ? cfg.drawer_w : now[i].wd, ht = now[i].ht < cfg.drawer_h ? cfg.drawer_h : now[i].ht;
                 WORD l = now[i].l, t = now[i].t;
@@ -1387,6 +1453,7 @@ int main(void)
     me = FindTask(NULL);
     if ((bsig = AllocSignal(-1)) < 0 || (wsig = AllocSignal(-1)) < 0 || (gsig = AllocSignal(-1)) < 0) goto out;
     sig_button = 1UL << bsig; sig_wheel = 1UL << wsig; sig_grab = 1UL << gsig;
+    { BYTE hsig = AllocSignal(-1); if (hsig >= 0) sig_hover = 1UL << hsig; }
     pointers_on();
     if (!(port = CreateMsgPort())) goto out;
     nb.nb_Port = port;
@@ -1412,7 +1479,7 @@ int main(void)
     if (timer) { tr->tr_node.io_Command = TR_ADDREQUEST; tr->tr_time.tv_secs = 1; tr->tr_time.tv_micro = 0; SendIO((struct IORequest *)tr); }
 
     while (!quit) {
-        ULONG got = Wait((1UL << port->mp_SigBit) | sig_button | sig_wheel | sig_grab | SIGBREAKF_CTRL_C | SIGBREAKF_CTRL_F |
+        ULONG got = Wait((1UL << port->mp_SigBit) | sig_button | sig_wheel | sig_grab | sig_hover | SIGBREAKF_CTRL_C | SIGBREAKF_CTRL_F |
                          (timer ? 1UL << tport->mp_SigBit : 0));
         CxMsg *m;
         if (got & SIGBREAKF_CTRL_C) quit = 1;
@@ -1422,6 +1489,7 @@ int main(void)
         }
         if (got & sig_wheel) wheel();
         if (got & sig_grab) resize();
+        if (got & sig_hover) hover();
         if (got & sig_button) { clicks(); buttons(); }
         while ((m = (CxMsg *)GetMsg(port))) {
             ULONG type = CxMsgType(m), id = CxMsgID(m);
