@@ -43,6 +43,12 @@ extern int lt_next;                        /* the tab clicked: the page to open 
 extern int lt_win_w, lt_win_h;             /* the inner size the window has reached */
 #endif
 
+/* Built into OpenBench (IN_OPENBENCH, its desktop/ob_builtin.h; the Team, 11 October 2026: the Open preferences in
+ * OpenBench natively): a tab starts the next editor through OpenBench when that one is built in too. */
+#ifdef IN_OPENBENCH
+int ob_builtin_open(const char *path);     /* OpenBench's: 1 when path names a built-in (started, or sent Ctrl-F) */
+#endif
+
 enum { LT_LOOK, LT_WINDOWS, LT_TITLEBAR, LT_MENUS, LT_N };
 #define LT_ID 900
 #define LT_IS(id) ((id) >= LT_ID && (id) < LT_ID + LT_N)
@@ -187,6 +193,9 @@ static void lt_go(struct Window *win, int to)
             Close(f);
         }
     }
+#ifdef IN_OPENBENCH
+    if (ob_builtin_open(lt_path[to])) return;   /* built in too: a process of OpenBench's, at this window's place */
+#endif
     snprintf(cmd, sizeof cmd, "\"%s\"", lt_path[to]);
     in = Open((STRPTR)"NIL:", MODE_OLDFILE);
     out = Open((STRPTR)"NIL:", MODE_NEWFILE);

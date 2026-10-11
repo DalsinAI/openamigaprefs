@@ -13,6 +13,12 @@
  * its public port) or, when something is switched on and it isn't running,
  * started from SYS:Tools/Commodities.
  *
+ * Built into OpenBench (IN_OPENBENCH; the Team, 11 October 2026: the Open preferences in OpenBench natively),
+ * it follows OpenBench's desktop/ob_builtin.h: it declares no library base, so dos, intuition, graphics and
+ * gadtools are OpenBench's, never opened or closed here; its globals are static; it starts as ob_builtin.c
+ * starts it, with no arguments and no tooltypes, and writes nothing to Output(); Ctrl-C quits as Cancel does
+ * and Ctrl-F brings the window to the front. The stand-alone Windows builds as before.
+ *
  * MIT, Copyright (c) 2026 Dalsin Limited. */
 #include <exec/types.h>
 #include <exec/memory.h>
@@ -340,7 +346,14 @@ static int gui_once(void)
 
     while (!quit) {
         struct IntuiMessage *m;
+#ifdef IN_OPENBENCH
+        /* OpenBench's Ctrl-C (it is quitting): as Cancel; its Ctrl-F (Windows opened again): the window to the front */
+        ULONG got = Wait((1UL << win->UserPort->mp_SigBit) | SIGBREAKF_CTRL_C | SIGBREAKF_CTRL_F);
+        if (got & SIGBREAKF_CTRL_C) quit = 1;
+        if (got & SIGBREAKF_CTRL_F) { ScreenToFront(win->WScreen); WindowToFront(win); ActivateWindow(win); }
+#else
         WaitPort(win->UserPort);
+#endif
         while (!quit && (m = GT_GetIMsg(win->UserPort))) {
             ULONG cls = m->Class;
             struct Gadget *gg = (struct Gadget *)m->IAddress;
@@ -412,6 +425,12 @@ static int gui(void)
 
 int main(int argc, char **argv)
 {
+#ifdef IN_OPENBENCH
+    /* Built in, it starts as ob_builtin.c starts it (argc 0, argv NULL, no WBStartup message, so no tooltypes):
+     * as from Workbench below, with nothing read from the Shell or written to Output(). Every static it counts
+     * on is set again below or as its window opens, so the run before leaves nothing behind. */
+    argc = 0;
+#endif
     LONG args[4] = { 0, 0, 0, 0 };
     /* from Workbench (argc 0) there are no arguments: ReadArgs would read them from
      * libnix's console window, which opens empty and waits */
