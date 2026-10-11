@@ -11,9 +11,9 @@
  *
  * The free memory is Workbench's own: its title format (the WBTF chunk of
  * Sys/Workbench.prefs, as Prefs/Workbench writes it) becomes
- *   "Workbench %r  Chip %mcek KB  Fast %mfek KB - 1 CPU + 8 cores"
- * (both in whole KB, as the Amiga always showed them: the user, 10 October
- * 2026; the earlier "Fast %mfem MB" is still known as ours and replaced)
+ *   "OpenBench 0.1 - Chip %mcek KB, Fast %mfek KB, GPU = 1, CPU = 1 (m68k) + 8 cores"
+ * (0.6.9; both in whole KB, as the Amiga always showed them: the user, 10
+ * October 2026; the earlier Workbench ones are still known as ours and replaced)
  * in ENV:, so IPrefs shows it and it updates as Workbench does; spaces
  * before it leave room for the logo.
  *
@@ -33,6 +33,7 @@
  * pointer, shows their help under them and tells the program of a click.
  * Tata is the first.
  *
+ * 0.6.10 (11 October 2026): the counts read "GPU = 1, CPU = 1 (m68k)", as the user put them.
  * 0.6.6 (10 October 2026): the editor the cog starts opens at the screen's top right, 20 pixels in (with
  *   OpenWindows 0.8.1); Network (OpenSocketControl) in the cog's list.
  * 0.6.5 (10 October 2026): the cog's list has Date and time (OpenDateTime)
@@ -92,7 +93,7 @@
 #include "popuptheme.h"
 #include "cogplace.h"
 
-const char version[] __attribute__((used)) = "$VER: OpenTitle 0.6.8 (10.10.2026) OpenPrefs, Dalsin Limited";
+const char version[] __attribute__((used)) = "$VER: OpenTitle 0.6.10 (11.10.2026) OpenPrefs, Dalsin Limited";
 
 struct IntuitionBase *IntuitionBase;
 struct GfxBase *GfxBase;
@@ -107,9 +108,14 @@ struct Library *LayersBase, *UtilityBase, *SocketBase, *WorkbenchBase, *CyberGfx
 #define WIFI_DEVICE "opensocketwifi.device"    /* OpenSocket's: the PC's (or the card's) Wi-Fi */
 #define WIFI_STATUS 2
 #define WB_ENV     "ENV:Sys/Workbench.prefs"
-#define TITLE_MEM  "Workbench %r  Chip %mcek KB  Fast %mfek KB"
+/* 0.6.9: the screen says what it is (the user, 10 October 2026: "OpenBench x.x - ChipMem, FastMem,
+ * GPU count, CPU count"); the GPUs and CPUs follow, written once, as the format has no tokens for them */
+#define OPENBENCH_VERSION "0.1"
+#define TITLE_MEM  "OpenBench " OPENBENCH_VERSION " - Chip %mcek KB, Fast %mfek KB"
+#define TITLE_PLAIN "OpenBench " OPENBENCH_VERSION
+#define TITLE_MEM_068 "Workbench %r  Chip %mcek KB  Fast %mfek KB"   /* OpenTitle 0.6.3 to 0.6.8: still ours */
 #define TITLE_MEM_062 "Workbench %r  Chip %mcek KB  Fast %mfem MB"   /* OpenTitle 0.6.2 and before */
-#define TITLE_PLAIN "Amiga Workbench %r"
+#define TITLE_PLAIN_068 "Amiga Workbench %r"
 #define LOGO_PAD   "    "                      /* room for the logo before Workbench's title */
 
 static tb_prefs prefs;
@@ -342,11 +348,28 @@ static ULONG omc_cores(void)
     return n > 1024 ? 0 : n;
 }
 
+/* The GPUs (0.6.9): AmigaChrome's graphics boards, ACRTG (Dalsin $DA15, product 9, up to four), counted
+ * through AutoConfig as the cores are. 0 on a machine without one. */
+static ULONG board_gpus(void)
+{
+    ULONG n = 0;
+    ExpansionBase = (struct ExpansionBase *)OpenLibrary((STRPTR)"expansion.library", 36);
+    if (ExpansionBase) {
+        struct ConfigDev *cd = NULL;
+        while ((cd = FindConfigDev(cd, 0xDA15, 9)) && n < 16) n++;
+        CloseLibrary((struct Library *)ExpansionBase);
+        ExpansionBase = NULL;
+    }
+    return n;
+}
+
+/* ", GPU = 1, CPU = 1 (m68k) + 8 cores": after the memory (0.6.10, the user, 10 October 2026: "GPU = 1,
+ * CPU = 1 (m68k)"); the cores only when the board or openmulticore.library gives them */
 static void cpus_text(char *buf, int size)
 {
-    ULONG n = (board_cores() ? board_cores() : omc_cores());
-    if (n) snprintf(buf, size, " - 1 CPU + %lu core%s", (unsigned long)n, n == 1 ? "" : "s");
-    else snprintf(buf, size, " - 1 CPU");
+    ULONG n = (board_cores() ? board_cores() : omc_cores()), g = board_gpus();
+    if (n) snprintf(buf, size, ", GPU = %lu, CPU = 1 (m68k) + %lu core%s", (unsigned long)g, (unsigned long)n, n == 1 ? "" : "s");
+    else snprintf(buf, size, ", GPU = %lu, CPU = 1 (m68k)", (unsigned long)g);
 }
 
 static int ours(const char *fmt)
@@ -354,13 +377,15 @@ static int ours(const char *fmt)
     const char *f = fmt;
     size_t m = strlen(TITLE_MEM);
     while (*f == ' ') f++;
-    if (!strncmp(f, TITLE_MEM, m) && (!f[m] || !strncmp(f + m, " - ", 3))) return 1;   /* with or without the CPUs */
-    return !strcmp(f, TITLE_MEM_062) || !strcmp(f, TITLE_PLAIN);
+    if (!strncmp(f, TITLE_MEM, m) && (!f[m] || !strncmp(f + m, ", ", 2))) return 1;   /* with or without the GPUs and CPUs */
+    m = strlen(TITLE_MEM_068);                       /* 0.6.3 to 0.6.8's, replaced by the OpenBench one */
+    if (!strncmp(f, TITLE_MEM_068, m) && (!f[m] || !strncmp(f + m, " - ", 3))) return 1;
+    return !strcmp(f, TITLE_MEM_062) || !strcmp(f, TITLE_PLAIN) || !strcmp(f, TITLE_PLAIN_068);
 }
 
 static void apply_title(void)
 {
-    char now[160], want[160], cpus[32];
+    char now[160], want[160], cpus[48];
     int have = wb_title(now, sizeof now);
     if (!prefs.memory && !prefs.logo) {
         if (have && ours(now)) wb_set_title(NULL);       /* back to Workbench's own */
