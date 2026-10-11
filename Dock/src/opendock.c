@@ -50,6 +50,7 @@
 
 #include "od_dock.h"
 #include "wbclose.h"
+#include "obmsg.h"
 
 const char version[] __attribute__((used)) = "$VER: OpenDock 0.6.3 (10.10.2026) OpenPrefs, Dalsin Limited";
 
@@ -58,7 +59,13 @@ const char version[] __attribute__((used)) = "$VER: OpenDock 0.6.3 (10.10.2026) 
 #define DOCK_PREFS "SYS:Prefs/OpenDock"       /* 0.6.3: the editor is OpenDock in Prefs, as every editor of ours */
 #define PORT_NAME "OpenDock"
 
+#ifdef OPENDOCK_IN_OPENBENCH
+/* 0.7: built into OpenBench, which is the Workbench (its dock): OpenBench's libraries */
+extern struct Library *IconBase, *WorkbenchBase;
+struct Library *CyberGfxBase;
+#else
 struct Library *IconBase, *WorkbenchBase, *CyberGfxBase;
+#endif
 
 static od_dock dock;
 static struct DiskObject *icons[OD_MAX];
@@ -426,7 +433,10 @@ static void start(const od_button *b)
 {
     char cmd[400];
     if (b->kind == OD_WB) {
-        if (WorkbenchBase && OpenWorkbenchObjectA((STRPTR)b->command, NULL)) return;
+        /* 0.7: OpenBench, our Workbench, when it is there; else Workbench */
+        int r = ob_open(b->command);
+        if (r > 0) return;
+        if (r < 0 && WorkbenchBase && OpenWorkbenchObjectA((STRPTR)b->command, NULL)) return;
         DisplayBeep(scr);
         return;
     }
