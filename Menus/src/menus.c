@@ -26,6 +26,16 @@
  * ENVARC:MagicMenu.prefs) and USE or SAVE puts it in place with no window:
  * OpenUp's part does this once when it installs OpenMenus.
  *
+ * Built into OpenBench (IN_OPENBENCH; the Team, 11 October 2026: the Open preferences in OpenBench natively)
+ * as Menus, it follows OpenBench's desktop/ob_builtin.h: dos, intuition, graphics and gadtools are OpenBench's
+ * and asl.library its own, under its own name; its globals are static, and its version string is left out
+ * (OpenDock's, built in too, is global); it starts as ob_builtin.c starts it, argc 0 and no WBStartup
+ * message, so it reads no arguments and writes nothing to Output(); Ctrl-C quits as Cancel does, a Test put
+ * back first, and Ctrl-F brings the window to the front; as its statics outlive a run, each run sets again
+ * the ones it counts on; and Look... opens OpenLook through OpenBench when OpenLook is built in too. The same
+ * holds with LT_ONE, as a page of OpenLook. OpenMenus' settings code, om_prefs.c, is linked once into
+ * OpenBench for every built-in that reads it. The stand-alone Menus builds as before.
+ *
  * MIT, Copyright (c) 2026 Dalsin Limited. */
 #include <exec/types.h>
 #include <exec/memory.h>
@@ -52,7 +62,9 @@
 #include "ogt_theme.h"
 #include "../../Common/looktabs.h"
 
+#ifndef IN_OPENBENCH
 const char version[] __attribute__((used)) = "$VER: Menus 0.2.3 (10.10.2026) OpenPrefs, Dalsin Limited";
+#endif
 
 #define PREFS_ENV "ENV:OpenMenus/Menus"
 #define PREFS_ENVARC "ENVARC:OpenMenus/Menus"
@@ -65,7 +77,13 @@ const char version[] __attribute__((used)) = "$VER: Menus 0.2.3 (10.10.2026) Ope
 #define VIEW_ENVARC "ENVARC:OpenAmiga/PrefsView"
 #define LOOK_TOOL "SYS:Prefs/OpenLook"   /* the one-window editor (10 Oct 2026) */
 
+#ifdef IN_OPENBENCH
+#define AslBase menus_AslBase                    /* its own asl.library, under its own name (ob_builtin.h) */
+static struct Library *AslBase;
+int ob_builtin_open(const char *path);           /* OpenBench's: 1 when path names a built-in (started, or sent Ctrl-F) */
+#else
 struct Library *AslBase;
+#endif
 
 static om_prefs cur, orig;              /* orig: what is in ENV: now, which Test and Cancel put back */
 
@@ -671,11 +689,21 @@ static int gui(void)
         struct IntuiMessage *m;
         ULONG tsig = timer ? 1UL << tport->mp_SigBit : 0;
         int switch_view = 0;
+#ifdef IN_OPENBENCH
+        ULONG got;
+#endif
         if (timer && test_until) {
             tr->tr_node.io_Command = TR_ADDREQUEST; tr->tr_time.tv_secs = 1; tr->tr_time.tv_micro = 0;
             SendIO((struct IORequest *)tr);
         }
+#ifdef IN_OPENBENCH
+        /* OpenBench's Ctrl-C (it is quitting): as Cancel, below, once the timer is back; its Ctrl-F (opened
+         * again): the window to the front */
+        got = Wait((1UL << win->UserPort->mp_SigBit) | tsig | SIGBREAKF_CTRL_C | SIGBREAKF_CTRL_F);
+        if (got & SIGBREAKF_CTRL_F) { ScreenToFront(win->WScreen); WindowToFront(win); ActivateWindow(win); }
+#else
         Wait((1UL << win->UserPort->mp_SigBit) | tsig);
+#endif
         if (timer && test_until) {
             if (!CheckIO((struct IORequest *)tr)) AbortIO((struct IORequest *)tr);
             WaitIO((struct IORequest *)tr);
@@ -690,6 +718,13 @@ static int gui(void)
                 status(status_text);
             }
         }
+#ifdef IN_OPENBENCH
+        if (got & SIGBREAKF_CTRL_C) {
+            if (test_until) go_back();
+            test_until = 0;
+            quit = 1;
+        }
+#endif
         while (!quit && !switch_view && (m = GT_GetIMsg(win->UserPort))) {
             ULONG cls = m->Class;
             UWORD code = m->Code;
@@ -769,7 +804,12 @@ static int gui(void)
                 strncpy(cur.image, (const char *)((struct StringInfo *)gg->SpecialInfo)->Buffer, sizeof cur.image - 1);
                 break;
             case G_CHOOSE: choose_image(); break;
+#ifdef IN_OPENBENCH
+            /* OpenLook built into OpenBench too: started there; else from SYS:Prefs, as before */
+            case G_LOOK: if (!ob_builtin_open(LOOK_TOOL)) SystemTags((STRPTR)"Run >NIL: <NIL: SYS:Prefs/OpenLook", TAG_DONE); redraw = 0; break;
+#else
             case G_LOOK: SystemTags((STRPTR)"Run >NIL: <NIL: SYS:Prefs/OpenLook", TAG_DONE); redraw = 0; break;
+#endif
             case G_ENABLED: cur.enabled = (gg->Flags & GFLG_SELECTED) != 0; break;
             case G_BAR: cur.bar = code; break;
             case G_HIDE: cur.bar_autohide = (gg->Flags & GFLG_SELECTED) != 0; redraw = 0; break;
@@ -824,6 +864,17 @@ int main(int argc, char **argv)
     struct RDArgs *rd = argc > 0 ? ReadArgs((STRPTR)"FROM,MAGICMENU/K,USE/S,SAVE/S,ADVANCED/S", args, NULL) : NULL;
     char *text, err[100];
     int rc = RETURN_OK;
+#ifdef IN_OPENBENCH
+    /* Built in, it starts as ob_builtin.c starts it: argc 0, argv NULL and no WBStartup message, so no
+     * arguments and no tooltypes; the window opens, as from Workbench, and nothing below reads the Shell or
+     * writes to Output(). Its statics outlive a run inside OpenBench: what a run counts on starts again here. */
+    advanced = 0;
+    theme_loaded = theme_dark = lite_on = 0;
+    npens = 0;
+    which = 0;
+    test_until = 0;
+    win = NULL;
+#endif
     if (!rd && argc > 0) { PrintFault(IoErr(), (STRPTR)"Menus"); return RETURN_FAIL; }
     /* orig is always what ENV: holds now; FROM only fills the window */
     text = read_file(PREFS_ENV, NULL);

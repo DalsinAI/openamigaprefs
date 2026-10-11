@@ -11,6 +11,16 @@
  * reads it at once); Cancel changes nothing. Everything else in the file is
  * kept as it was.
  *
+ * Built into OpenBench (IN_OPENBENCH; the Team, 11 October 2026: the Open
+ * preferences in OpenBench natively) as OpenSerial, it follows OpenBench's
+ * desktop/ob_builtin.h: dos, intuition, graphics and gadtools are OpenBench's;
+ * its globals are static, and its version string is left out; it starts as
+ * ob_builtin.c starts it, argc 0 and no WBStartup message, so it reads no
+ * arguments and writes nothing to Output(); Ctrl-C quits as Cancel does and
+ * Ctrl-F brings the window to the front; as its statics outlive a run, each
+ * run sets again the ones it counts on. The stand-alone OpenSerial builds as
+ * before.
+ *
  * MIT, Copyright (c) 2026 Dalsin Limited. */
 #include <exec/types.h>
 #include <exec/memory.h>
@@ -28,7 +38,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+#ifndef IN_OPENBENCH
 static const char version[] __attribute__((used)) = "$VER: OpenSerial 0.1 (10.10.2026) OpenPrefs, MIT, Copyright (c) 2026 Dalsin Limited";
+#endif
 
 /* sp_SerialFlags' bits, as the OS's Serial editor sets them (not in every NDK's prefs/serial.h) */
 #ifndef SERIALFLAG_XDISABLED
@@ -319,7 +331,14 @@ static int gui(void)
 
     while (!quit) {
         struct IntuiMessage *m;
+#ifdef IN_OPENBENCH
+        /* OpenBench's Ctrl-C (it is quitting): as Cancel; its Ctrl-F (opened again): the window to the front */
+        ULONG got = Wait((1UL << win->UserPort->mp_SigBit) | SIGBREAKF_CTRL_C | SIGBREAKF_CTRL_F);
+        if (got & SIGBREAKF_CTRL_C) quit = 1;
+        if (got & SIGBREAKF_CTRL_F) { ScreenToFront(win->WScreen); WindowToFront(win); ActivateWindow(win); }
+#else
         WaitPort(win->UserPort);
+#endif
         while (!quit && (m = GT_GetIMsg(win->UserPort))) {
             ULONG cls = m->Class;
             UWORD code = m->Code;
@@ -369,7 +388,16 @@ int main(int argc, char **argv)
     struct RDArgs *rd = argc > 0 ? ReadArgs((STRPTR)"FROM,USE/S,SAVE/S", args, NULL) : NULL;
     int rc;
     (void)argv;
+#ifdef IN_OPENBENCH
+    /* Built in, it starts as ob_builtin.c starts it: argc 0, argv NULL and no WBStartup message, so the
+     * window, as from Workbench, with nothing read from the Shell or written to Output(). Its statics outlive
+     * a run inside OpenBench: the file the run before read and freed is not freed again. */
+    file_data = NULL;
+    file_len = 0;
+    win = NULL;
+#else
     (void)version;
+#endif
     if (!rd && argc > 0) { PrintFault(IoErr(), (STRPTR)"OpenSerial"); return RETURN_FAIL; }
     load_serial(args[0] ? (const char *)args[0] : SERIAL_ENV);
     if (args[1] || args[2]) {

@@ -19,6 +19,12 @@
  *
  * "Sound USE" at boot (OpenUp's startup) gives the board the saved levels.
  *
+ * Built into OpenBench (the Team, 11 October 2026: the Open preferences in OpenBench natively) with
+ * -DIN_OPENBENCH, as openamigabench desktop/ob_builtin.h says: OpenBench starts it as a process of its
+ * own with no arguments, as Workbench starts a tool, so it is the window; Ctrl-C is Cancel, Ctrl-F
+ * brings the window to the front; each start begins as a new program would, since OpenBench's data
+ * stays from one start to the next. OpenSpeaker stays a program of its own.
+ *
  * MIT, Copyright (c) 2026 Dalsin Limited. */
 #include <exec/types.h>
 #include <exec/memory.h>
@@ -41,7 +47,9 @@
 #include "sp_amiga.h"
 #include "sp_test.h"
 
+#ifndef IN_OPENBENCH                                  /* inside OpenBench, OpenBench's $VER is the one */
 const char version[] __attribute__((used)) = "$VER: OpenSound 0.1.1 (10.10.2026) OpenPrefs, Dalsin Limited";
+#endif
 
 #define VIEW_ENV "ENV:OpenAmiga/PrefsView"           /* shared by every OpenPrefs editor: simple or advanced */
 #define VIEW_ENVARC "ENVARC:OpenAmiga/PrefsView"
@@ -316,7 +324,14 @@ static int gui_once(void)
 
     while (!quit) {
         struct IntuiMessage *m;
+#ifdef IN_OPENBENCH
+        /* inside OpenBench: Ctrl-C (OpenBench is quitting) is Cancel; Ctrl-F (opened again) to the front */
+        ULONG got = Wait(1UL << win->UserPort->mp_SigBit | SIGBREAKF_CTRL_C | SIGBREAKF_CTRL_F);
+        if (got & SIGBREAKF_CTRL_C) { put_back(); quit = 1; continue; }
+        if (got & SIGBREAKF_CTRL_F) { ScreenToFront(win->WScreen); WindowToFront(win); ActivateWindow(win); }
+#else
         WaitPort(win->UserPort);
+#endif
         while (!quit && (m = GT_GetIMsg(win->UserPort))) {
             ULONG cls = m->Class;
             UWORD code = m->Code;
@@ -420,6 +435,11 @@ int main(int argc, char **argv)
     struct RDArgs *rd = argc > 0 ? ReadArgs((STRPTR)"FROM,USE/S,SAVE/S,ADVANCED/S", args, NULL) : NULL;
     int rc;
     if (!rd && argc > 0) { PrintFault(IoErr(), (STRPTR)"Sound"); return RETURN_FAIL; }
+#ifdef IN_OPENBENCH
+    /* OpenBench started it (argc 0, as from Workbench): what a new start finds, not the last one's */
+    touched = 0;
+    status_text[0] = 0;
+#endif
     board = sp_board();
     if (board) seen_seq = sp_board_seq(board);
     sp_load(&cur, args[0] ? (const char *)args[0] : NULL);
