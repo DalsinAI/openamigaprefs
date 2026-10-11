@@ -20,6 +20,12 @@
  *
  *   Look [FROM file] [USE] [SAVE]
  *
+ * Built into OpenBench (IN_OPENBENCH; the Team, 11 October 2026: the Open preferences in OpenBench natively),
+ * it follows OpenBench's desktop/ob_builtin.h: it declares no library base, so dos, intuition, graphics,
+ * gadtools and icon are OpenBench's, never opened or closed here; its globals are static; it starts as
+ * ob_builtin.c starts it, with no arguments and no tooltypes, and writes nothing to Output(); Ctrl-C quits as
+ * Cancel does and Ctrl-F brings the window to the front. The stand-alone Look builds as before.
+ *
  * MIT, Copyright (c) 2026 Dalsin Limited. */
 #include <exec/types.h>
 #include <exec/memory.h>
@@ -51,6 +57,9 @@
 #include "ogt_theme.h"
 #include "../../Common/looktabs.h"
 
+#ifdef IN_OPENBENCH
+static                                     /* built in: OpenBench's globals are its own */
+#endif
 const char version[] __attribute__((used)) = "$VER: Look 0.4.2 (10.10.2026) OpenPrefs, Dalsin Limited";
 
 #define PREFS_ENV "ENV:OpenGadTools/Look"
@@ -756,11 +765,18 @@ static int gui_once(void)
     while (!quit) {
         struct IntuiMessage *m;
         ULONG tsig = timer ? 1UL << tport->mp_SigBit : 0;
+#ifdef IN_OPENBENCH
+        ULONG got;
+#endif
         if (timer && test_until) {
             tr->tr_node.io_Command = TR_ADDREQUEST; tr->tr_time.tv_secs = 1; tr->tr_time.tv_micro = 0;
             SendIO((struct IORequest *)tr);
         }
+#ifdef IN_OPENBENCH
+        got = Wait((1UL << win->UserPort->mp_SigBit) | tsig | SIGBREAKF_CTRL_C | SIGBREAKF_CTRL_F);
+#else
         Wait((1UL << win->UserPort->mp_SigBit) | tsig);
+#endif
         if (timer && test_until) {
             if (!CheckIO((struct IORequest *)tr)) AbortIO((struct IORequest *)tr);
             WaitIO((struct IORequest *)tr);
@@ -775,6 +791,11 @@ static int gui_once(void)
                 status(status_text);
             }
         }
+#ifdef IN_OPENBENCH
+        /* OpenBench's Ctrl-C (it is quitting): as Cancel; its Ctrl-F (Look opened again): the window to the front */
+        if (got & SIGBREAKF_CTRL_C) { if (test_until) go_back(); test_until = 0; quit = 1; }
+        if (got & SIGBREAKF_CTRL_F) { ScreenToFront(win->WScreen); WindowToFront(win); ActivateWindow(win); }
+#endif
         while (!quit && (m = GT_GetIMsg(win->UserPort))) {
             ULONG cls = m->Class;
             UWORD code = m->Code;
@@ -872,6 +893,13 @@ static int gui(void)
 
 int main(int argc, char **argv)
 {
+#ifdef IN_OPENBENCH
+    /* Built in, it starts as ob_builtin.c starts it (argc 0, argv NULL, no WBStartup message, so no tooltypes):
+     * as from Workbench below, with nothing read from the Shell or written to Output(). Its statics live on in
+     * OpenBench from the run before, so what a run counts on starts afresh (the preview was freed, not cleared). */
+    argc = 0;
+    preview_loaded = 0; npens = 0; test_until = 0; ctf_qual = 0;
+#endif
     LONG args[4] = { 0, 0, 0, 0 };
     /* from Workbench (argc 0) there are no arguments: ReadArgs would read them from
      * libnix's console window, which opens empty and waits */
