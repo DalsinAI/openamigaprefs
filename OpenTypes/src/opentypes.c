@@ -22,6 +22,18 @@
  *   before it changes and listed in ENVARC:OpenTypes/Changes; UNDO puts them
  *   all back. Icons are read and written with icon.library only.
  *
+ * Built into OpenBench (IN_OPENBENCH; the Team, 11 October 2026: the Open
+ * preferences in OpenBench natively) as OpenTypes, it follows OpenBench's
+ * desktop/ob_builtin.h: icon.library and gadtools.library are OpenBench's,
+ * never opened or closed here; datatypes.library (OpenBench opens its own
+ * only for a backdrop picture) and asl.library are its own, under its own
+ * names; its globals are static. It starts as ob_builtin.c starts it, argc 0
+ * and no WBStartup message: the window, and none of the Shell's commands
+ * (they write to Output(), and are left out). Ctrl-C quits as Cancel does,
+ * Ctrl-F brings the window to the front, and as its statics outlive a run,
+ * each run sets again the ones it counts on. The stand-alone OpenTypes builds
+ * as before.
+ *
  * MIT, Copyright (c) 2026 Dalsin Limited. */
 #include <exec/types.h>
 #include <exec/memory.h>
@@ -47,13 +59,22 @@
 
 #include <string.h>
 
+#ifndef IN_OPENBENCH
 static const char version[] __attribute__((used)) = "$VER: OpenTypes 0.2.2 (10.10.2026) MIT, Copyright (c) 2026 Dalsin Limited";
+#endif
 
 #define STATE "ENVARC:OpenTypes"
 #define BACKUP "ENVARC:OpenTypes/Backup"
 #define CHANGES "ENVARC:OpenTypes/Changes"
 
+#ifdef IN_OPENBENCH
+extern struct Library *IconBase, *GadToolsBase;          /* OpenBench's (ob_builtin.h) */
+#define DataTypesBase opentypes_DataTypesBase              /* its own, under its own names */
+#define AslBase opentypes_AslBase
+static struct Library *DataTypesBase, *AslBase;
+#else
 struct Library *IconBase, *DataTypesBase, *AslBase, *GadToolsBase;
+#endif
 
 /* ---- the kinds of file --------------------------------------------------------- */
 
@@ -445,6 +466,10 @@ static int apply_found(const char *tool)
     return done;
 }
 
+#ifndef IN_OPENBENCH
+/* The Shell's commands, SWITCH among them: built into OpenBench there are no arguments and no Output(),
+ * so they are left out there. */
+
 /* ---- SWITCH: one program's kinds of file to another ---------------------------------- */
 
 /* Kinds a viewer doesn't take over from MultiView: sounds, music, video and
@@ -612,6 +637,7 @@ static int shell_apply(LONG *a)
     Printf((STRPTR)"OpenTypes: %ld icon%s changed from %s to %s\n", n, (LONG)(n == 1 ? "" : "s"), (LONG)old, a[2]);
     return RETURN_OK;
 }
+#endif /* !IN_OPENBENCH: the Shell's commands */
 
 /* ---- the window --------------------------------------------------------------------------- */
 
@@ -730,7 +756,14 @@ static int gui(void)
 #define SET(id, ...) GT_SetGadgetAttrs(gad[id], win, NULL, __VA_ARGS__, TAG_DONE)
     while (!quit) {
         struct IntuiMessage *m;
+#ifdef IN_OPENBENCH
+        /* OpenBench's Ctrl-C (it is quitting): as Cancel; its Ctrl-F (opened again): the window to the front */
+        ULONG got = Wait((1UL << win->UserPort->mp_SigBit) | SIGBREAKF_CTRL_C | SIGBREAKF_CTRL_F);
+        if (got & SIGBREAKF_CTRL_C) quit = 1;
+        if (got & SIGBREAKF_CTRL_F) { ScreenToFront(win->WScreen); WindowToFront(win); ActivateWindow(win); }
+#else
         WaitPort(win->UserPort);
+#endif
         while (!quit && (m = GT_GetIMsg(win->UserPort))) {
             ULONG cls = m->Class;
             UWORD code = m->Code;
@@ -839,6 +872,30 @@ out:
     return rc;
 }
 
+#ifdef IN_OPENBENCH
+/* Built in, it starts as ob_builtin.c starts it: argc 0, argv NULL and no WBStartup message, so the window,
+ * as from Workbench. Its statics outlive a run inside OpenBench: what a run counts on starts again here. */
+int main(int argc, char **argv)
+{
+    int rc = RETURN_FAIL;
+    (void)argc;
+    (void)argv;
+    found = NULL;
+    nfound = 0;
+    DataTypesBase = OpenLibrary((STRPTR)"datatypes.library", 39);
+    AslBase = OpenLibrary((STRPTR)"asl.library", 39);
+    if (DataTypesBase && AslBase) {
+        load_types();
+        rc = gui();
+    }
+    if (found) FreeVec(found);
+    found = NULL;
+    if (AslBase) CloseLibrary(AslBase);
+    if (DataTypesBase) CloseLibrary(DataTypesBase);
+    AslBase = DataTypesBase = NULL;
+    return rc;
+}
+#else
 int main(int argc, char **argv)
 {
     LONG a[10] = { 0 };
@@ -875,3 +932,4 @@ out:
     (void)version;
     return rc;
 }
+#endif
