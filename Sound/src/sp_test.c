@@ -21,7 +21,9 @@
 
 #include "sp_test.h"
 
+#ifndef IN_OPENBENCH                 /* inside OpenBench, a global of ours by this name could be another's: sp_ahi_modes has its own */
 struct Library *AHIBase;
+#endif
 extern struct GfxBase *GfxBase;
 
 /* ---- Paula ------------------------------------------------------------------------------- */
@@ -104,6 +106,9 @@ int sp_test_ahi(int unit)
 
 int sp_ahi_modes(ULONG *ids, char names[][48], int max)
 {
+#ifdef IN_OPENBENCH
+    struct Library *AHIBase;                 /* the Sound editor's own, for this call only */
+#endif
     struct MsgPort *port;
     struct AHIRequest *io;
     int n = 0;

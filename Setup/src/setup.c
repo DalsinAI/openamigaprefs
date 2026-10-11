@@ -24,6 +24,18 @@
  * FIRSTSTART (or being started from SYS:WBStartup) does nothing once Setup
  * has been finished or told not to come back.
  *
+ * Built into OpenBench (IN_OPENBENCH; the Team, 11 October 2026: the Open
+ * preferences in OpenBench natively) as OpenUp-Setup, it follows OpenBench's
+ * desktop/ob_builtin.h: dos, intuition, graphics and gadtools are OpenBench's;
+ * its globals are static, and its version string is left out (OpenDock's,
+ * built in too, is global); it starts as ob_builtin.c starts it, argc 0 and no
+ * WBStartup message, so it reads no arguments and writes nothing to Output(),
+ * and tells its first start without that message (from_wbstartup, below);
+ * Ctrl-C quits as Later does and Ctrl-F brings the window to the front; as its
+ * statics outlive a run, each run sets again the ones it counts on; and an
+ * editor's button starts that editor in OpenBench when it is built in too.
+ * The stand-alone OpenUp-Setup builds as before.
+ *
  * MIT, Copyright (c) 2026 Dalsin Limited. */
 #include <exec/types.h>
 #include <exec/memory.h>
@@ -43,7 +55,9 @@
 #include <stdlib.h>
 #include <stdio.h>
 
+#ifndef IN_OPENBENCH
 const char version[] __attribute__((used)) = "$VER: OpenUp-Setup 0.1.2 (10.10.2026) OpenPrefs, Dalsin Limited";
+#endif
 
 #define USER_STARTUP "S:User-Startup"
 #define BLOCK_BEGIN ";BEGIN OpenUp"
@@ -57,7 +71,11 @@ const char version[] __attribute__((used)) = "$VER: OpenUp-Setup 0.1.2 (10.10.20
 #define VIEW_ENV "ENV:OpenAmiga/PrefsView"
 #define VIEW_ENVARC "ENVARC:OpenAmiga/PrefsView"
 
+#ifdef IN_OPENBENCH
+int ob_builtin_open(const char *path);           /* OpenBench's: 1 when path names a built-in (started, or sent Ctrl-F) */
+#else
 extern struct WBStartup *_WBenchMsg;
+#endif
 
 /* ---- files -------------------------------------------------------------------------------- */
 
@@ -112,6 +130,9 @@ static const char *found(const char *path)
 static void run_tool(const char *path, const char *args)
 {
     char cmd[160];
+#ifdef IN_OPENBENCH
+    if (!args && ob_builtin_open(found(path))) return;   /* built into OpenBench too: started there */
+#endif
     snprintf(cmd, sizeof cmd, "Run >NIL: <NIL: \"%s\" %s", found(path), args ? args : "");
     SystemTags((STRPTR)cmd, TAG_DONE);
 }
@@ -624,7 +645,17 @@ static int gui(void)
 
     while (!quit) {
         struct IntuiMessage *m;
+#ifdef IN_OPENBENCH
+        /* OpenBench's Ctrl-C (it is quitting): as Later; its Ctrl-F (opened again): the window to the front */
+        ULONG got = Wait((1UL << win->UserPort->mp_SigBit) | SIGBREAKF_CTRL_C | SIGBREAKF_CTRL_F);
+        if (got & SIGBREAKF_CTRL_C) {
+            if (noshow) write_file(DONE_FILE, "OpenUp Setup: not shown at start\n", 33);
+            quit = 1;
+        }
+        if (got & SIGBREAKF_CTRL_F) { ScreenToFront(win->WScreen); WindowToFront(win); ActivateWindow(win); }
+#else
         WaitPort(win->UserPort);
+#endif
         while (!quit && (m = GT_GetIMsg(win->UserPort))) {
             ULONG cls = m->Class;
             UWORD code = m->Code;
@@ -685,6 +716,21 @@ out:
     return rc;
 }
 
+#ifdef IN_OPENBENCH
+/* Built into OpenBench there is no WBStartup message to look at (ob_builtin.c starts a built-in with argc 0),
+ * and SYS:WBStartup/OpenUp-Setup starts this built-in by its name, as SYS:Prefs/OpenUp-Setup does. But
+ * OpenBench opens what is in SYS:WBStartup as it starts, before it answers anything else (a drawer, the dock,
+ * the cog): so the first start in an OpenBench's run, with that icon in SYS:WBStartup, is the first start.
+ * Unlike the others, this static is meant to outlive a run: it starts again only with OpenBench. */
+static int started_before;
+
+static int from_wbstartup(void)
+{
+    int first = !started_before && exists("SYS:WBStartup/OpenUp-Setup.info");
+    started_before = 1;
+    return first;
+}
+#else
 /* Started from SYS:WBStartup: the first start. The tool itself there, or a
  * project icon there whose default tool is SYS:Prefs/OpenUp-Setup. */
 static int from_wbstartup(void)
@@ -698,10 +744,32 @@ static int from_wbstartup(void)
     }
     return 0;
 }
+#endif
 
 int main(int argc, char **argv)
 {
     int first = 0, rc;
+#ifdef IN_OPENBENCH
+    /* Built in, it starts as ob_builtin.c starts it: argc 0, argv NULL and no WBStartup message, so the
+     * window, as from Workbench, with nothing read from the Shell or written to Output(). Its statics outlive
+     * a run inside OpenBench: what a run counts on starts again here (but from_wbstartup's own). */
+    advanced = 0;
+    nprofiles = 0;
+    profile_sel = -1;
+    by_machine = 1;
+    nlines = 0;
+    line_sel = -1;
+    page = P_WELCOME;
+    noshow = 0;
+    lists_on = 0;
+    adv_on = 0;
+    say_limit = 0;
+    win = NULL;
+    nav_glist = NULL;
+    memset(gad, 0, sizeof gad);
+    memset(page_glist, 0, sizeof page_glist);
+    memset(adv_glist, 0, sizeof adv_glist);
+#endif
     if (argc > 0) {                              /* from the Shell */
         LONG args[2] = { 0, 0 };
         struct RDArgs *rd = ReadArgs((STRPTR)"FIRSTSTART/S,ADVANCED/S", args, NULL);

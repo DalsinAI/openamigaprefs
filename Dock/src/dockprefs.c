@@ -20,6 +20,15 @@
  * not on the dock yet, so OpenUp can add OpenFiles and OpenView to a dock
  * someone already has without touching the rest.
  *
+ * Built into OpenBench (IN_OPENBENCH; the Team, 11 October 2026: the Open preferences in OpenBench natively)
+ * as OpenDock, the name it is installed under in SYS:Prefs, it follows OpenBench's desktop/ob_builtin.h:
+ * icon.library is OpenBench's, never opened or closed here, and asl.library its own under its own name; its
+ * globals are static, and its version string is left out (OpenDock's, the dock built in beside it, is
+ * global); it starts as ob_builtin.c starts it, argc 0 and no WBStartup message, so it reads no arguments and
+ * writes nothing to Output(); Ctrl-C quits as Cancel does, a Test put back first, and Ctrl-F brings the
+ * window to the front; and as its statics outlive a run, each run sets again the ones it counts on. Its
+ * settings code, od_dock.c, is the dock's, linked once. The stand-alone Dock builds as before.
+ *
  * MIT, Copyright (c) 2026 Dalsin Limited. */
 #include <exec/types.h>
 #include <exec/memory.h>
@@ -45,7 +54,9 @@
 
 #include "od_dock.h"
 
+#ifndef IN_OPENBENCH
 const char version[] __attribute__((used)) = "$VER: OpenDock-Prefs 0.5.2 (10.10.2026) OpenPrefs, Dalsin Limited";
+#endif
 
 #define PREFS_ENV "ENV:OpenDock/Dock"
 #define PREFS_ENVARC "ENVARC:OpenDock/Dock"
@@ -53,7 +64,13 @@ const char version[] __attribute__((used)) = "$VER: OpenDock-Prefs 0.5.2 (10.10.
 #define VIEW_ENVARC "ENVARC:OpenAmiga/PrefsView"
 #define TEST_SECONDS 15
 
+#ifdef IN_OPENBENCH
+extern struct Library *IconBase;                 /* OpenBench's (ob_builtin.h) */
+#define AslBase dockprefs_AslBase                /* its own asl.library, under its own name */
+static struct Library *AslBase;
+#else
 struct Library *AslBase, *IconBase;
+#endif
 
 static od_dock cur, orig;                /* orig: what is in ENV: now, which Test and Cancel put back */
 static int advanced;
@@ -520,11 +537,21 @@ static int gui(void)
         struct IntuiMessage *m;
         ULONG tsig = timer ? 1UL << tport->mp_SigBit : 0;
         int switch_view = 0;
+#ifdef IN_OPENBENCH
+        ULONG got;
+#endif
         if (timer && test_until) {
             tr->tr_node.io_Command = TR_ADDREQUEST; tr->tr_time.tv_secs = 1; tr->tr_time.tv_micro = 0;
             SendIO((struct IORequest *)tr);
         }
+#ifdef IN_OPENBENCH
+        /* OpenBench's Ctrl-C (it is quitting): as Cancel, below, once the timer is back; its Ctrl-F (opened
+         * again): the window to the front */
+        got = Wait((1UL << win->UserPort->mp_SigBit) | tsig | SIGBREAKF_CTRL_C | SIGBREAKF_CTRL_F);
+        if (got & SIGBREAKF_CTRL_F) { ScreenToFront(win->WScreen); WindowToFront(win); ActivateWindow(win); }
+#else
         Wait((1UL << win->UserPort->mp_SigBit) | tsig);
+#endif
         if (timer && test_until) {
             if (!CheckIO((struct IORequest *)tr)) AbortIO((struct IORequest *)tr);
             WaitIO((struct IORequest *)tr);
@@ -539,6 +566,13 @@ static int gui(void)
                 status(status_text);
             }
         }
+#ifdef IN_OPENBENCH
+        if (got & SIGBREAKF_CTRL_C) {
+            if (test_until) go_back();
+            test_until = 0;
+            quit = 1;
+        }
+#endif
         while (!quit && !switch_view && (m = GT_GetIMsg(win->UserPort))) {
             ULONG cls = m->Class;
             UWORD code = m->Code;
@@ -647,8 +681,21 @@ int main(int argc, char **argv)
     struct RDArgs *rd = argc > 0 ? ReadArgs((STRPTR)"FROM/K,TOOLMANAGER/K,AMIDOCK/K,AMISTART/K,USE/S,SAVE/S,ADVANCED/S,ADD/M", args, NULL) : NULL;
     char *text, err[120];
     int rc = RETURN_OK, first;
+#ifdef IN_OPENBENCH
+    /* Built in, it starts as ob_builtin.c starts it: argc 0, argv NULL and no WBStartup message, so no
+     * arguments and no tooltypes; the window opens, as from Workbench, and nothing below reads the Shell or
+     * writes to Output(). Its statics outlive a run inside OpenBench: what a run counts on starts again here. */
+    advanced = 0;
+    sel = -1;
+    source = 0;
+    status_text[0] = 0;
+    test_until = 0;
+    win = NULL;
+#endif
     if (!rd && argc > 0) { PrintFault(IoErr(), (STRPTR)"Dock"); return RETURN_FAIL; }
+#ifndef IN_OPENBENCH
     IconBase = OpenLibrary((STRPTR)"icon.library", 37);
+#endif
     /* orig is always what ENV: holds now; FROM only fills the window */
     text = read_file(PREFS_ENV, NULL);
     first = !text && !exists(PREFS_ENVARC);
@@ -718,6 +765,8 @@ int main(int argc, char **argv)
     if (AslBase) CloseLibrary(AslBase);
 done:
     if (rd) FreeArgs(rd);
+#ifndef IN_OPENBENCH
     if (IconBase) CloseLibrary(IconBase);
+#endif
     return rc;
 }

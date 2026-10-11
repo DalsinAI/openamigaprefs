@@ -13,7 +13,9 @@
 
 #include "sp_amiga.h"
 
+#ifndef IN_OPENBENCH                 /* inside OpenBench, ExpansionBase is OpenBench's: sp_board has its own */
 struct ExpansionBase *ExpansionBase;
+#endif
 
 /* the board: protocol acahi-v1 (vendor/amigachrome-guest common/protocol/acahi.h) */
 #define ACAHI_MANUFACTURER     0xDA15
@@ -29,6 +31,9 @@ struct ExpansionBase *ExpansionBase;
 
 volatile ULONG *sp_board(void)
 {
+#ifdef IN_OPENBENCH
+    struct ExpansionBase *ExpansionBase;     /* the Sound editor's own, for this call only */
+#endif
     struct ConfigDev *cd = NULL;
     volatile ULONG *b = NULL;
     if (!(ExpansionBase = (struct ExpansionBase *)OpenLibrary((STRPTR)"expansion.library", 37))) return NULL;

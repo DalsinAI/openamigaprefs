@@ -22,6 +22,13 @@
  * "Gamepads USE" at boot (OpenUp's startup) starts openinput.library, so
  * the ReadJoyPort patch is in when it is switched on.
  *
+ * Built into OpenBench as OpenGamepads (the Team, 11 October 2026: the Open preferences in OpenBench
+ * natively) with -DIN_OPENBENCH, as openamigabench desktop/ob_builtin.h says: OpenBench starts it as
+ * a process of its own with no arguments, as Workbench starts a tool, so it is the window; Ctrl-C is
+ * Cancel, Ctrl-F brings the window to the front; openinput.library is opened under this editor's own
+ * name, and the pad it holds is let go as it quits; each start begins as a new program would, since
+ * OpenBench's data stays from one start to the next.
+ *
  * MIT, Copyright (c) 2026 Dalsin Limited. */
 #include <exec/types.h>
 #include <exec/memory.h>
@@ -49,9 +56,16 @@
 #include "gp_pad.h"
 #include "gp_draw.h"
 
+#ifdef IN_OPENBENCH
+/* inside OpenBench, OpenBench's $VER is the one; a global OpenInputBase could be another built-in's:
+ * every OpenInputBase below, and in openinput.library's calls, is this editor's own */
+static struct Library *gamepads_openinput;
+#define OpenInputBase gamepads_openinput
+#else
 const char version[] __attribute__((used)) = "$VER: Gamepads 0.2 (9.10.2026) OpenPrefs, Dalsin Limited";
 
 struct Library *OpenInputBase;
+#endif
 
 #define VIEW_ENV "ENV:OpenAmiga/PrefsView"           /* shared by every OpenPrefs editor: simple or advanced */
 #define VIEW_ENVARC "ENVARC:OpenAmiga/PrefsView"
@@ -848,7 +862,14 @@ static int gui_once(void)
     sigs = 1UL << win->UserPort->mp_SigBit | (oiport ? 1UL << oiport->mp_SigBit : 0);
     while (!quit) {
         struct IntuiMessage *m;
+#ifdef IN_OPENBENCH
+        /* inside OpenBench: Ctrl-C (OpenBench is quitting) is Cancel; Ctrl-F (opened again) to the front */
+        ULONG got = Wait(sigs | SIGBREAKF_CTRL_C | SIGBREAKF_CTRL_F);
+        if (got & SIGBREAKF_CTRL_C) { put_back(); quit = 1; continue; }
+        if (got & SIGBREAKF_CTRL_F) { ScreenToFront(win->WScreen); WindowToFront(win); ActivateWindow(win); }
+#else
         Wait(sigs);
+#endif
         handle_messages();
         while (!quit && (m = GT_GetIMsg(win->UserPort))) {
             ULONG cls = m->Class;
@@ -962,6 +983,37 @@ out:
     return rc;
 }
 
+#ifdef IN_OPENBENCH
+/* OpenBench's data stays from one start to the next: what a new start finds, not the last one's (the
+ * port, the notifications and the pad were let go as the last one quit; a missing library this time
+ * must not leave have_lib set) */
+static void fresh_start(void)
+{
+    tested = 0;
+    have_lib = 0;
+    npads = 0;
+    sel_id = 0;
+    memset(&sel, 0, sizeof sel);
+    sel_gone = 0;
+    handle = NULL;
+    memset(&st, 0, sizeof st);
+    memset(&raw, 0, sizeof raw);
+    last_seq = 0xFFFFFFFF;
+    oiport = NULL;
+    notify_all = notify_state = NULL;
+    nchanges = 0;
+    map_step = -1;
+    map_wait_release = 0;
+    skip_shown = 1;                                   /* Skip is in the gadget list as it is made */
+    view = NULL;
+    view_dirty = 1;
+    dead_zone = -1;
+    status_text[0] = 0;
+    other_text[0] = 0;
+    raw_text[0] = 0;
+}
+#endif
+
 int main(int argc, char **argv)
 {
     LONG args[3] = { 0, 0, 0 };
@@ -971,6 +1023,9 @@ int main(int argc, char **argv)
     int rc = RETURN_OK;
     (void)argv;
     if (!rd && argc > 0) { PrintFault(IoErr(), (STRPTR)"Gamepads"); return RETURN_FAIL; }
+#ifdef IN_OPENBENCH
+    fresh_start();
+#endif
     if ((OpenInputBase = OpenLibrary((STRPTR)OPENINPUT_NAME, OPENINPUT_VERSION)))
         have_lib = OpenInputBase->lib_Version > 1 || OpenInputBase->lib_Revision >= OPENINPUT_REVISION_CORE;
     load_settings(&cur);
