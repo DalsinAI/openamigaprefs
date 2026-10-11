@@ -34,6 +34,7 @@
 static ogt_theme pt_theme;
 static int pt_ok;
 static ogt_rgb pt_fill, pt_text, pt_frame, pt_hot, pt_hot_text;
+static int pt_mode;                               /* the theme's mode the colours are from: OGT_LIGHT or OGT_DARK */
 static LONG pt_pens[4] = { -1, -1, -1, -1 };      /* text, frame, accent text, accent */
 static struct Screen *pt_scr;
 
@@ -86,6 +87,7 @@ static PT_UNUSED int pt_load(struct Screen *scr)
     if (!(text = pt_read(path))) return 0;
     if (ogt_theme_parse(&pt_theme, text, err, sizeof err)) {
         int m = dark && pt_theme.has_dark ? OGT_DARK : OGT_LIGHT;
+        pt_mode = m;
         pt_ok = !pt_theme.passthrough && ogt_theme_colour(&pt_theme, m, "menu", &pt_fill) && ogt_theme_colour(&pt_theme, m, "menu.text", &pt_text) &&
                 ogt_theme_colour(&pt_theme, m, "frame.active", &pt_frame) && ogt_theme_colour(&pt_theme, m, "accent", &pt_hot) &&
                 ogt_theme_colour(&pt_theme, m, "accent.text", &pt_hot_text);
@@ -119,6 +121,9 @@ static PT_UNUSED void pt_panel(struct RastPort *rp, WORD w, WORD h)
         Move(rp, 0, 0); Draw(rp, w - 1, 0); Draw(rp, w - 1, h - 1); Draw(rp, 0, h - 1); Draw(rp, 0, 0);
     }
 }
+
+/* another of the theme's colours in its mode (OpenSpeaker: "screenbar"); 0 when there is no theme or no such key */
+static PT_UNUSED int pt_colour(const char *key, ogt_rgb *out) { return pt_ok && ogt_theme_colour(&pt_theme, pt_mode, key, out); }
 
 /* the pens: panel text, frame, text on the accent, the accent; or -1 */
 static PT_UNUSED LONG pt_text_pen(void) { return pt_ok ? pt_pens[0] : -1; }
