@@ -25,6 +25,16 @@
  *                    to show it; Ctrl-C quits, Ctrl-F reads the settings
  *                    again and quits when the speaker is switched off)
  *
+ * 0.1.3 (the Team, 11 October 2026: the speaker's "55%" was seen in a white
+ * box on the black bar): on the screen's title bar it is always painted in
+ * the bar's own colour, never the bar pen's white. When reading the bar's
+ * colour fails it keeps the colours last read well, or the theme's screenbar
+ * colour before any reading has worked (Common/barpaint.h, bp_paint_kept()).
+ * While its levels are open it shows pressed in a lighter shade of the bar,
+ * not the fill pen's white. When the bar's height changes (OpenLook makes it
+ * taller as it starts) its window is made again for the new height, as
+ * OpenTitle 0.6.11's are.
+ *
  * MIT, Copyright (c) 2026 Dalsin Limited. */
 #include <exec/types.h>
 #include <exec/memory.h>
@@ -58,7 +68,7 @@
 #include "popuptheme.h"
 #include "barpaint.h"
 
-const char version[] __attribute__((used)) = "$VER: OpenSpeaker 0.1.2 (10.10.2026) OpenPrefs, Dalsin Limited";
+const char version[] __attribute__((used)) = "$VER: OpenSpeaker 0.1.3 (11.10.2026) OpenPrefs, Dalsin Limited";
 
 struct IntuitionBase *IntuitionBase;
 struct Library *CyberGfxBase;
@@ -84,6 +94,7 @@ static struct Screen *scr;
 static struct DrawInfo *dri;
 static struct Window *spk;                   /* the speaker */
 static WORD sx, sy, sw, sh;
+static WORD made_bh;                         /* 0.1.3: the bar's height the speaker's window was made for */
 
 static struct Window *pop;                   /* its levels */
 static int wb_down;                         /* Workbench is shutting down or shut: 1 our windows are closed, 2 to open them again */
@@ -127,24 +138,45 @@ static int levels_in(void)
 
 /* ---- the speaker -------------------------------------------------------------------------------- */
 
-static int bar_pens(UWORD *fg, UWORD *bg)
+#define PRESSED_SHADE 56                     /* while the levels are open: 56/256 of the way to white on a dark bar */
+
+/* The theme's colour for the bar (its screenbar), ARGB; 0 with no theme. */
+static ULONG theme_bar(void)
 {
-    if (pop) { *fg = dri->dri_Pens[FILLTEXTPEN]; *bg = dri->dri_Pens[FILLPEN]; return 1; }
-    *fg = bp_text_pen(scr, dri->dri_Pens[BARDETAILPEN]); *bg = dri->dri_Pens[BARBLOCKPEN];
-    return 0;
+    ogt_rgb c;
+    return pt_colour("screenbar", &c) ? pt_argb(c) : 0;
+}
+
+/* The speaker's background, and the pen for it on that. On the screen's title bar: the bar's own colour, a shade
+ * lighter while the levels are open, never the bar pen's white (0.1.3). On OpenMenus' own bar: its pen, as before,
+ * and the theme's accent (or the fill pen without a theme) while the levels are open. */
+static LONG paint_back(void)
+{
+    struct RastPort *rp = spk->RPort;
+    if (bar_edge == OM_BAR_TITLE) {
+        ULONG keep = theme_bar();
+        int shade = pop ? PRESSED_SHADE : 0;
+        bp_paint_kept(spk, keep, dri->dri_Pens[BARBLOCKPEN], 0, 0, sw, sh, shade);
+        return bp_text_pen_kept(scr, keep, shade, dri->dri_Pens[BARDETAILPEN]);
+    }
+    if (pop) {
+        SetAPen(rp, pt_ok ? pt_hot_pen() : dri->dri_Pens[FILLPEN]);
+        RectFill(rp, 0, 0, sw - 1, sh - 1);
+        return pt_ok ? pt_hot_text_pen() : dri->dri_Pens[FILLTEXTPEN];
+    }
+    bp_paint(spk, dri->dri_Pens[BARBLOCKPEN], 0, 0, sw, sh);
+    return bp_text_pen(scr, dri->dri_Pens[BARDETAILPEN]);
 }
 
 static void draw_speaker(void)
 {
     struct RastPort *rp;
-    UWORD fg, bg;
+    LONG fg;
     char t[8];
     WORD cy, x, h;
     if (!spk) return;
     rp = spk->RPort;
-    bar_pens(&fg, &bg);
-    if (pop) { SetAPen(rp, bg); RectFill(rp, 0, 0, sw - 1, sh - 1); }
-    else bp_paint(spk, bg, 0, 0, sw, sh);                       /* the bar's own colour, not the pen's white */
+    fg = paint_back();
     SetAPen(rp, fg);
     h = sh;                                                      /* the bar's rows: the line under them isn't ours */
     cy = h / 2;
@@ -160,7 +192,6 @@ static void draw_speaker(void)
     }
     if (cur.muted) strcpy(t, "Mute");
     else snprintf(t, sizeof t, "%d%%", cur.volume);
-    SetBPen(rp, bg);
     SetDrMd(rp, JAM1);
     Move(rp, x + 17, (h - rp->TxHeight) / 2 + rp->TxBaseline);
     Text(rp, (STRPTR)t, strlen(t));
@@ -275,6 +306,7 @@ static int open_speaker(void)
     struct Screen *s = LockPubScreen((STRPTR)"Workbench");
     if (!s) return 0;
     scr = s;
+    made_bh = s->BarHeight;
     if ((dri = GetScreenDrawInfo(s))) {
         bar_edge = read_bar_edge();
         pt_load(s);
@@ -576,6 +608,12 @@ int main(void)
         }
         if (CheckIO((struct IORequest *)tr)) {
             WaitIO((struct IORequest *)tr);
+            /* 0.1.3: the bar changed height (OpenLook makes it taller as it starts): the speaker made again for it */
+            if (spk && !wb_down && scr->BarHeight != made_bh) {
+                if (pop) pop_close(0);
+                close_speaker();
+                if (!open_speaker()) wb_down = 2;    /* tried again as Workbench's return is */
+            }
             if (levels_in()) { draw_speaker(); if (pop) pop_show(); }
             if (save_in && !--save_in) sp_save_levels(&cur, 1);
             if (++ticks % 10 == 0 && !pop && !wb_down) {                 /* every 2 s: OpenMenus' bar moved? */
