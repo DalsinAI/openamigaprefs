@@ -33,6 +33,8 @@
  * pointer, shows their help under them and tells the program of a click.
  * Tata is the first.
  *
+ * 0.6.13 (11 October 2026): the cog asks OpenBench first (Common/obmsg.h), so an editor built into OpenBench
+ *   runs there; Workbench's OpenWorkbenchObject, then Run, when OpenBench isn't running.
  * 0.6.12 (11 October 2026): the title's room for the logo is worked out from the logo's width and the bar's
  *   font (Common/barlogo.h, shared with OpenBench), and made again when the bar changes height: the bigger
  *   logo covered the title's first letter. The cores say what they run: "+ 8 (m68k)", "+ 8 (m68k, x86-64)".
@@ -97,8 +99,9 @@
 #include "popuptheme.h"
 #include "cogplace.h"
 #include "barlogo.h"
+#include "obmsg.h"
 
-const char version[] __attribute__((used)) = "$VER: OpenTitle 0.6.12 (11.10.2026) OpenPrefs, Dalsin Limited";
+const char version[] __attribute__((used)) = "$VER: OpenTitle 0.6.13 (11.10.2026) OpenPrefs, Dalsin Limited";
 
 struct IntuitionBase *IntuitionBase;
 struct GfxBase *GfxBase;
@@ -1082,6 +1085,7 @@ static void cog_start(const char *path)
     BPTR in, out;
     char cmd[80];
     cog_arm();
+    if (ob_open(path) > 0) return;                     /* 0.6.13: OpenBench opens it (a built-in runs inside it) */
     if (!WorkbenchBase) WorkbenchBase = OpenLibrary((STRPTR)"workbench.library", 44);
     if (WorkbenchBase && OpenWorkbenchObjectA((STRPTR)path, NULL)) return;
     if (!strcmp(path, "SYS:Prefs")) return;             /* a drawer needs Workbench */

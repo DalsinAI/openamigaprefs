@@ -1499,7 +1499,9 @@ int main(void)
                     struct MenuItem *it = ItemAddress(menus, code);
                     if (!it) break;
                     switch ((ULONG)GTMENUITEM_USERDATA(it)) {
-                    case M_PREFS: SystemTags((STRPTR)"Run >NIL: " DOCK_PREFS, TAG_DONE); break;
+                    case M_PREFS:                   /* through OpenBench first: its editor is built in there */
+                        if (ob_open(DOCK_PREFS) <= 0) SystemTags((STRPTR)"Run >NIL: " DOCK_PREFS, TAG_DONE);
+                        break;
                     case M_REMOVE: removing = 1; break;
                     case M_QUIT: quit = 1; break;
                     }
