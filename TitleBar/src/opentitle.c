@@ -87,13 +87,14 @@
 #include "tb_prefs.h"
 #include "om_prefs.h"
 #include "logo.h"
+#include "logo_big.h"
 #include "taskspace.h"
 #include "barpaint.h"
 #include "wbclose.h"
 #include "popuptheme.h"
 #include "cogplace.h"
 
-const char version[] __attribute__((used)) = "$VER: OpenTitle 0.6.10 (11.10.2026) OpenPrefs, Dalsin Limited";
+const char version[] __attribute__((used)) = "$VER: OpenTitle 0.6.11 (11.10.2026) OpenPrefs, Dalsin Limited";
 
 struct IntuitionBase *IntuitionBase;
 struct GfxBase *GfxBase;
@@ -116,7 +117,7 @@ struct Library *LayersBase, *UtilityBase, *SocketBase, *WorkbenchBase, *CyberGfx
 #define TITLE_MEM_068 "Workbench %r  Chip %mcek KB  Fast %mfek KB"   /* OpenTitle 0.6.3 to 0.6.8: still ours */
 #define TITLE_MEM_062 "Workbench %r  Chip %mcek KB  Fast %mfem MB"   /* OpenTitle 0.6.2 and before */
 #define TITLE_PLAIN_068 "Amiga Workbench %r"
-#define LOGO_PAD   "    "                      /* room for the logo before Workbench's title */
+#define LOGO_PAD   "         "                 /* room for the logo before Workbench's title (0.6.11: the bigger logo) */
 
 static tb_prefs prefs;
 static struct Screen *scr;
@@ -458,11 +459,70 @@ static void free_pens(void)
 
 #define LOGO_W 17                              /* the logo's window: the logo is 16 wide, its picture 15 */
 
+/* 0.6.11 (the Team, 11 October 2026: "bigger ... aspect correct but 2 pixels smaller than the title bar and
+ * centre aligned"): the logo at the bar's height less 2, its width to match, a pixel's gap above and below,
+ * each pixel the average of the ones of logo_big it covers, laid over the bar's own colour by its alpha.
+ * Needs cybergraphics (the bar's colours); else the 16 x 16 picture as before. */
+static WORD logo_size(WORD bar_h, WORD *w)
+{
+    WORD h = bar_h - 2;
+    if (h > LOGO_BIG_H) h = LOGO_BIG_H;
+    if (h < 8) h = 8;
+    *w = (WORD)((h * LOGO_BIG_W + LOGO_BIG_H / 2) / LOGO_BIG_H);
+    return h;
+}
+
+static WORD logo_window_w(void)
+{
+    WORD w;
+    if (!CyberGfxBase || !bp_n) return LOGO_W;
+    logo_size(scr->BarHeight, &w);
+    return w + 4;
+}
+
+static int draw_logo_big(void)
+{
+    static ULONG row[LOGO_BIG_W + 8];
+    struct RastPort *rp = logo_w->RPort;
+    WORD th, tw, x, y, top;
+    if (!CyberGfxBase || !bp_n) return 0;
+    th = logo_size(logo_w->Height, &tw);
+    if (tw + 4 > logo_w->Width) return 0;
+    top = (logo_w->Height - th) / 2;
+    for (y = 0; y < logo_w->Height; y++) {
+        WORD sy = logo_w->TopEdge + y;
+        ULONG bar = bp_rgb[sy < 0 ? 0 : sy >= bp_n ? bp_n - 1 : sy];
+        for (x = 0; x < logo_w->Width; x++) row[x] = bar;
+        if (y >= top && y < top + th) {
+            LONG y0 = (LONG)(y - top) * LOGO_BIG_H / th, y1 = (LONG)(y - top + 1) * LOGO_BIG_H / th;
+            if (y1 <= y0) y1 = y0 + 1;
+            for (x = 0; x < tw; x++) {
+                LONG x0 = (LONG)x * LOGO_BIG_W / tw, x1 = (LONG)(x + 1) * LOGO_BIG_W / tw, i, j, n = 0;
+                ULONG a = 0, r = 0, g = 0, b = 0, br = (bar >> 16) & 255, bg = (bar >> 8) & 255, bb = bar & 255;
+                if (x1 <= x0) x1 = x0 + 1;
+                for (j = y0; j < y1; j++)
+                    for (i = x0; i < x1; i++) {
+                        ULONG p = logo_big[j * LOGO_BIG_W + i], pa = p >> 24;
+                        a += pa; r += ((p >> 16) & 255) * pa; g += ((p >> 8) & 255) * pa; b += (p & 255) * pa; n++;
+                    }
+                if (!a) continue;
+                /* the average colour (by alpha) over the bar, by the average alpha */
+                r /= a; g /= a; b /= a; a /= n;
+                r = (r * a + br * (255 - a) + 127) / 255; g = (g * a + bg * (255 - a) + 127) / 255; b = (b * a + bb * (255 - a) + 127) / 255;
+                row[2 + x] = 0xff000000UL | (r << 16) | (g << 8) | b;
+            }
+        }
+        WritePixelArray(row, 0, 0, logo_w->Width * 4, rp, 0, y, logo_w->Width, 1, RECTFMT_ARGB);
+    }
+    return 1;
+}
+
 static void draw_logo(void)
 {
     struct RastPort *rp;
     WORD x, y, oy;
     if (!logo_w) return;
+    if (draw_logo_big()) return;
     rp = logo_w->RPort;
     bar_paint(logo_w, 0, 0, logo_w->Width, logo_w->Height);
     /* the picture as it is (16 x 16, rows 4 to 12 used), its used rows centred in the bar's colour rows */
@@ -1357,9 +1417,12 @@ static void close_all(void)
     if (scr) { UnlockPubScreen(NULL, scr); scr = NULL; }
 }
 
+static WORD made_bh;                           /* 0.6.11: the bar's height the windows were made for */
+
 static int open_all(void)
 {
     if (!(scr = LockPubScreen((STRPTR)"Workbench"))) return 0;
+    made_bh = scr->BarHeight;
     if (!(dri = GetScreenDrawInfo(scr))) { close_all(); return 0; }
     bar_edge = read_bar_edge();
     bar_sample_now();
@@ -1457,7 +1520,7 @@ static void logo_follow(void)
     int want = prefs.logo && wb_title_shown();
     if (want && !logo_w) {
         bar_sample_now();
-        if ((logo_w = bar_window(0, 0, LOGO_W, scr->BarHeight))) draw_logo();
+        if ((logo_w = bar_window(0, 0, logo_window_w(), scr->BarHeight))) draw_logo();
     } else if (!want && logo_w) {
         CloseWindow(logo_w);
         logo_w = NULL;
@@ -1577,6 +1640,8 @@ int main(void)
         if (waited < 500) continue;
         waited = 0;                            /* every half second, as before */
         if (pop_w && ++pop_ticks > 20) pop_close();     /* the panel goes after 10 s */
+        /* 0.6.11: the bar changed height (OpenLook makes it taller as it starts): every window made again */
+        if (scr && scr->BarHeight != made_bh) { close_all(); if (!open_all()) break; }
         logo_follow();
         draw_clock(0);
         if (++tick % 4 == 0) {                 /* every 2 s: the tray and OpenMenus' bar may have moved */
