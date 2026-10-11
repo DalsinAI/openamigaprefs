@@ -118,6 +118,21 @@ Picasso96 guides, Help) and of 16 default icons to OpenView.
 - `tests/check_stricmp_a6.py` builds OpenTypes and fails when any call of
   Stricmp in the machine code is made with another A6 than UtilityBase.
 
+### 4d. OpenTypes 0.2.3 (11 October 2026): its own stack
+
+Started from a Shell (`OpenTypes`, `Run >NIL: OpenTypes`, a script), OpenTypes
+got the Shell's 4 KB of stack. The window worked, but closing it (Cancel, Save,
+Use or the close gadget) rebooted the machine every time: the window's calls
+(Intuition and GadTools, with OpenLook and OpenWindows patched in on the same
+stack) had run past the end of the 4 KB, and the damaged memory list was found
+when the stack was given back. `OpenTypes LIST` on 4 KB, and the window on
+64 KB, exit cleanly.
+
+- `opentypes.c` sets `__stack` to 32 KB, so libnix's start code swaps to a
+  stack of its own when started with less (the practice in amigachrome's
+  `docs/AMIGA_OS3_APPLICATION_PRACTICE.md`, section 2). The OpenBench build
+  (IN_OPENBENCH) runs on OpenBench's stack and is unchanged.
+
 ## 5. Phases
 
 | Phase | Delivers | Done when |
