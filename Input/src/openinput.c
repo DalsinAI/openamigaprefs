@@ -15,6 +15,12 @@
  * reads it at once); Cancel changes nothing. Everything else in the file is
  * kept as it was.
  *
+ * Built into OpenBench (the Team, 11 October 2026: the Open preferences in OpenBench natively) with
+ * -DIN_OPENBENCH, as openamigabench desktop/ob_builtin.h says: OpenBench starts it as a process of its
+ * own with no arguments, as Workbench starts a tool, so it is the window; Ctrl-C is Cancel, Ctrl-F
+ * brings the window to the front; utility.library is opened under this editor's own name; Gamepads...
+ * asks OpenBench to open SYS:Prefs/OpenGamepads (Common/obmsg.h), its built-in too.
+ *
  * MIT, Copyright (c) 2026 Dalsin Limited. */
 #include <exec/types.h>
 #include <exec/memory.h>
@@ -35,9 +41,20 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+#ifdef IN_OPENBENCH
+#include "obmsg.h"
+#endif
+
 static const char version[] __attribute__((used)) = "$VER: OpenInput 0.1.1 (10.10.2026) OpenPrefs, MIT, Copyright (c) 2026 Dalsin Limited";
 
+#ifdef IN_OPENBENCH
+/* inside OpenBench, a global UtilityBase could be another built-in's: every UtilityBase below, and in
+ * utility.library's calls, is this editor's own */
+static struct Library *openinput_utility;
+#define UtilityBase openinput_utility
+#else
 struct Library *UtilityBase;
+#endif
 
 #define INPUT_ENV "ENV:Sys/input.prefs"
 #define INPUT_ENVARC "ENVARC:Sys/input.prefs"
@@ -264,6 +281,10 @@ static int put_in_place(int save)
 /* The Gamepads editor, started on its own; this window stays. */
 static void gamepads(void)
 {
+#ifdef IN_OPENBENCH
+    /* inside OpenBench: OpenBench opens it, as its built-in (or to the front when it runs already) */
+    if (ob_open(GAMEPADS) != 1) status("Couldn't start SYS:Prefs/OpenGamepads.");
+#else
     BPTR in = Open((STRPTR)"NIL:", MODE_OLDFILE), out = Open((STRPTR)"NIL:", MODE_NEWFILE);
     if (!in || !out || SystemTags((STRPTR)"\"" GAMEPADS "\"", SYS_Input, in, SYS_Output, out, SYS_Asynch, TRUE,
                                   SYS_UserShell, TRUE, NP_StackSize, 16384, TAG_DONE) == -1) {
@@ -271,6 +292,7 @@ static void gamepads(void)
         if (out) Close(out);
         status("Couldn't start SYS:Prefs/OpenGamepads.");
     }
+#endif
 }
 
 static struct NewMenu menus[] = {
@@ -363,7 +385,14 @@ static int gui(void)
 
     while (!quit) {
         struct IntuiMessage *m;
+#ifdef IN_OPENBENCH
+        /* inside OpenBench: Ctrl-C (OpenBench is quitting) is Cancel; Ctrl-F (opened again) to the front */
+        ULONG got = Wait(1UL << win->UserPort->mp_SigBit | SIGBREAKF_CTRL_C | SIGBREAKF_CTRL_F);
+        if (got & SIGBREAKF_CTRL_C) { quit = 1; continue; }
+        if (got & SIGBREAKF_CTRL_F) { ScreenToFront(win->WScreen); WindowToFront(win); ActivateWindow(win); }
+#else
         WaitPort(win->UserPort);
+#endif
         while (!quit && (m = GT_GetIMsg(win->UserPort))) {
             ULONG cls = m->Class;
             UWORD code = m->Code;
@@ -423,6 +452,10 @@ int main(int argc, char **argv)
     } else rc = gui();
     if (rd) FreeArgs(rd);
     if (file_data) FreeVec(file_data);
+#ifdef IN_OPENBENCH
+    file_data = NULL;                            /* OpenBench's data stays: the next start must not free it again */
+    file_len = 0;
+#endif
     CloseLibrary(UtilityBase);
     return rc;
 }
