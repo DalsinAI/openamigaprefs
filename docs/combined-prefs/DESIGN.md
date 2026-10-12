@@ -173,6 +173,8 @@ P1
 
 Done when: a theme, a font and a backdrop changed in Appearance survive a reboot on a scratch OS 3.2.3 instance, and the Classic Font editor shows the same font.
 
+**Status, 12 October 2026: built as OpenLook 1.1** (`Look/DESIGN.md`). Appearance is OpenLook's one window with ten tabs: Theme, Pointer, Fonts, Colours, Backdrops, Workbench and File requesters, then Windows, Title bar and Menus. The six new tabs share one frame (Simple and Advanced; Save, Use, Test and Cancel) and one PREF reader and writer (iffparse.library; host tests), write only a file whose bytes change, and carry every chunk and byte they don't know. Done when met in a lab copied from Instance-32: a theme, a screen font and a backdrop saved in OpenLook were there after the lab was stopped and started, and the Classic Font editor showed the same font; the files the tabs write are the bytes OS 3.2.3's own editors write for the same settings (the Pointer editor differs only in its reserved fields). Still to do: the pointer's acceleration (question 2 of the 10 October revision, and question 3 of OpenInput's `Design-Pointer-Acceleration.md`), drawing a pointer, the one Simple page for Appearance, and ReAction's look.
+
 P2
 
 ### Desktop

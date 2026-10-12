@@ -17,6 +17,10 @@ CF="-noixemul -m68020 -std=gnu99 -Wall -Werror -O2 -fno-delete-null-pointer-chec
 "$CC" $CF -Dmain=windows_main -Dversion=windows_version -c -o "$OUT/one/windows.o" "$P/Windows/src/windows.c"
 "$CC" $CF -Dmain=titlebar_main -Dversion=titlebar_version -I"$P/TitleBar/src" -I"$P/TitleBar/include" -c -o "$OUT/one/titlebar.o" "$P/TitleBar/src/titlebar.c"
 "$CC" $CF -Dmain=menus_main -Dversion=menus_version -I"$P/Menus/src" -c -o "$OUT/one/menus.o" "$P/Menus/src/menus.c"
+# Appearance's tabs (OpenLook 1.1): Pointer, Fonts, Colours, Backdrops, Workbench, File requesters, and the PREF
+# reader and writer they share (pf_*.c; host tests in Look/tests/run.sh)
+"$CC" $CF -c -o "$OUT/one/appearance.o" "$HERE/src/appearance.c"
 "$CC" $CF -I"$P/Menus/src" -o "$OUT/OpenLook" "$HERE/src/openlookprefs.c" "$OUT/one/look.o" "$OUT/one/windows.o" "$OUT/one/titlebar.o" \
-    "$OUT/one/menus.o" "$P/Menus/src/om_prefs.c" "$OGT/lib/ogt_theme.c"
+    "$OUT/one/menus.o" "$OUT/one/appearance.o" "$HERE/src/pf_iff.c" "$HERE/src/pf_prefs.c" "$HERE/src/pf_amiga.c" \
+    "$P/Menus/src/om_prefs.c" "$OGT/lib/ogt_theme.c"
 echo "$OUT/OpenLook ($(wc -c < "$OUT/OpenLook") bytes)"

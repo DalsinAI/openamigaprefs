@@ -37,7 +37,7 @@
 #include <stdlib.h>
 #include "../../Common/looktabs.h"
 
-static const char version[] __attribute__((used)) = "$VER: Windows 0.6.3 (10.10.2026) OpenPrefs, MIT, Copyright (c) 2026 Dalsin Limited";
+static const char version[] __attribute__((used)) = "$VER: Windows 0.6.4 (12.10.2026) OpenPrefs, MIT, Copyright (c) 2026 Dalsin Limited";
 
 #define PREFS_ENV "ENV:OpenPrefs/Windows"
 #define PREFS_ENVARC "ENVARC:OpenPrefs/Windows"
@@ -271,7 +271,7 @@ static int gui_once(void)
     APTR vi = scr ? GetVisualInfoA(scr, NULL) : NULL;
     struct Gadget *glist = NULL, *g;
     struct NewGadget ng;
-    int fh, lh, top, row, quit = 0, rc = 1, W = 480, X = 200, i, wl = 60, wt;
+    int fh, lh, top, row, quit = 0, rc = 1, W = 480, X = 200, i, wl = 60, wt, sp;
     struct Menu *menu = NULL;
     if (!vi) { if (scr) UnlockPubScreen(NULL, scr); return -1; }
     memset(gad, 0, sizeof gad);
@@ -293,38 +293,39 @@ static int gui_once(void)
     (ng.ng_LeftEdge = (x), ng.ng_TopEdge = (y), ng.ng_Width = (w), ng.ng_Height = (h), ng.ng_GadgetText = (STRPTR)(text), \
      ng.ng_Flags = (flags), ng.ng_GadgetID = (id), g = gad[id] = CreateGadget(kind, g, &ng, __VA_ARGS__, TAG_DONE))
 
+    sp = scr->Height < 400 ? 2 : 4;                  /* the rows closer on a 256-line screen, so the page fits it */
     g = lt_make(g, &ng, 10, top, W - 20, lh, LT_WINDOWS);
-    row = top + lh + 8;                              /* below the tabs (looktabs.h) */
+    row = top + lt_space(scr->Font, W - 20, lh) + 8; /* below the tabs (looktabs.h): one row, or two */
     G(CHECKBOX_KIND, G_SNAP, X, row, 26, lh, "Snap to edges", PLACETEXT_LEFT, GTCB_Scaled, TRUE);
     if (advanced) G(INTEGER_KIND, G_DIST, X + 160, row, 50, lh, "within", PLACETEXT_LEFT, GTIN_MaxChars, 2);
-    row += lh + 4;
+    row += lh + sp;
     if (advanced) { G(CHECKBOX_KIND, G_HALVES, X, row, 26, lh, "Fill a half", PLACETEXT_LEFT, GTCB_Scaled, TRUE); row += lh + 10; }
     G(CHECKBOX_KIND, G_SWITCH, X, row, 26, lh, "Window switcher", PLACETEXT_LEFT, GTCB_Scaled, TRUE);
     if (advanced) G(STRING_KIND, G_KEY, X + 100, row, 160, lh, "key", PLACETEXT_LEFT, GTST_MaxChars, 46);
-    row += lh + (advanced ? 10 : 4);
-    G(CHECKBOX_KIND, G_WHEEL, X, row, 26, lh, "Wheel under pointer", PLACETEXT_LEFT, GTCB_Scaled, TRUE); row += lh + 4;
+    row += lh + (advanced ? 10 : sp);
+    G(CHECKBOX_KIND, G_WHEEL, X, row, 26, lh, "Wheel under pointer", PLACETEXT_LEFT, GTCB_Scaled, TRUE); row += lh + sp;
     /* a long label: the box in the column with its words after it */
     G(CHECKBOX_KIND, G_DBLFRONT, X, row, 26, lh, "Double-click a title bar to bring the window to the front", PLACETEXT_RIGHT,
       GTCB_Scaled, TRUE);
-    row += lh + 4;
+    row += lh + sp;
     G(CHECKBOX_KIND, G_EDGES, X, row, 26, lh, "Resize a window from any edge but its title bar", PLACETEXT_RIGHT,
       GTCB_Scaled, TRUE);
-    row += lh + 4;
+    row += lh + sp;
     G(CHECKBOX_KIND, G_SOLID, X, row, 26, lh, "Drag windows with their contents, not an outline", PLACETEXT_RIGHT, GTCB_Scaled, TRUE);
-    row += lh + 4;
+    row += lh + sp;
     G(CHECKBOX_KIND, G_DRIVETITLE, X, row, 26, lh, "Drive windows titled with the name only", PLACETEXT_RIGHT, GTCB_Scaled, TRUE);
-    row += lh + (advanced ? 10 : 4);
+    row += lh + (advanced ? 10 : sp);
     G(CHECKBOX_KIND, G_PLACES, X, row, 26, lh, "Remember places", PLACETEXT_LEFT, GTCB_Scaled, TRUE);
     if (advanced) G(BUTTON_KIND, G_FORGET, X + 120, row, 140, lh, "Forget all", 0, GA_Disabled, FALSE);
-    row += lh + 4;
+    row += lh + sp;
     G(CHECKBOX_KIND, G_DRAWERS, X, row, 26, lh, "Workbench drawers too", PLACETEXT_LEFT, GTCB_Scaled, TRUE);
     if (advanced) {
-        row += lh + 4;
+        row += lh + sp;
         G(STRING_KIND, G_NEVER, X, row, 260, lh, "Never for", PLACETEXT_LEFT, GTST_MaxChars, 158); row += lh + 10;
         G(INTEGER_KIND, G_DRAWW, X, row, 60, lh, "Drawers at least", PLACETEXT_LEFT, GTIN_MaxChars, 4);
         G(INTEGER_KIND, G_DRAWH, X + 90, row, 60, lh, "x", PLACETEXT_LEFT, GTIN_MaxChars, 4);
     }
-    row += lh + 10;
+    row += lh + (sp == 4 ? 10 : 6);
     G(TEXT_KIND, G_STATUS, 10, row, W - 20, lh, NULL, 0, GTTX_Text, (ULONG)status_text, GTTX_Border, TRUE); row += lh + 6;
     {
         static const char *const names[3] = { "Save", "Use", "Cancel" };
@@ -399,10 +400,13 @@ static int gui_once(void)
                 case G_DRAWW: cur.drawer_w = num < 0 ? 0 : num; show(); break;
                 case G_DRAWH: cur.drawer_h = num < 0 ? 0 : num; show(); break;
                 case G_USE: put_in_place(0); quit = 1; break;
-                case LT_ID + LT_LOOK: case LT_ID + LT_TITLEBAR: case LT_ID + LT_MENUS:   /* another tab: keep, as Use, and hand over */
-                    put_in_place(0); lt_go(win, gg->GadgetID - LT_ID); quit = 1; break;
                 case G_SAVE: put_in_place(1); quit = 1; break;
                 case G_CANCEL: quit = 1; break;
+                default:
+                    if (LT_IS(gg->GadgetID) && gg->GadgetID != LT_ID + LT_WINDOWS) {   /* another tab: keep, as Use, and hand over */
+                        put_in_place(0); lt_go(win, gg->GadgetID - LT_ID); quit = 1;
+                    }
+                    break;
                 }
             }
         }
