@@ -68,7 +68,7 @@
 #include "om_kbd.h"
 #include "ogt_theme.h"
 
-static const char version[] __attribute__((used)) = "$VER: OpenMenus 0.4.3 (10.10.2026) MIT, Copyright (c) 2026 Dalsin Limited";
+static const char version[] __attribute__((used)) = "$VER: OpenMenus 0.4.4 (12.10.2026) MIT, Copyright (c) 2026 Dalsin Limited";   /* 0.4.4: commands start with both NIL: handles */
 
 #define PREFS_ENV "ENV:OpenMenus/Menus"
 #define TRAY_DIR "ENV:OpenMenus/Tray"     /* one file per tray program: "width order" (OpenSpeaker, the clock) */
@@ -1443,8 +1443,14 @@ static void selected_paths(void)
 
 static void run_async(const char *cmd)
 {
-    BPTR nil = Open((STRPTR)"NIL:", MODE_NEWFILE);
-    if (SystemTags((STRPTR)cmd, SYS_Input, nil, SYS_Output, NULL, SYS_Asynch, TRUE, NP_StackSize, 32768, TAG_DONE) == -1 && nil) Close(nil);
+    /* asynchronous: both handles are the new process's, which closes them when it
+     * ends; closed here only if it could not start. Never a NULL output: a real
+     * NIL: handle, as OpenTitle and the editors' tabs give (12 Oct 2026) */
+    BPTR in = Open((STRPTR)"NIL:", MODE_OLDFILE), out = Open((STRPTR)"NIL:", MODE_NEWFILE);
+    if (!in || !out || SystemTags((STRPTR)cmd, SYS_Input, in, SYS_Output, out, SYS_Asynch, TRUE, NP_StackSize, 32768, TAG_DONE) == -1) {
+        if (in) Close(in);
+        if (out) Close(out);
+    }
 }
 
 static void do_action(int a)
