@@ -98,6 +98,19 @@ int pf_wbnc_put(pf_file *f, const pf_wbnc *in);
 int pf_wbtf_get(const pf_file *f, char *out, int size);     /* 1 when there is a title format */
 int pf_wbtf_put(pf_file *f, const char *format);           /* "" takes it out (the OS's own title) */
 
+/* The icon frame as OS 3.2's Workbench editor offers it ("Border Size"): 0 none (borderless, the frame
+ * -1 -1 1 1), 1 small (-1 -1 1 1), 2 medium (-2 -2 2 2), 3 large (-3 -3 3 3); -1 another frame. */
+int pf_wbnc_frame(const pf_wbnc *w);
+void pf_wbnc_set_frame(pf_wbnc *w, int size);              /* 0 to 3, the fields that editor writes */
+
+/* WBHD: the devices Workbench hides, a chunk each with the name, its colon and a 0 ("DF0:"), after WBNC */
+int pf_wbhd_get(const pf_file *f, int nth, char *out, int size);   /* 1 and the nth hidden device */
+int pf_wbhd_is(const pf_file *f, const char *name);        /* 1 when that device is hidden (either case) */
+/* The hidden devices: n names. When they are the ones the file has, in any order and either case, the file
+ * is left as it is; else every WBHD goes and these are written in this order where the first was (after
+ * WBNC when there was none), as the editor writes them. 1, or 0 with no memory. */
+int pf_wbhd_set(pf_file *f, const char *const *names, int n);
+
 /* ---- asl.prefs: "ASL ", struct AslPrefs (26 bytes) ---- */
 #define PF_ASL PF_ID('A', 'S', 'L', ' ')
 #define PF_ASL_LEN 26
@@ -128,5 +141,10 @@ int pf_pntr_pixel(const pf_pntr *p, int x, int y);          /* the colour (0 cle
 int pf_pntr_set_hotspot(pf_file *f, int which, int x, int y);
 int pf_pntr_take(pf_file *f, const pf_file *from, int which);   /* that pointer from another file (a set) */
 int pf_pntr_take_all(pf_file *f, const pf_file *from);       /* every pointer from another file */
+/* Drawing, as OS 3.2's Pointer editor writes it: a pixel's bits in each plane of that pointer (colour 0 clear);
+ * a colour (1 to 3) in every pointer of the file, which share them; every pixel of one pointer clear. */
+int pf_pntr_set_pixel(pf_file *f, int which, int x, int y, int colour);   /* 1, or 0 (no such pointer or pixel) */
+int pf_pntr_set_colour(pf_file *f, int colour, const uint8_t rgb[3]);    /* 1 when a pointer has that colour */
+int pf_pntr_clear(pf_file *f, int which);
 
 #endif /* PF_PREFS_H */

@@ -60,7 +60,7 @@
 #ifdef IN_OPENBENCH
 static                                     /* built in: OpenBench's globals are its own */
 #endif
-const char version[] __attribute__((used)) = "$VER: Look 0.5 (12.10.2026) OpenPrefs, Dalsin Limited";
+const char version[] __attribute__((used)) = "$VER: Look 0.5.1 (12.10.2026) OpenPrefs, Dalsin Limited";
 
 #define PREFS_ENV "ENV:OpenGadTools/Look"
 #define PREFS_ENVARC "ENVARC:OpenGadTools/Look"
@@ -486,6 +486,7 @@ static void draw_preview(struct Window *win, int x, int y, int w, int h, const s
     struct Screen *scr = win->WScreen;
     int mode = l->mode == 1 ? OGT_DARK : OGT_LIGHT, th = 12;
     ogt_rgb c, white = { 255, 255, 255 }, grey = { 160, 160, 160 }, black = { 0, 0, 0 };
+    if (w <= 0 || h <= 0) return;           /* no preview: the Advanced view on a 256-line screen */
     free_pens(scr);
     band(rp, scr, "desktop", mode, x, y, w, h, grey);
     if (!preview_loaded) return;
@@ -673,7 +674,7 @@ static int gui_once(void)
     APTR vi = scr ? GetVisualInfoA(scr, NULL) : NULL;
     struct Gadget *glist = NULL, *g;
     struct NewGadget ng;
-    int fh, top, row, quit = 0, rc = RETURN_OK, W = 620, L = 10, R = 300, i, lh, tabs_y, wl = 40, wt;
+    int fh, top, row, quit = 0, rc = RETURN_OK, W = 620, L = 10, R = 300, i, lh, tabs_y, wl = 40, wt, compact;
     struct MsgPort *tport = NULL;
     struct timerequest *tr = NULL;
     int timer = 0;
@@ -684,7 +685,13 @@ static int gui_once(void)
     lh = fh + 6;
     top = scr->WBorTop + fh + 1 + 6;
     tabs_y = top;
-    top += lt_space(scr->Font, W - 20, lh) + 8;     /* the tabs (looktabs.h): one row, or two */
+    /* Advanced on a screen under 400 lines is laid out to fit 640 x 256 with Topaz 8 (OpenLook 1.2) */
+    compact = advanced && scr->Height < 400;
+    {   /* the right column's switches with their words after them stay inside the page (Topaz 8: 14 pixels left) */
+        int over = R + 110 + 34 + TextLength(&scr->RastPort, (STRPTR)"Scroll bars when needed", 23) - (W - 10);
+        if (over > 0) R -= over > 20 ? 20 : over;
+    }
+    top += lt_space(scr->Font, W - 20, lh) + (compact ? 4 : 8);     /* the tabs (looktabs.h): one row, or two */
     build_theme_list();
     for (i = 0; i < nprofiles; i++) profile_labels[i] = (STRPTR)profile_names[i];
     if (!nprofiles) profile_labels[nprofiles++] = (STRPTR)"(no profiles)";
@@ -701,6 +708,7 @@ static int gui_once(void)
      ng.ng_Flags = (flags), ng.ng_GadgetID = (id), g = gad[id] = CreateGadget(kind, g, &ng, __VA_ARGS__, TAG_DONE))
 
     g = lt_make(g, &ng, L, tabs_y, W - 20, lh, LT_LOOK);
+    if (!compact) {
     /* the left column: themes and the preview */
     row = top + fh + 4;
     G(LISTVIEW_KIND, G_THEMES, L, row, 270, 6 * (fh + 1) + 4, "Theme", PLACETEXT_ABOVE, GTLV_Labels, (ULONG)&theme_list, GTLV_ShowSelected, NULL);
@@ -741,14 +749,64 @@ static int gui_once(void)
 
     }
     if (py + ph + 10 > row) row = py + ph + 10;
-    G(TEXT_KIND, G_STATUS, L, row, W - 20, lh, NULL, 0, GTTX_Text, (ULONG)status_text, GTTX_Border, TRUE); row += lh + 6;
+    } else {
+        /* Advanced on a screen under 400 lines (OpenLook 1.2): every setting in 640 x 256 with Topaz 8. No preview
+         * (Simple has it, and Test shows the real thing); under a theme list four lines tall, the screens, the programs
+         * never touched and the profile; on the right the mode, windows, accent, Lite and focus, a line apart. */
+        static const char *const left_words[] = { "Workbench", "Other screens", "Game screens", "Never touch", "Profile", "By machine",
+                                                  "Icon labels", NULL };
+        int st = lh + 1, lx = L, lw, row2, k, t, nl = 4;          /* nl: the theme list's lines */
+#ifndef LT_ONE
+        nl = 3;                                    /* the stand-alone Look has the icon labels too */
+#endif
+        for (k = 0; left_words[k]; k++)
+            if ((t = TextLength(&scr->RastPort, (STRPTR)left_words[k], strlen(left_words[k]))) + 12 > lx - L) lx = L + t + 12;
+        lw = R - 10 - lx;
+        row = top + fh + 4;
+        G(LISTVIEW_KIND, G_THEMES, L, row, 270, nl * (fh + 1) + 4, "Theme", PLACETEXT_ABOVE, GTLV_Labels, (ULONG)&theme_list, GTLV_ShowSelected, NULL);
+        px = L; py = row; pw = 0; ph = 0;
+        row2 = row + nl * (fh + 1) + 4 + 4;
+        G(CYCLE_KIND, G_WB, lx, row2, lw < 160 ? lw : 160, lh, "Workbench", PLACETEXT_LEFT, GTCY_Labels, (ULONG)themed_labels); row2 += st;
+        G(CYCLE_KIND, G_PUB, lx, row2, lw < 160 ? lw : 160, lh, "Other screens", PLACETEXT_LEFT, GTCY_Labels, (ULONG)themed_labels); row2 += st;
+        G(CYCLE_KIND, G_CUSTOM, lx, row2, lw < 160 ? lw : 160, lh, "Game screens", PLACETEXT_LEFT, GTCY_Labels, (ULONG)themed_labels); row2 += st;
+        G(STRING_KIND, G_NEVER, lx, row2, lw, lh, "Never touch", PLACETEXT_LEFT, GTST_MaxChars, 150); row2 += st;
+        /* the profile's name as wide as the column, and Load beside By machine under it */
+        G(CYCLE_KIND, G_PROFILE, lx, row2, lw, lh, "Profile", PLACETEXT_LEFT, GTCY_Labels, (ULONG)profile_labels); row2 += st;
+        G(CHECKBOX_KIND, G_PROFILEAUTO, lx, row2, 26, lh, "By machine", PLACETEXT_LEFT, GTCB_Scaled, TRUE);
+        t = TextLength(&scr->RastPort, (STRPTR)"Load", 4) + 24;
+        G(BUTTON_KIND, G_APPLYPROFILE, lx + lw - t, row2, t, lh, "Load", 0, GA_Disabled, profile_labels[0][0] == '('); row2 += st;
+#ifndef LT_ONE
+        G(CYCLE_KIND, G_LABELS, lx, row2, lw < 160 ? lw : 160, lh, "Icon labels", PLACETEXT_LEFT, GTCY_Labels, (ULONG)label_labels); row2 += st;
+#endif
+        row = top;
+        G(CYCLE_KIND, G_MODE, R + 110, row, 200, lh, "Mode", PLACETEXT_LEFT, GTCY_Labels, (ULONG)mode_labels); row += st;
+        G(INTEGER_KIND, G_FROM, R + 110, row, 50, lh, "Dark from", PLACETEXT_LEFT, GTIN_MaxChars, 2);
+        G(INTEGER_KIND, G_TO, R + 220, row, 50, lh, "to", PLACETEXT_LEFT, GTIN_MaxChars, 2); row += st;
+        G(CHECKBOX_KIND, G_SCROLL, R + 110, row, 26, lh, "Scroll bars when needed", PLACETEXT_RIGHT, GTCB_Scaled, TRUE); row += st;
+        G(CHECKBOX_KIND, G_NOSIZE, R + 110, row, 26, lh, "No size gadget", PLACETEXT_RIGHT, GTCB_Scaled, TRUE); row += st;
+        G(CHECKBOX_KIND, G_NOZOOM, R + 110, row, 26, lh, "No zoom gadget", PLACETEXT_RIGHT, GTCB_Scaled, TRUE); row += st;
+        G(CHECKBOX_KIND, G_OWNACCENT, R + 110, row, 26, lh, "Own accent", PLACETEXT_LEFT, GTCB_Scaled, TRUE);
+        G(STRING_KIND, G_ACCENT, R + 150, row, 90, lh, NULL, 0, GTST_MaxChars, 7); row += st;
+        G(CYCLE_KIND, G_LITE, R + 110, row, 200, lh, "Lite", PLACETEXT_LEFT, GTCY_Labels, (ULONG)lite_labels); row += st;
+        /* Lite's three switches on one row */
+        G(CHECKBOX_KIND, G_LSHADOW, R + 110, row, 26, lh, "No shadows", PLACETEXT_LEFT, GTCB_Scaled, TRUE);
+        G(CHECKBOX_KIND, G_LROUND, R + 194, row, 26, lh, "Square", PLACETEXT_LEFT, GTCB_Scaled, TRUE);
+        G(CHECKBOX_KIND, G_LGRAD, R + 264, row, 26, lh, "Flat", PLACETEXT_LEFT, GTCB_Scaled, TRUE); row += st;
+        G(CHECKBOX_KIND, G_CTF, R + 110, row, 26, lh, "Click to front", PLACETEXT_LEFT, GTCB_Scaled, TRUE, GA_Disabled, !exists(CTF_TOOL));
+        G(CYCLE_KIND, G_CTFQUAL, R + 150, row, 160, lh, NULL, 0, GTCY_Labels, (ULONG)qual_labels, GA_Disabled, !exists(CTF_TOOL)); row += st;
+        G(CHECKBOX_KIND, G_AP, R + 110, row, 26, lh, "Focus follows", PLACETEXT_LEFT, GTCB_Scaled, TRUE, GA_Disabled, !exists(AP_TOOL)); row += st;
+        if (row2 > row) row = row2;
+        row += 7;                                  /* the page's frame passes 6 lines above the status line */
+    }
+    G(TEXT_KIND, G_STATUS, L, row, W - 20, lh, NULL, 0, GTTX_Text, (ULONG)status_text, GTTX_Border, TRUE); row += lh + (compact ? 4 : 6);
     {
         static const char *const names[4] = { "Save", "Use", "Test", "Cancel" };
         static const int ids[4] = { G_SAVE, G_USE, G_TEST, G_CANCEL };
         int bw = (W - 20 - 3 * 10) / 4;
         for (i = 0; i < 4; i++) G(BUTTON_KIND, ids[i], L + i * (bw + 10), row, bw, lh, names[i], 0, GA_Disabled, FALSE);
-        row += lh + 8;
+        row += lh + (compact ? 6 : 8);
     }
+
     if (!g) { rc = RETURN_FAIL; goto out; }
     wt = scr->BarHeight + (scr->Height < 400 ? 1 : 10);
     lt_place(&wl, &wt);

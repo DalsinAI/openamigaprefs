@@ -241,6 +241,130 @@ style changed.
 - The Theme tab's Advanced view and the Menus and Windows pages on a
   640 x 256 screen.
 
+## OpenLook 1.2 (12 October 2026): a pointer drawn, the icon frame and hidden devices, 640 x 256
+
+Three of 1.1's follow-ups, built: drawing a pointer and its colours, the
+Workbench tab's icon frame and hidden devices, and every page on a 640 x 256
+screen. The pointer's acceleration still waits for the decision above.
+Versions: OpenLook 1.2, Look 0.5.1, Windows 0.6.5, Menus 0.2.5.
+
+**Drawing a pointer** (Pointer tab, Advanced). Beside the sets and the
+pointer types is the chosen pointer in fat bits, with its hot spot marked:
+5 screen pixels a pixel on a screen under 400 lines, larger on a big one.
+Beside that are the four colours to draw with (clear, then the pointer's
+three), red, green and blue for the chosen colour, Hot spot (the next click
+on the grid places it; the two numbers still take it typed) and Clear the
+pointer. A click on the grid draws a pixel; with the button held down it
+draws on as the mouse moves. The status line says what to do.
+
+What is written is what OS 3.2.3's Pointer editor writes for the same
+drawing, measured in a lab:
+- a pixel sets its bit in each plane of that pointer's PNTR chunk, and
+  nothing else;
+- the pointers share their three colours: a colour changed on one is written
+  into every PNTR chunk of the file, as 8-bit red, green and blue (the OS
+  editor's sliders run from 0 to 255 too).
+
+The OS editor also keeps a 41st chunk, type 40, which Intuition doesn't use
+(`POINTERTYPE_COUNT` is 40): at every save it is a copy of the Normal
+pointer one row up, with reserved bytes and a hot spot from its memory, which
+differ each time. OpenLook leaves that chunk as the file has it. So after the
+same edit in both (colour 1's red from 224 to 225, pixel 10, 20 of Normal in
+colour 2), the two files are the same bytes in all 40 pointers and differ in
+10 bytes of chunk 40 only; and the OS editor, reading OpenLook's file
+(`FROM ... USE`), writes the 40 pointers back byte for byte. After Use, the
+screen's pointer had the new pixel.
+
+**The Workbench tab: the icon frame and the hidden devices.** OS 3.2.3's
+Workbench editor offers the frame as Border Size, and the lab showed what each
+size writes: No Border is Borderless with the frame -1 -1 1 1; Small, Medium
+and Large are -1, -2 and -3 each way, and not borderless. The tab's **Icon
+borders** (None, Small, Medium, Large) takes the place of 1.1's Borders round
+icons and writes the same fields; a file whose frame is none of these shows
+Its own, which puts that frame back. **Hidden devices** (Advanced) lists the
+devices the OS editor lists, in its order: those with a file system running,
+except the one SYS: is on (in the lab DH1:, RAM:, DF0:), then any the file
+hides that aren't mounted now. A click hides or shows one. Each hidden device
+is a WBHD chunk with the name, its colon and a 0, after WBNC, in the list's
+order, as the OS editor writes them; the same devices in another order are
+left as the file has them. Medium with DH1: hidden, set on the tab, wrote the
+OS editor's file for the same settings byte for byte, and the OS editor read
+it back as Medium with DH1: hidden.
+
+**640 x 256.** Every page now fits a PAL High Res screen with Topaz 8. On a
+screen under 400 lines:
+- Theme, Advanced: no preview (Simple has it, and Test shows the theme
+  itself); under a theme list four lines tall the screens, Never touch and the
+  profile (Load beside By machine); on the right the mode, the three window
+  switches, the accent, Lite with its three switches on one row, and focus.
+- Menus, Advanced: no preview; the right-click menus move under the look on
+  the right, Take over MagicMenu's at its foot.
+- Windows, Advanced: the short switches in two columns, the four long ones
+  across the page.
+- Workbench, Advanced: icons and the hidden devices on the left, the screen
+  title and drawers on the right; the screen title's switch and its text on
+  one row.
+- These views have one line between rows.
+
+On any screen, the Windows page's four long switches stand at the page's left
+edge when the column would make the page wider than 620 pixels (Topaz 8 on a
+640-wide screen), and in the column, as before, everywhere else. The Theme
+tab's right column moves left (14 pixels in Topaz 8) when "Scroll bars when
+needed" would run past the page. "Drawers in lists" offers Mixed, First and
+Last, as the OS editor words them. The page's frame passes below the last row
+on every page.
+
+Measured in the lab on the PAL High Res Workbench, 640 x 256, Topaz 8, the
+Graphite theme (screen bar 18 lines, window title 15), window sizes read from
+Intuition, every page opened on its own:
+
+| Page | Simple | Advanced | Advanced in 1.1 |
+| --- | --- | --- | --- |
+| Theme | 628 x 243 | 628 x 250 | 429 lines needed |
+| Pointer | 628 x 185 | 628 x 251 | 628 x 203 |
+| Fonts | 628 x 147 | 628 x 223 | the same |
+| Colours | 628 x 187 | 628 x 205 | the same |
+| Backdrops | 628 x 167 | 628 x 239 | the same |
+| Workbench | 628 x 183 | 628 x 246 | 628 x 239 |
+| File requesters | 628 x 183 | 628 x 219 | the same |
+| Windows | 628 x 253 | 628 x 245 | 710 x 331 needed |
+| Title bar | 628 x 241 | 628 x 241 | the same |
+| Menus | 640 x 249 | 640 x 248 | 311 lines needed |
+
+The stand-alone Look, Windows and Menus fit too (Advanced 252, 245 and 248
+lines). On the 1920 x 1080 screen (CGTimes 13) every page keeps 1.1's layout
+and size, except the two pages that gained settings in Advanced: Pointer (268
+to 305 lines) and Workbench (304 to 326).
+
+**Tested** in lab `p1-look` (copied from Instance-32), with the build copied
+into the lab beside its own OpenLook:
+- Host tests (`Look/tests/run.sh`): 163 checks pass (125 in 1.1), with the
+  four files OS 3.2.3's Workbench editor wrote in the lab (Small, Medium,
+  Large and No Border, with DH1: or DH1: and DF0: hidden) and the bytes its
+  Pointer editor changed for a drawing (its pointer file isn't kept: the OS's
+  pointers are Hyperion's).
+- Save, Use, Test and Cancel on every tab (Windows and Title bar have Save,
+  Use and Cancel): after Test, ENV: had the change and ENVARC: didn't; Cancel
+  put ENV: back; Use changed ENV: only; Save wrote ENVARC: too. A Test on the
+  Workbench tab went back by itself after 15 seconds. The Colours tab, with
+  no `palette.prefs` to start from, made one on Test and Use and took it away
+  again on Cancel.
+- Built with `Look/build-one.sh` and the stand-alone editors' scripts on the
+  os32 stove, and the four pages as OpenBench builds them in (`IN_OPENBENCH`),
+  with no warnings.
+
+**Found, not changed.** OpenBench, the Team's desktop, doesn't read
+`workbench.prefs`: with DH1: hidden and saved, the lab's desktop still showed
+Work after a restart (openamigabench has no WBHD or WBNC reader). The hidden
+devices and the icon frame are the OS's Workbench's and icon.library's; on
+the Team's desktop they wait for OpenBench to read them.
+
+**Still to do.**
+- **Pointer acceleration**: the decision above.
+- The design's one Simple page for Appearance; ReAction's look.
+- Drawing works on the pointers the file has (the OS's sets are 16 x 24 in
+  three colours); with no pointer file, a set is taken first.
+
 ## Next
 
 Windows (snapping, Amiga+Tab, wheel under the pointer, remembered window

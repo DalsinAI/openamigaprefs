@@ -37,7 +37,7 @@
 #include <stdlib.h>
 #include "../../Common/looktabs.h"
 
-static const char version[] __attribute__((used)) = "$VER: Windows 0.6.4 (12.10.2026) OpenPrefs, MIT, Copyright (c) 2026 Dalsin Limited";
+static const char version[] __attribute__((used)) = "$VER: Windows 0.6.5 (12.10.2026) OpenPrefs, MIT, Copyright (c) 2026 Dalsin Limited";
 
 #define PREFS_ENV "ENV:OpenPrefs/Windows"
 #define PREFS_ENVARC "ENVARC:OpenPrefs/Windows"
@@ -271,18 +271,28 @@ static int gui_once(void)
     APTR vi = scr ? GetVisualInfoA(scr, NULL) : NULL;
     struct Gadget *glist = NULL, *g;
     struct NewGadget ng;
-    int fh, lh, top, row, quit = 0, rc = 1, W = 480, X = 200, i, wl = 60, wt, sp;
+    int fh, lh, top, row, quit = 0, rc = 1, W = 480, X = 200, i, wl = 60, wt, sp, LX, compact;
     struct Menu *menu = NULL;
     if (!vi) { if (scr) UnlockPubScreen(NULL, scr); return -1; }
     memset(gad, 0, sizeof gad);
     fh = scr->Font->ta_YSize;
     lh = fh + 6;
     top = scr->WBorTop + fh + 1 + 8;
-    {   /* room for the longest label */
-        static const char dbl[] = "Double-click a title bar to bring the window to the front";
-        int need = X + 26 + 8 + TextLength(&scr->RastPort, (STRPTR)dbl, sizeof dbl - 1) + 16;
-        if (W < need) W = need;
+    /* The four switches with long words: the box in the column with its words after it, or, where that would make
+     * the window wider than the editors' 620 (Topaz 8 on a 640-wide screen), at the left edge (Windows 0.6.5). */
+    {
+        static const char *const longs[] = { "Double-click a title bar to bring the window to the front",
+                                             "Resize a window from any edge but its title bar",
+                                             "Drag windows with their contents, not an outline", "Drive windows titled with the name only", NULL };
+        int k, t, most = 0;
+        for (k = 0; longs[k]; k++)
+            if ((t = TextLength(&scr->RastPort, (STRPTR)longs[k], strlen(longs[k]))) > most) most = t;
+        LX = X + 26 + 8 + most + 16 <= 620 ? X : 10;
+        if (W < LX + 26 + 8 + most + 16) W = LX + 26 + 8 + most + 16;
     }
+    /* Advanced on a screen under 400 lines has the short switches in two columns, so it fits 640 x 256 */
+    compact = advanced && scr->Height < 400;
+    if (compact && W < 620) W = 620;
     strcpy(status_text, running() ? "OpenWindows is running." : "OpenWindows isn't running: Use or Save starts it.");
 
     g = CreateContext(&glist);
@@ -296,6 +306,38 @@ static int gui_once(void)
     sp = scr->Height < 400 ? 2 : 4;                  /* the rows closer on a 256-line screen, so the page fits it */
     g = lt_make(g, &ng, 10, top, W - 20, lh, LT_WINDOWS);
     row = top + lt_space(scr->Font, W - 20, lh) + 8; /* below the tabs (looktabs.h): one row, or two */
+    if (compact) {
+        static const char *const left[] = { "Snap to edges", "Window switcher", "Remember places", "Never for", NULL };
+        static const char *const right[] = { "Fill a half", "Wheel under pointer", "Workbench drawers too", "Drawers at least", NULL };
+        int k, t, x1 = 0, x2 = 0, mid = (W - 20) / 2 + 10, st = lh + 2, iw = TextLength(&scr->RastPort, (STRPTR)"0000", 4) + 12;
+        for (k = 0; left[k]; k++) if ((t = TextLength(&scr->RastPort, (STRPTR)left[k], strlen(left[k]))) > x1) x1 = t;
+        for (k = 0; right[k]; k++) if ((t = TextLength(&scr->RastPort, (STRPTR)right[k], strlen(right[k]))) > x2) x2 = t;
+        x1 += 10 + 10; x2 += mid + 10;
+        G(CHECKBOX_KIND, G_SNAP, x1, row, 26, lh, "Snap to edges", PLACETEXT_LEFT, GTCB_Scaled, TRUE);
+        t = TextLength(&scr->RastPort, (STRPTR)"within", 6);
+        G(INTEGER_KIND, G_DIST, x1 + 34 + t + 8, row, iw, lh, "within", PLACETEXT_LEFT, GTIN_MaxChars, 2);
+        G(CHECKBOX_KIND, G_HALVES, x2, row, 26, lh, "Fill a half", PLACETEXT_LEFT, GTCB_Scaled, TRUE); row += st;
+        G(CHECKBOX_KIND, G_SWITCH, x1, row, 26, lh, "Window switcher", PLACETEXT_LEFT, GTCB_Scaled, TRUE);
+        t = TextLength(&scr->RastPort, (STRPTR)"key", 3);
+        G(STRING_KIND, G_KEY, x1 + 34 + t + 8, row, mid - 12 - (x1 + 34 + t + 8), lh, "key", PLACETEXT_LEFT, GTST_MaxChars, 46);
+        G(CHECKBOX_KIND, G_WHEEL, x2, row, 26, lh, "Wheel under pointer", PLACETEXT_LEFT, GTCB_Scaled, TRUE); row += st + 4;
+        G(CHECKBOX_KIND, G_DBLFRONT, LX, row, 26, lh, "Double-click a title bar to bring the window to the front", PLACETEXT_RIGHT,
+          GTCB_Scaled, TRUE); row += st;
+        G(CHECKBOX_KIND, G_EDGES, LX, row, 26, lh, "Resize a window from any edge but its title bar", PLACETEXT_RIGHT, GTCB_Scaled, TRUE);
+        row += st;
+        G(CHECKBOX_KIND, G_SOLID, LX, row, 26, lh, "Drag windows with their contents, not an outline", PLACETEXT_RIGHT, GTCB_Scaled, TRUE);
+        row += st;
+        G(CHECKBOX_KIND, G_DRIVETITLE, LX, row, 26, lh, "Drive windows titled with the name only", PLACETEXT_RIGHT, GTCB_Scaled, TRUE);
+        row += st + 4;
+        G(CHECKBOX_KIND, G_PLACES, x1, row, 26, lh, "Remember places", PLACETEXT_LEFT, GTCB_Scaled, TRUE);
+        G(BUTTON_KIND, G_FORGET, x1 + 34, row, mid - 12 - (x1 + 34), lh, "Forget all", 0, GA_Disabled, FALSE);
+        G(CHECKBOX_KIND, G_DRAWERS, x2, row, 26, lh, "Workbench drawers too", PLACETEXT_LEFT, GTCB_Scaled, TRUE); row += st;
+        G(STRING_KIND, G_NEVER, x1, row, mid - 12 - x1, lh, "Never for", PLACETEXT_LEFT, GTST_MaxChars, 158);
+        G(INTEGER_KIND, G_DRAWW, x2, row, iw, lh, "Drawers at least", PLACETEXT_LEFT, GTIN_MaxChars, 4);
+        t = TextLength(&scr->RastPort, (STRPTR)"x", 1);
+        G(INTEGER_KIND, G_DRAWH, x2 + iw + t + 12, row, iw, lh, "x", PLACETEXT_LEFT, GTIN_MaxChars, 4);
+        row += st + 6;                             /* the page's frame passes 6 lines above the status line */
+    } else {
     G(CHECKBOX_KIND, G_SNAP, X, row, 26, lh, "Snap to edges", PLACETEXT_LEFT, GTCB_Scaled, TRUE);
     if (advanced) G(INTEGER_KIND, G_DIST, X + 160, row, 50, lh, "within", PLACETEXT_LEFT, GTIN_MaxChars, 2);
     row += lh + sp;
@@ -305,15 +347,15 @@ static int gui_once(void)
     row += lh + (advanced ? 10 : sp);
     G(CHECKBOX_KIND, G_WHEEL, X, row, 26, lh, "Wheel under pointer", PLACETEXT_LEFT, GTCB_Scaled, TRUE); row += lh + sp;
     /* a long label: the box in the column with its words after it */
-    G(CHECKBOX_KIND, G_DBLFRONT, X, row, 26, lh, "Double-click a title bar to bring the window to the front", PLACETEXT_RIGHT,
+    G(CHECKBOX_KIND, G_DBLFRONT, LX, row, 26, lh, "Double-click a title bar to bring the window to the front", PLACETEXT_RIGHT,
       GTCB_Scaled, TRUE);
     row += lh + sp;
-    G(CHECKBOX_KIND, G_EDGES, X, row, 26, lh, "Resize a window from any edge but its title bar", PLACETEXT_RIGHT,
+    G(CHECKBOX_KIND, G_EDGES, LX, row, 26, lh, "Resize a window from any edge but its title bar", PLACETEXT_RIGHT,
       GTCB_Scaled, TRUE);
     row += lh + sp;
-    G(CHECKBOX_KIND, G_SOLID, X, row, 26, lh, "Drag windows with their contents, not an outline", PLACETEXT_RIGHT, GTCB_Scaled, TRUE);
+    G(CHECKBOX_KIND, G_SOLID, LX, row, 26, lh, "Drag windows with their contents, not an outline", PLACETEXT_RIGHT, GTCB_Scaled, TRUE);
     row += lh + sp;
-    G(CHECKBOX_KIND, G_DRIVETITLE, X, row, 26, lh, "Drive windows titled with the name only", PLACETEXT_RIGHT, GTCB_Scaled, TRUE);
+    G(CHECKBOX_KIND, G_DRIVETITLE, LX, row, 26, lh, "Drive windows titled with the name only", PLACETEXT_RIGHT, GTCB_Scaled, TRUE);
     row += lh + (advanced ? 10 : sp);
     G(CHECKBOX_KIND, G_PLACES, X, row, 26, lh, "Remember places", PLACETEXT_LEFT, GTCB_Scaled, TRUE);
     if (advanced) G(BUTTON_KIND, G_FORGET, X + 120, row, 140, lh, "Forget all", 0, GA_Disabled, FALSE);
@@ -325,7 +367,9 @@ static int gui_once(void)
         G(INTEGER_KIND, G_DRAWW, X, row, 60, lh, "Drawers at least", PLACETEXT_LEFT, GTIN_MaxChars, 4);
         G(INTEGER_KIND, G_DRAWH, X + 90, row, 60, lh, "x", PLACETEXT_LEFT, GTIN_MaxChars, 4);
     }
-    row += lh + (sp == 4 ? 10 : 6);
+    row += lh + (sp == 4 ? 10 : 8);
+    }
+
     G(TEXT_KIND, G_STATUS, 10, row, W - 20, lh, NULL, 0, GTTX_Text, (ULONG)status_text, GTTX_Border, TRUE); row += lh + 6;
     {
         static const char *const names[3] = { "Save", "Use", "Cancel" };
