@@ -56,7 +56,7 @@
 #include <stdio.h>
 
 #ifndef IN_OPENBENCH
-const char version[] __attribute__((used)) = "$VER: OpenUp-Setup 0.1.2 (10.10.2026) OpenPrefs, Dalsin Limited";
+const char version[] __attribute__((used)) = "$VER: OpenUp-Setup 0.1.3 (12.10.2026) OpenPrefs, Dalsin Limited";
 #endif
 
 #define USER_STARTUP "S:User-Startup"
@@ -402,8 +402,8 @@ static const struct { int id; const char *label, *path, *args; } editors[] = {  
     { G_ED_TYPES, "File types...", "SYS:Prefs/OpenTypes" },
     { G_SCREENMODE, "Screen mode...", "SYS:Prefs/ScreenMode" },
     { G_PRINTER, "Printer...", "SYS:Prefs/Printer" },
-    { G_ED_OPENPRINT, "OpenPrint...", "SYS:Prefs/OpenPrint" },
-    { G_NETWORK, "Network...", "SYS:Prefs/OpenSocket" },
+    { G_ED_OPENPRINT, "OpenPrint...", "SYS:Utilities/OpenPrint/Printers and Queue" },  /* 0.1.3: OpenPrint's printers, as the cog's */
+    { G_NETWORK, "Network...", "SYS:Tools/Commodities/OpenSocketControl" },  /* 0.1.3: OpenSocket's settings, as the cog's */
     { G_FONTS, "Fonts...", "SYS:Prefs/Font" },
 };
 

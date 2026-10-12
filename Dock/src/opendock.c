@@ -52,7 +52,7 @@
 #include "wbclose.h"
 #include "obmsg.h"
 
-const char version[] __attribute__((used)) = "$VER: OpenDock 0.6.4 (12.10.2026) OpenPrefs, Dalsin Limited";   /* 0.6.4: programs start with both NIL: handles */
+const char version[] __attribute__((used)) = "$VER: OpenDock 0.6.5 (12.10.2026) OpenPrefs, Dalsin Limited";   /* 0.6.5: one dock after a refused Workbench reset */
 
 #define PREFS_ENV "ENV:OpenDock/Dock"
 #define PREFS_ENVARC "ENVARC:OpenDock/Dock"
@@ -1451,7 +1451,9 @@ int main(void)
             wb_down = 1;
             wbc_closed();
             break;
-        case WBC_OPEN: wb_down = 2; break;
+        /* 0.6.5: only when the dock is down. A refused CloseWorkBench says "open" and the OpenWorkBench after
+         * it says it again: the second opened a second dock over the first (and took a second lock) */
+        case WBC_OPEN: if (wb_down) wb_down = 2; break;
         }
         if (wb_down == 2 && (scr = LockPubScreen((STRPTR)"Workbench"))) {
             if ((vi = GetVisualInfoA(scr, NULL)) && (menus = CreateMenus(newmenus, TAG_DONE)))
