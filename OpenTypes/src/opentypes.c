@@ -60,7 +60,12 @@
 #include <string.h>
 
 #ifndef IN_OPENBENCH
-static const char version[] __attribute__((used)) = "$VER: OpenTypes 0.2.2 (10.10.2026) MIT, Copyright (c) 2026 Dalsin Limited";
+static const char version[] __attribute__((used)) = "$VER: OpenTypes 0.2.3 (11.10.2026) MIT, Copyright (c) 2026 Dalsin Limited";
+/* The window runs on 32 KB, however OpenTypes is started: on a Shell's 4 KB
+ * (Run, a script, the dock's default) the window's calls overran the stack and
+ * closing the window rebooted the machine (11 Oct 2026). libnix's start code
+ * swaps to a stack of this size when the one it was given is smaller. */
+unsigned long __stack = 32768;
 #endif
 
 #define STATE "ENVARC:OpenTypes"
