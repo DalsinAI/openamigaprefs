@@ -44,7 +44,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-static const char version[] __attribute__((used)) = "$VER: OpenDateTime 0.1.2 (12.10.2026) OpenPrefs, MIT, Copyright (c) 2026 Dalsin Limited";
+static const char version[] __attribute__((used)) = "$VER: OpenDateTime 0.1.3 (12.10.2026) OpenPrefs, MIT, Copyright (c) 2026 Dalsin Limited";   /* 0.1.3: C:Date and SetClock get both NIL: handles */
 
 #ifdef IN_OPENBENCH
 /* inside OpenBench, a global UtilityBase could be another built-in's: every UtilityBase below, and in
@@ -285,15 +285,21 @@ static const char *const month_dos[] = { "Jan", "Feb", "Mar", "Apr", "May", "Jun
 static int set_clock(const struct ClockData *cd)
 {
     char cmd[96];
-    BPTR nil;
-    LONG rc;
+    BPTR in, out;
+    LONG rc = -1;
     if (cd->year < 1978 || cd->year > 2077) return 0;   /* what C:Date's two-digit years reach */
     snprintf(cmd, sizeof cmd, "C:Date %02d-%s-%02d %02d:%02d:%02d", cd->mday, month_dos[cd->month - 1], cd->year % 100,
              cd->hour, cd->min, cd->sec);
-    nil = Open((STRPTR)"NIL:", MODE_NEWFILE);
-    rc = SystemTags((STRPTR)cmd, SYS_Input, (ULONG)nil, SYS_Output, (ULONG)NULL, TAG_DONE);
-    if (rc == 0) rc = SystemTags((STRPTR)"C:SetClock SAVE", SYS_Input, (ULONG)nil, SYS_Output, (ULONG)NULL, TAG_DONE);
-    if (nil) Close(nil);
+    /* synchronous: both handles stay ours, so both are closed here. Never a NULL output: a real
+     * NIL: handle, as OpenDock 0.6.4 and OpenMenus 0.4.4 give (12 Oct 2026) */
+    in = Open((STRPTR)"NIL:", MODE_OLDFILE);
+    out = Open((STRPTR)"NIL:", MODE_NEWFILE);
+    if (in && out) {
+        rc = SystemTags((STRPTR)cmd, SYS_Input, (ULONG)in, SYS_Output, (ULONG)out, TAG_DONE);
+        if (rc == 0) rc = SystemTags((STRPTR)"C:SetClock SAVE", SYS_Input, (ULONG)in, SYS_Output, (ULONG)out, TAG_DONE);
+    }
+    if (in) Close(in);
+    if (out) Close(out);
     return rc == 0;
 }
 
@@ -524,7 +530,7 @@ static int gui(void)
         row += lh + 8;
     }
     if (!g) { rc = RETURN_FAIL; goto out; }
-    win = OpenWindowTags(NULL, WA_Title, (ULONG)"Date and time", WA_ScreenTitle, (ULONG)"OpenDateTime 0.1.2", WA_PubScreen, (ULONG)scr,
+    win = OpenWindowTags(NULL, WA_Title, (ULONG)"Date and time", WA_ScreenTitle, (ULONG)"OpenDateTime 0.1.3", WA_PubScreen, (ULONG)scr,
                          WA_Left, (scr->Width - W) / 2 > 0 ? (scr->Width - W) / 2 : 0, WA_Top, scr->BarHeight + 20,
                          WA_InnerWidth, W, WA_InnerHeight, row - scr->WBorTop - fh - 1,
                          WA_Gadgets, (ULONG)glist, WA_DragBar, TRUE, WA_DepthGadget, TRUE, WA_CloseGadget, TRUE, WA_Activate, TRUE,
