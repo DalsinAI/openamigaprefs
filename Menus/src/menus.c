@@ -63,7 +63,7 @@
 #include "../../Common/looktabs.h"
 
 #ifndef IN_OPENBENCH
-const char version[] __attribute__((used)) = "$VER: Menus 0.2.4 (12.10.2026) OpenPrefs, Dalsin Limited";
+const char version[] __attribute__((used)) = "$VER: Menus 0.2.5 (12.10.2026) OpenPrefs, Dalsin Limited";
 #endif
 
 #define PREFS_ENV "ENV:OpenMenus/Menus"
@@ -282,6 +282,7 @@ static void draw_preview(struct Window *win, int x, int y, int w, int h, const o
     int fh = rp->TxHeight, ih = fh + 3, mw = w - 40, mx = x + 14, my = y + 8, mh = 6 * ih + 2, i;
     int shadow = p->shadow && !lite_on, s = shadow ? p->shadow_size : 0;
     LONG bg, tx, sel, seltx, light, dark, sh;
+    if (w <= 0 || h <= 0) return;                            /* no preview: Advanced on a 256-line screen */
     free_pens(scr);
     box(rp, pen_for(scr, (ogt_rgb){ 150, 156, 166 }), x, y, w, h);            /* the "screen" behind */
     if (!p->enabled) {
@@ -490,12 +491,15 @@ static int make_gadgets(struct Screen *scr, APTR vi, struct Gadget **glist, int 
     static const char *const left_words[] = { "Menus open", "From the bar", "At the pointer", "Bar delay", "Pointer delay", "Open on last",
                                               "Centre submenus", "Programs run on", "Keyboard", "R.Amiga+R.Alt", "Use OpenMenus", "They work",
                                               "Colours", "Shadow", "Delays", "They show", "Selected", "Name at the top", "Menu bar", NULL };
-    static const char *const right_words[] = { "Colours", "Border", "Shadow", "Background", "Picture", NULL };
+    static const char *const right_words[] = { "Colours", "Border", "Shadow", "Background", "Picture", "Icon menus", "They show",
+                                               "Selected", NULL };
     struct Gadget *g;
     struct NewGadget ng;
     int fh = scr->Font->ta_YSize, lh = fh + 6, bl = scr->WBorLeft, top = scr->WBorTop + fh + 1 + 6, row, row2, i;
     /* the Advanced view is packed tight on every screen, so it measures the same as on a 256-line PAL Workbench */
     int gp = scr->Height < 320 || advanced ? 2 : 4, cb = 26, slv = 3 * scr->RastPort.TxWidth + 8;    /* a checkbox; a slider's number */
+    /* ... but on a screen under 400 lines Advanced has its own layout, to fit 640 x 256 with Topaz 8 (OpenLook 1.2) */
+    int compact = advanced && scr->Height < 400;
     /* the left column: labels, then gadgets as wide as the widest choice */
     int lx = bl + 8 + widest(scr, left_words) + 8;
     int cw = widest(scr, open_labels) > widest(scr, use_labels) ? widest(scr, open_labels) : widest(scr, use_labels);
@@ -531,9 +535,9 @@ static int make_gadgets(struct Screen *scr, APTR vi, struct Gadget **glist, int 
      ng.ng_Flags = (flags), ng.ng_GadgetID = (id), g = gad[id] = CreateGadget(kind, g, &ng, __VA_ARGS__, TAG_DONE))
 
     g = lt_make(g, &ng, bl + 8, top, W - 16, lh, LT_MENUS);
-    top += lt_space(scr->Font, W - 16, lh) + 8;     /* below the tabs (looktabs.h): one row, or two */
+    top += lt_space(scr->Font, W - 16, lh) + (compact ? 4 : 8);   /* below the tabs (looktabs.h): one row, or two */
     /* the right column: the preview, in both views */
-    px = rx0; py = top; pw = rx + rg - rx0; ph = 6 * (fh + 3) + (gp < 4 ? 8 : 22);
+    px = rx0; py = top; pw = rx + rg - rx0; ph = compact ? 0 : 6 * (fh + 3) + (gp < 4 ? 8 : 22);
     row = row2 = top;
 
     if (!advanced) {
@@ -567,6 +571,56 @@ static int make_gadgets(struct Screen *scr, APTR vi, struct Gadget **glist, int 
             G(TEXT_KIND, G_RCNOTE1, bl + 8, row, W - 16, fh + 2, NULL, 0, GTTX_Text, (ULONG)note1); row += fh + 2;
             G(TEXT_KIND, G_RCNOTE2, bl + 8, row, W - 16, fh + 2, NULL, 0, GTTX_Text, (ULONG)note2); row += fh + 2 + gp;
         }
+    } else if (compact) {
+        /* Advanced on a screen under 400 lines (OpenLook 1.2): every setting in 640 x 256 with Topaz 8, a line apart.
+         * No preview (Simple has it, and Test shows the real menus); on the left how menus open and the keys, then
+         * OpenMenus itself; on the right the look, the right-click menus and taking over MagicMenu's settings. */
+        int st = lh + 1, hw = text_w(scr, "Hide") + 8 + cb, dw = (lw - 2 * slv - 8) / 2;
+        int rcw = text_w(scr, "Name at the top") + 8 + cb;
+        G(CYCLE_KIND, G_OPEN, lx, row, lw, lh, "Menus open", PLACETEXT_LEFT, GTCY_Labels, (ULONG)open_labels); row += st;
+        G(CYCLE_KIND, G_BAR, lx, row, lw - hw - 8, lh, "Menu bar", PLACETEXT_LEFT, GTCY_Labels, (ULONG)bar_labels);
+        G(CHECKBOX_KIND, G_HIDE, lx + lw - cb, row, cb, lh, "Hide", PLACETEXT_LEFT, GTCB_Scaled, TRUE); row += st;
+        G(CYCLE_KIND, G_PDUSE, lx, row, lw, lh, "From the bar", PLACETEXT_LEFT, GTCY_Labels, (ULONG)use_labels); row += st;
+        G(CYCLE_KIND, G_PUUSE, lx, row, lw, lh, "At the pointer", PLACETEXT_LEFT, GTCY_Labels, (ULONG)use_labels); row += st;
+        G(SLIDER_KIND, G_PDDELAY, lx, row, dw, lh, "Delays", PLACETEXT_LEFT, GTSL_Min, 0, GTSL_Max, OM_DELAY_MAX,
+          GTSL_LevelFormat, (ULONG)"%2ld", GTSL_MaxLevelLen, 2, GTSL_LevelPlace, PLACETEXT_RIGHT, GA_RelVerify, TRUE);
+        G(SLIDER_KIND, G_PUDELAY, lx + dw + slv + 8, row, dw, lh, NULL, 0, GTSL_Min, 0, GTSL_Max, OM_DELAY_MAX,
+          GTSL_LevelFormat, (ULONG)"%2ld", GTSL_MaxLevelLen, 2, GTSL_LevelPlace, PLACETEXT_RIGHT, GA_RelVerify, TRUE); row += st;
+        G(CHECKBOX_KIND, G_CENTRE, lx, row, cb, lh, "Centre submenus", PLACETEXT_LEFT, GTCB_Scaled, TRUE);
+        G(CHECKBOX_KIND, G_MARK, lx + lw - cb, row, cb, lh, "Mark them", PLACETEXT_LEFT, GTCB_Scaled, TRUE); row += st;
+        G(CHECKBOX_KIND, G_RUNNING, lx, row, cb, lh, "Programs run on", PLACETEXT_LEFT, GTCB_Scaled, TRUE);
+        G(CHECKBOX_KIND, G_LAST, lx + lw - cb, row, cb, lh, "Open on last", PLACETEXT_LEFT, GTCB_Scaled, TRUE); row += st;
+        G(CHECKBOX_KIND, G_KEYBOARD, lx, row, cb, lh, "Keyboard", PLACETEXT_LEFT, GTCB_Scaled, TRUE);
+        G(STRING_KIND, G_KEY, lx + cb + 8, row, lw - cb - 8, lh, NULL, 0, GTST_MaxChars, 60); row += st;
+        G(CHECKBOX_KIND, G_RALT, lx, row, cb, lh, "R.Amiga+R.Alt", PLACETEXT_LEFT, GTCB_Scaled, TRUE);
+        G(CHECKBOX_KIND, G_TOP, lx + lw - cb, row, cb, lh, "Pointer up", PLACETEXT_LEFT, GTCB_Scaled, TRUE); row += st;
+        G(CHECKBOX_KIND, G_ENABLED, lx, row, cb, lh, "Use OpenMenus", PLACETEXT_LEFT, GTCB_Scaled, TRUE); row += st;
+
+        G(CYCLE_KIND, G_COLOURS, rx, row2, rg, lh, "Colours", PLACETEXT_LEFT, GTCY_Labels, (ULONG)colours_labels); row2 += st;
+        G(CYCLE_KIND, G_WHICH, rx, row2, rg - hexw - 6, lh, NULL, 0, GTCY_Labels, (ULONG)which_labels);
+        G(STRING_KIND, G_HEX, rx + rg - hexw, row2, hexw, lh, NULL, 0, GTST_MaxChars, 7); row2 += st;
+        G(CYCLE_KIND, G_BORDER, rx, row2, bw, lh, "Border", PLACETEXT_LEFT, GTCY_Labels, (ULONG)border_labels);
+        G(CYCLE_KIND, G_SEPS, rx + rg - sw, row2, sw, lh, "Lines", PLACETEXT_LEFT, GTCY_Labels, (ULONG)seps_labels); row2 += st;
+        {
+            int sx = rx + cb + 8, ssw = (rg - cb - 8 - 2 * slv - 8) / 2;
+            G(CHECKBOX_KIND, G_SHADOW, rx, row2, cb, lh, "Shadow", PLACETEXT_LEFT, GTCB_Scaled, TRUE);
+            G(SLIDER_KIND, G_SSIZE, sx, row2, ssw, lh, NULL, 0, GTSL_Min, 1, GTSL_Max, OM_SHADOW_SIZE_MAX,
+              GTSL_LevelFormat, (ULONG)"%2ld", GTSL_MaxLevelLen, 3, GTSL_LevelPlace, PLACETEXT_RIGHT, GA_RelVerify, TRUE);
+            G(SLIDER_KIND, G_SSTRENGTH, sx + ssw + slv + 8, row2, ssw, lh, NULL, 0, GTSL_Min, 1, GTSL_Max, OM_SHADOW_STRENGTH_MAX,
+              GTSL_LevelFormat, (ULONG)"%3ld", GTSL_MaxLevelLen, 3, GTSL_LevelPlace, PLACETEXT_RIGHT, GA_RelVerify, TRUE); row2 += st;
+        }
+        G(CYCLE_KIND, G_BG, rx, row2, rg, lh, "Background", PLACETEXT_LEFT, GTCY_Labels, (ULONG)bg_labels); row2 += st;
+        G(STRING_KIND, G_IMAGE, rx, row2, rg - chw - 6, lh, "Picture", PLACETEXT_LEFT, GTST_MaxChars, 250);
+        G(BUTTON_KIND, G_CHOOSE, rx + rg - chw, row2, chw, lh, "Choose...", 0, GA_Disabled, FALSE); row2 += st;
+        /* the right-click menus on icons and the desktop */
+        G(CHECKBOX_KIND, G_RC, rx, row2, cb, lh, "Icon menus", PLACETEXT_LEFT, GTCB_Scaled, TRUE);
+        G(CHECKBOX_KIND, G_RCNAME, rx + rg - cb, row2, cb, lh, rcw <= rg - cb - 8 ? "Name at the top" : "Name on top", PLACETEXT_LEFT,
+          GTCB_Scaled, TRUE); row2 += st;
+        G(CYCLE_KIND, G_RCEXTRAS, rx, row2, rg, lh, "They show", PLACETEXT_LEFT, GTCY_Labels, (ULONG)rcshow_labels); row2 += st;
+        G(CYCLE_KIND, G_RCSEL, rx, row2, rg, lh, "Selected", PLACETEXT_LEFT, GTCY_Labels, (ULONG)rcsel_labels); row2 += st;
+        G(BUTTON_KIND, G_TAKEOVER, rx0, row2, pw, lh, "Take over MagicMenu's...", 0, GA_Disabled, FALSE); row2 += st;
+        if (row2 > row) row = row2;
+        row += 7;                                  /* the page's frame passes 6 lines above the status line */
     } else {
         /* the left column: how menus open, and the keys */
         G(CYCLE_KIND, G_OPEN, lx, row, lw, lh, "Menus open", PLACETEXT_LEFT, GTCY_Labels, (ULONG)open_labels); row += lh + gp;

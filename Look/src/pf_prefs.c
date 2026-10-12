@@ -383,6 +383,74 @@ int pf_wbtf_put(pf_file *f, const char *format)
     return pf_insert(f, i >= 0 ? i + 1 : f->n, PF_WBTF, format, (uint32_t)strlen(format) + 1);
 }
 
+/* OS 3.2.3's Workbench editor, measured in a lab: No Border writes Borderless 1 and the frame -1 -1 1 1;
+ * Small, Medium and Large write Borderless 0 and -1, -2 or -3 each way. */
+int pf_wbnc_frame(const pf_wbnc *w)
+{
+    int n = -w->emboss[0];
+    if (w->borderless) return 0;
+    if (n < 1 || n > 3 || w->emboss[1] != -n || w->emboss[2] != n || w->emboss[3] != n) return -1;
+    return n;
+}
+
+void pf_wbnc_set_frame(pf_wbnc *w, int size)
+{
+    int n = size < 1 ? 1 : size > 3 ? 3 : size;
+    w->borderless = size <= 0;
+    w->emboss[0] = w->emboss[1] = (int16_t)-n;
+    w->emboss[2] = w->emboss[3] = (int16_t)n;
+}
+
+static int same_name(const char *a, const char *b)  /* ASCII, either case, as AmigaDOS compares names */
+{
+    for (; *a && *b; a++, b++) {
+        int x = *a >= 'a' && *a <= 'z' ? *a - 32 : *a, y = *b >= 'a' && *b <= 'z' ? *b - 32 : *b;
+        if (x != y) return 0;
+    }
+    return *a == *b;
+}
+
+int pf_wbhd_get(const pf_file *f, int nth, char *out, int size)
+{
+    int i = pf_find(f, PF_WBHD, nth);
+    out[0] = 0;
+    if (i < 0) return 0;
+    get_name(f->ch[i].data, (int)f->ch[i].len, out, size);
+    return 1;
+}
+
+int pf_wbhd_is(const pf_file *f, const char *name)
+{
+    char now[128];
+    int k;
+    for (k = 0; pf_wbhd_get(f, k, now, sizeof now); k++)
+        if (same_name(now, name)) return 1;
+    return 0;
+}
+
+int pf_wbhd_set(pf_file *f, const char *const *names, int n)
+{
+    char now[128];
+    int k, have = 0, at, i;
+    for (k = 0; pf_wbhd_get(f, k, now, sizeof now); k++) have++;
+    if (have == n) {                                          /* the same devices: the file as it is */
+        for (k = 0; k < n && pf_wbhd_is(f, names[k]); k++) ;
+        if (k == n) return 1;
+    }
+    at = pf_find(f, PF_WBHD, 0);
+    if (at < 0) {
+        i = pf_find(f, PF_WBNC, 0);
+        at = i >= 0 ? i + 1 : pf_find(f, PF_PRHD, 0) + 1;
+    }
+    while ((i = pf_find(f, PF_WBHD, 0)) >= 0) {
+        pf_remove(f, i);
+        if (i < at) at--;
+    }
+    for (k = 0; k < n; k++)
+        if (!pf_insert(f, at + k, PF_WBHD, names[k], (uint32_t)strlen(names[k]) + 1)) return 0;
+    return 1;
+}
+
 /* ---- asl.prefs -------------------------------------------------------------------------------------- */
 
 int pf_asl_get(const pf_file *f, pf_asl *out)
@@ -500,5 +568,51 @@ int pf_pntr_take_all(pf_file *f, const pf_file *from)
             if (!pf_insert(f, at++, PF_PNTR, from->ch[i].data, from->ch[i].len)) { pf_copy(f, &keep); pf_free(&keep); return 0; }
         }
     pf_free(&keep);
+    return 1;
+}
+
+/* The pointer's bytes to draw in: chunk i's planes, after its header and colours (NULL when not whole). */
+static uint8_t *pntr_planes(pf_file *f, int which, pf_pntr *p)
+{
+    int i = index_of(f, PF_PNTR, 16, which);
+    if (i < 0 || !pntr_read(f->ch[i].data, f->ch[i].len, p)) return NULL;
+    return f->ch[i].data + PF_PNTR_HEAD + 3 * p->ncolours;
+}
+
+int pf_pntr_set_pixel(pf_file *f, int which, int x, int y, int colour)
+{
+    pf_pntr p;
+    uint8_t *planes = pntr_planes(f, which, &p);
+    int k, bpr;
+    if (!planes || x < 0 || y < 0 || x >= p.width || y >= p.height || colour < 0 || colour > p.ncolours) return 0;
+    bpr = ((p.width + 15) / 16) * 2;
+    for (k = 0; k < p.depth; k++) {
+        uint8_t *b = planes + ((long)k * p.height + y) * bpr + (x >> 3), bit = (uint8_t)(0x80 >> (x & 7));
+        if (colour & (1 << k)) *b |= bit;
+        else *b &= (uint8_t)~bit;
+    }
+    return 1;
+}
+
+/* OS 3.2.3's Pointer editor, measured in a lab: a colour changed on one pointer is written into every PNTR
+ * chunk of the file, the extra one (type 40) and the flagged one (16 | 0x4000) too, as 8-bit red, green, blue. */
+int pf_pntr_set_colour(pf_file *f, int colour, const uint8_t rgb[3])
+{
+    int i, any = 0;
+    for (i = 0; i < f->n; i++) {
+        pf_pntr p;
+        if (f->ch[i].id != PF_PNTR || !pntr_read(f->ch[i].data, f->ch[i].len, &p) || colour < 1 || colour > p.ncolours) continue;
+        memcpy(f->ch[i].data + PF_PNTR_HEAD + 3 * (colour - 1), rgb, 3);
+        any = 1;
+    }
+    return any;
+}
+
+int pf_pntr_clear(pf_file *f, int which)
+{
+    pf_pntr p;
+    uint8_t *planes = pntr_planes(f, which, &p);
+    if (!planes) return 0;
+    memset(planes, 0, (size_t)p.depth * p.height * (((p.width + 15) / 16) * 2));
     return 1;
 }

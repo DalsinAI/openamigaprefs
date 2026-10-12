@@ -217,6 +217,16 @@ the shadow's size and strength share a row, and Take over MagicMenu's moves
 under the preview. The Advanced view keeps PAL's tighter spacing on every screen,
 so it is 251 lines high (Topaz 8) wherever it is measured.
 
+With OpenLook's tabs above it (OpenLook 1.1) the Advanced view needed 311 lines
+in Topaz 8. Menus 0.2.5 (OpenLook 1.2, 12 October 2026) lays it out for a
+screen under 400 lines: no preview (Simple has it, and Test shows the real
+menus), how menus open and the keys on the left with Use OpenMenus at their
+foot, and on the right the look, then the right-click menus (Icon menus and
+Name at the top on one row, They show, Selected) and Take over MagicMenu's,
+one line between rows. Measured on a PAL High Res Workbench in Topaz 8 it is
+640 x 248 inside OpenLook and 634 x 248 on its own. Taller screens keep the
+layout above.
+
 ### For the OpenUp part (to add in openamigaup)
 
     menus = Part(top, "OpenMenus", "0.1", "OpenMenus: our own menus, and their editor")
