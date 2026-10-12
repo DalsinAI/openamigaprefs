@@ -54,3 +54,21 @@ locale.library runs on its own built-in region (united_states, GMT offset
 
 Tested in lab `gcc16-c` (a copy of Instance-32), built into OpenBench and
 stand-alone.
+
+## 0.1.3 (12 October 2026): C:Date and SetClock get both NIL: handles
+
+Setting the clock runs `C:Date` and then `C:SetClock SAVE` with a synchronous
+`SystemTags`. Both had a `NIL:` input and a NULL output. An editor started
+from Workbench has no output of its own, so the commands ran with none. Each
+call now gets a real `NIL:` input and a real `NIL:` output, as OpenDock 0.6.4
+and OpenMenus 0.4.4 give their programs (openamigaprefs #94). A synchronous
+call leaves both handles to the caller, so the editor closes them after the
+second command. If `NIL:` can't be opened, the clock is not set and the
+editor says so, as it does when `C:Date` fails.
+
+Tested in lab `smallfixes-lab` (a copy of Instance-32): started from its
+Workbench icon (no output of its own), the editor set the clock to 10:18
+and back to 22:22 with Use, and `Date` in a Shell showed each. The lab's
+`ENV:Sys/Locale.prefs` was written once; Use after that said "Couldn't
+write ENV:Sys/Locale.prefs." with 0.1.2 too, the file held open as the
+0.1.2 notes above describe. That is not changed here.
