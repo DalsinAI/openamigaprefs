@@ -37,7 +37,7 @@
 #include <stdlib.h>
 #include "../../Common/looktabs.h"
 
-static const char version[] __attribute__((used)) = "$VER: Windows 0.6.3 (10.10.2026) OpenPrefs, MIT, Copyright (c) 2026 Dalsin Limited";
+static const char version[] __attribute__((used)) = "$VER: Windows 0.6.4 (12.10.2026) OpenPrefs, MIT, Copyright (c) 2026 Dalsin Limited";
 
 #define PREFS_ENV "ENV:OpenPrefs/Windows"
 #define PREFS_ENVARC "ENVARC:OpenPrefs/Windows"
@@ -294,7 +294,7 @@ static int gui_once(void)
      ng.ng_Flags = (flags), ng.ng_GadgetID = (id), g = gad[id] = CreateGadget(kind, g, &ng, __VA_ARGS__, TAG_DONE))
 
     g = lt_make(g, &ng, 10, top, W - 20, lh, LT_WINDOWS);
-    row = top + lh + 8;                              /* below the tabs (looktabs.h) */
+    row = top + lt_space(scr->Font, W - 20, lh) + 8; /* below the tabs (looktabs.h): one row, or two */
     G(CHECKBOX_KIND, G_SNAP, X, row, 26, lh, "Snap to edges", PLACETEXT_LEFT, GTCB_Scaled, TRUE);
     if (advanced) G(INTEGER_KIND, G_DIST, X + 160, row, 50, lh, "within", PLACETEXT_LEFT, GTIN_MaxChars, 2);
     row += lh + 4;
@@ -399,10 +399,13 @@ static int gui_once(void)
                 case G_DRAWW: cur.drawer_w = num < 0 ? 0 : num; show(); break;
                 case G_DRAWH: cur.drawer_h = num < 0 ? 0 : num; show(); break;
                 case G_USE: put_in_place(0); quit = 1; break;
-                case LT_ID + LT_LOOK: case LT_ID + LT_TITLEBAR: case LT_ID + LT_MENUS:   /* another tab: keep, as Use, and hand over */
-                    put_in_place(0); lt_go(win, gg->GadgetID - LT_ID); quit = 1; break;
                 case G_SAVE: put_in_place(1); quit = 1; break;
                 case G_CANCEL: quit = 1; break;
+                default:
+                    if (LT_IS(gg->GadgetID) && gg->GadgetID != LT_ID + LT_WINDOWS) {   /* another tab: keep, as Use, and hand over */
+                        put_in_place(0); lt_go(win, gg->GadgetID - LT_ID); quit = 1;
+                    }
+                    break;
                 }
             }
         }

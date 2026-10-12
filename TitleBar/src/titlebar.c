@@ -34,7 +34,7 @@
 #include "tb_prefs.h"
 #include "../../Common/looktabs.h"
 
-static const char version[] __attribute__((used)) = "$VER: TitleBar 0.3.2 (10.10.2026) OpenPrefs, MIT, Copyright (c) 2026 Dalsin Limited";
+static const char version[] __attribute__((used)) = "$VER: TitleBar 0.3.3 (12.10.2026) OpenPrefs, MIT, Copyright (c) 2026 Dalsin Limited";
 
 static tb_prefs cur;
 
@@ -162,7 +162,7 @@ static int gui(void)
 
     row = scr->WBorTop + fh + 1 + 8;
     g = lt_make(g, &ng, 10, row, W - 20, lh, LT_TITLEBAR);
-    row += lh + 8;                                   /* below the tabs (looktabs.h) */
+    row += lt_space(scr->Font, W - 20, lh) + 8;     /* below the tabs (looktabs.h): one row, or two */
     G(CHECKBOX_KIND, G_LOGO, X, row, 26, lh, "AmigaChrome logo at the left", PLACETEXT_LEFT, GTCB_Scaled, TRUE); row += lh + 4;
     G(CHECKBOX_KIND, G_MEMORY, X, row, 26, lh, "Free chip and fast memory", PLACETEXT_LEFT, GTCB_Scaled, TRUE); row += lh + 4;
     G(CHECKBOX_KIND, G_CLOCK, X, row, 26, lh, "Clock at the right", PLACETEXT_LEFT, GTCB_Scaled, TRUE); row += lh + 4;
@@ -228,10 +228,13 @@ static int gui(void)
                 case G_COG: cur.cog = sel; break;
                 case G_BORDER: cur.border_black = sel; break;
                 case G_USE: put_in_place(0); quit = 1; break;
-                case LT_ID + LT_LOOK: case LT_ID + LT_WINDOWS: case LT_ID + LT_MENUS:   /* another tab: keep, as Use, and hand over */
-                    put_in_place(0); lt_go(win, gg->GadgetID - LT_ID); quit = 1; break;
                 case G_SAVE: put_in_place(1); quit = 1; break;
                 case G_CANCEL: quit = 1; break;
+                default:
+                    if (LT_IS(gg->GadgetID) && gg->GadgetID != LT_ID + LT_TITLEBAR) {   /* another tab: keep, as Use, and hand over */
+                        put_in_place(0); lt_go(win, gg->GadgetID - LT_ID); quit = 1;
+                    }
+                    break;
                 }
             }
         }
