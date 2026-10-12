@@ -284,6 +284,51 @@ static void workbench(void)
     pf_free(&f); pf_free(&g); free(b); free(dflt);
 }
 
+/* The icon frame and the hidden devices, against what OS 3.2.3's Workbench editor wrote in a lab, each
+ * from sample-workbench.prefs: Border Size Small, Medium, Large, then No Border, with DH1: and DF0: hidden. */
+static void workbench_as_classic(void)
+{
+    static const struct { const char *file; int frame, n; const char *names[2]; } c[] = {
+        { "sample-workbench-small-dh1.prefs", 1, 1, { "DH1:", NULL } },
+        { "sample-workbench-medium-dh1.prefs", 2, 1, { "DH1:", NULL } },
+        { "sample-workbench-large-dh1-df0.prefs", 3, 2, { "DH1:", "DF0:" } },
+        { "sample-workbench-none-dh1-df0.prefs", 0, 2, { "DH1:", "DF0:" } },
+    };
+    unsigned k;
+    char name[32];
+    for (k = 0; k < sizeof c / sizeof c[0]; k++) {
+        pf_file f, want;
+        pf_wbnc w;
+        uint8_t *b, *wb;
+        long len, wlen;
+        parse_sample(&f, "sample-workbench.prefs", &b, &len);
+        parse_sample(&want, c[k].file, &wb, &wlen);
+        CHECK(pf_wbnc_get(&f, &w) && pf_wbnc_frame(&w) == 0 && pf_wbhd_get(&f, 0, name, sizeof name) == 0, "%s: no border, none hidden", c[k].file);
+        pf_wbnc_set_frame(&w, c[k].frame);
+        CHECK(pf_wbnc_put(&f, &w) && pf_wbhd_set(&f, c[k].names, c[k].n) && same_as(&f, wb, wlen), "%s: %ld bytes differ", c[k].file,
+              differing(&f, wb, wlen));
+        CHECK(pf_wbnc_get(&want, &w) && pf_wbnc_frame(&w) == c[k].frame && pf_wbhd_is(&want, "dh1:") && !pf_wbhd_is(&want, "RAM:") &&
+              pf_wbhd_get(&want, c[k].n - 1, name, sizeof name) && !strcmp(name, c[k].names[c[k].n - 1]), "%s read back", c[k].file);
+        free(b); free(wb); pf_free(&f); pf_free(&want);
+    }
+    {
+        pf_file f;
+        pf_wbnc w;
+        uint8_t *b;
+        long len;
+        static const char *const two[2] = { "df0:", "DH1:" }, *const one[1] = { "CD0:" };
+        memset(&w, 0, sizeof w);
+        parse_sample(&f, "sample-workbench-large-dh1-df0.prefs", &b, &len);
+        CHECK(pf_wbhd_set(&f, two, 2) && same_as(&f, b, len), "the same devices in another order and case: the file as it is");
+        CHECK(pf_wbhd_set(&f, one, 1) && pf_find(&f, PF_WBHD, 0) == 2 && pf_find(&f, PF_WBHD, 1) < 0 && f.ch[3].id == PF_WBTF &&
+              f.ch[2].len == 5, "one device in place of two, where they were");
+        CHECK(pf_wbhd_set(&f, NULL, 0) && pf_find(&f, PF_WBHD, 0) < 0 && f.n == 3, "none hidden");
+        w.emboss[0] = -2; w.emboss[1] = -1; w.emboss[2] = 2; w.emboss[3] = 2; w.borderless = 0;
+        CHECK(pf_wbnc_frame(&w) == -1, "a frame the editor doesn't offer");
+        free(b); pf_free(&f);
+    }
+}
+
 /* ---- asl.prefs -------------------------------------------------------------------------------------- */
 
 static void asl(void)
@@ -357,6 +402,56 @@ static void pointer(void)
     pf_free(&f); pf_free(&set);
 }
 
+/* A PNTR chunk as OS 3.2's sets have them: 16 x 24, depth 2, size 5, the classic colours, all clear. */
+static void pointer_chunk24(pf_file *f, int which)
+{
+    uint8_t d[32 + 9 + 96];
+    memset(d, 0, sizeof d);
+    pf_put16(d + 16, (uint16_t)which);
+    pf_put16(d + 18, 5);
+    pf_put16(d + 20, 16);
+    pf_put16(d + 22, 24);
+    pf_put16(d + 24, 2);
+    d[32] = 0xe0; d[33] = 0x40; d[34] = 0x40; d[38] = 0xe0; d[39] = 0xe0; d[40] = 0xc0;
+    pf_add(f, PF_PNTR, d, sizeof d);
+}
+
+/* Drawing, against what OS 3.2.3's Pointer editor wrote in a lab (its file isn't kept here: the OS's pointers
+ * are Hyperion's): colour 1's red 0xe0 to 0xe1 changed byte 32 of every PNTR chunk; pixel 10, 20 of Normal
+ * in colour 2 changed byte 130 of Normal's chunk from 0x00 to 0x20 (plane 1, row 20, second byte, bit 2). */
+static void pointer_drawing(void)
+{
+    static const uint8_t red[3] = { 0xe1, 0x40, 0x40 };
+    pf_file f, was;
+    pf_pntr p;
+    int i, k, changed = 0;
+    pf_init(&f); pf_init(&was);
+    pf_new(&f);
+    pointer_chunk24(&f, 40);
+    pointer_chunk24(&f, 1);
+    pointer_chunk24(&f, 16 | 0x4000);
+    pointer_chunk24(&f, 0);
+    pf_copy(&was, &f);
+    CHECK(pf_pntr_set_colour(&f, 1, red), "colour 1");
+    for (i = 1; i < f.n; i++)
+        CHECK(f.ch[i].data[32] == 0xe1 && f.ch[i].data[33] == 0x40 && f.ch[i].data[38] == 0xe0, "colour 1 in chunk %d", i);
+    CHECK(pf_pntr_set_pixel(&f, 0, 10, 20, 2), "a pixel");
+    for (i = 1; i < f.n; i++)
+        for (k = 0; k < (int)f.ch[i].len; k++)
+            if (f.ch[i].data[k] != was.ch[i].data[k]) changed++;
+    CHECK(f.ch[4].data[130] == 0x20 && changed == 4 + 1, "byte 130 of Normal only, and the four red bytes: %d", changed);
+    CHECK(pf_pntr_get(&f, 0, &p) && pf_pntr_pixel(&p, 10, 20) == 2 && pf_pntr_pixel(&p, 11, 20) == 0, "read back");
+    CHECK(pf_pntr_set_pixel(&f, 0, 10, 20, 3) && pf_pntr_get(&f, 0, &p) && pf_pntr_pixel(&p, 10, 20) == 3 && f.ch[4].data[82] == 0x20,
+          "colour 3: plane 0 too");
+    CHECK(pf_pntr_set_pixel(&f, 0, 10, 20, 0) && f.ch[4].data[130] == 0 && f.ch[4].data[82] == 0, "clear again");
+    CHECK(!pf_pntr_set_pixel(&f, 0, 16, 0, 1) && !pf_pntr_set_pixel(&f, 0, 0, 24, 1) && !pf_pntr_set_pixel(&f, 0, 0, 0, 4) &&
+          !pf_pntr_set_pixel(&f, 7, 0, 0, 1), "outside it, too deep a colour, no such pointer");
+    CHECK(!pf_pntr_set_colour(&f, 4, red) && !pf_pntr_set_colour(&f, 0, red), "only colours 1 to 3");
+    pf_pntr_set_pixel(&f, 1, 0, 0, 3);
+    CHECK(pf_pntr_clear(&f, 1) && pf_pntr_get(&f, 1, &p) && pf_pntr_pixel(&p, 0, 0) == 0 && f.ch[2].data[32] == 0xe1, "clear: the colours kept");
+    pf_free(&f); pf_free(&was);
+}
+
 int main(int argc, char **argv)
 {
     dir = argc > 1 ? argv[1] : ".";
@@ -368,8 +463,10 @@ int main(int argc, char **argv)
     palette();
     wbpattern();
     workbench();
+    workbench_as_classic();
     asl();
     pointer();
+    pointer_drawing();
     if (fails) { fprintf(stderr, "%d of %d checks failed\n", fails, checks); return 1; }
     printf("pf: all %d checks passed\n", checks);
     return 0;

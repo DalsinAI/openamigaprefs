@@ -249,6 +249,21 @@ keys leave the press to Intuition, so Amiga-drag and the rest are as before.
 A window moves with no NEWSIZE or redraw from its program: the layers move
 its contents.
 
+## The editor in 640 x 256 (Windows 0.6.5, 12 October 2026)
+
+Inside OpenLook (1.1) the page was wider than a 640-wide screen in Topaz 8,
+for its four long switches, and its Advanced view was taller than 256 lines.
+Now the four long switches stand with their boxes at the page's left edge
+when the column would make the page wider than 620 pixels, and in the column,
+as before, everywhere else. On a screen under 400 lines the Advanced view puts
+the short switches in two columns (Snap to edges and within, Window switcher
+and its key, Remember places and Forget all, Never for on the left; Fill a
+half, Wheel under pointer, Workbench drawers too, Drawers at least on the
+right) with the four long ones across the page between them. Measured on a
+PAL High Res Workbench in Topaz 8 (OpenLook 1.2): Simple 628 x 253, Advanced
+628 x 245; the stand-alone editor's Advanced view is 628 x 245 too. On the
+1920 x 1080 screen both views are as they were.
+
 ## Tested
 
 Tested on a scratch OS 3.2.3 on AmigaChrome (OpenRTG 800x600), with input

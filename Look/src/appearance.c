@@ -16,12 +16,18 @@
  *  - Simple shows each tab's few main settings; View > Advanced (Amiga-A) every one, shared with every
  *    OpenPrefs editor through ENV:OpenAmiga/PrefsView.
  *
+ * OpenLook 1.2 (12 October 2026): the Pointer tab's Advanced view draws a pointer, in fat bits, with its three
+ * colours (shared by every pointer of the file, as the OS's Pointer editor has them) and its hot spot; the
+ * Workbench tab shows the icon frame ("Icon borders", the OS editor's Border Size) and the hidden devices; and
+ * every page fits a 640 x 256 screen in Topaz 8 (on a screen under 400 lines Advanced packs its rows closer).
+ *
  * Built into OpenLook only (LT_ONE, Look/build-one.sh): the page runs in OpenLook's one window.
  *
  * MIT, Copyright (c) 2026 Dalsin Limited. */
 #include <exec/types.h>
 #include <exec/memory.h>
 #include <dos/dos.h>
+#include <dos/dosextens.h>
 #include <intuition/intuition.h>
 #include <intuition/screens.h>
 #include <libraries/gadtools.h>
@@ -79,8 +85,8 @@ static const struct ap_page {
 
 enum {
     G_NONE, G_STATUS, G_SAVE, G_USE, G_TEST, G_CANCEL,
-    /* Pointer */
-    G_PSETS, G_PUSESET, G_PONLY, G_PTYPES, G_PHOTX, G_PHOTY,
+    /* Pointer (G_PCOLR, G_PCOLG, G_PCOLB in that order) */
+    G_PSETS, G_PUSESET, G_PONLY, G_PTYPES, G_PHOTX, G_PHOTY, G_PHOT, G_PCOLR, G_PCOLG, G_PCOLB, G_PCLEAR,
     /* Fonts */
     G_FSCREEN, G_FSCREENPICK, G_FICON, G_FICONPICK, G_FSYS, G_FSYSPICK, G_FLABELS, G_FTEXTPEN, G_FFIELDPEN,
     /* Colours */
@@ -88,7 +94,7 @@ enum {
     /* Backdrops */
     G_BFOR, G_BUSE, G_BPATH, G_BPICK, G_BPLACE, G_BREMAP, G_BDITHER, G_BMATCH,
     /* Workbench */
-    G_WBORDERS, G_WGAUGE, G_WTITLEBAR, G_WLABELLEN, G_WNEWICONS, G_WCOLICONS, G_WPRECISION, G_WLOCKPENS,
+    G_WFRAME, G_WGAUGE, G_WTITLEBAR, G_WLABELLEN, G_WNEWICONS, G_WCOLICONS, G_WPRECISION, G_WLOCKPENS, G_WHIDDEN,
     G_WSTACK, G_WDRAWERS, G_WOLDFIRST, G_WBOUND, G_WDELAY, G_WCOPYBUF, G_WRESTART, G_WTITLE,
     /* File requesters */
     G_ASORT, G_ADRAWERS, G_AORDER, G_APLACE, G_ALEFT, G_ATOP, G_ASIZE, G_AWIDTH, G_AHEIGHT, G_AOVERRIDE,
@@ -104,6 +110,7 @@ static int damaged;                        /* there, but not a PREF file this ca
 static int before_had, env_touched;        /* ENV: had the file before a Test; a Test wrote ENV: */
 static ULONG test_until;                   /* seconds since 1978 when a Test goes back, or 0 */
 static int advanced;
+static int tight;                          /* a screen under 400 lines (PAL High Res): Advanced packs its rows closer */
 static struct Window *win;
 static struct Screen *scr;
 static APTR vi;
@@ -326,7 +333,13 @@ static struct names sets, types;
 static int type_of[48];                    /* the pointer type each row of the types list shows */
 static int sel_set = -1, sel_type;         /* the set chosen in the list; the type shown in Advanced */
 static pf_file setfile;                    /* that set, read */
-static int ppx, ppy, ppw, pph;             /* the preview's box */
+static int ppx, ppy, ppw, pph;             /* the preview's box (Simple) */
+/* Drawing (Advanced, OpenLook 1.2): the pointer shown in fat bits, gs pixels a pixel, at gx, gy inside its box;
+ * the four colours to draw with (0 clear) at swx, swy, sws each; the colour drawn with; a click places the hot
+ * spot instead; the colour being painted while the button is held, or -1. */
+static int gx, gy, gs, gbw, gbh, swx, swy, sws;
+static int draw_colour = 2, hot_mode, painting = -1;
+static LONG ptr_pen[4], grid_pen, mark_pen[2];
 
 static void pointer_types(void)
 {
@@ -371,6 +384,57 @@ static void draw_pointer(int which, int x, int y, int maxw, int maxh, LONG textp
     Text(rp, (STRPTR)pointer_names[which], strlen(pointer_names[which]));
 }
 
+/* The size of one pixel of pointer p in the grid: gs, smaller when p is bigger than 16 x 24. */
+static int cell_of(const pf_pntr *p)
+{
+    int c = gs;
+    if (p->width * c > 16 * gs) c = 16 * gs / p->width;
+    if (p->height * c > 24 * gs) c = 24 * gs / p->height;
+    return c < 1 ? 1 : c;
+}
+
+/* Pixel px, py of the pointer shown, in the grid: its colour, and the hot spot's mark on it. */
+static void draw_cell(const pf_pntr *p, int px, int py)
+{
+    struct RastPort *rp = win->RPort;
+    int c = pf_pntr_pixel(p, px, py), s = cell_of(p), x = gx + px * s, y = gy + py * s, inner = s > 2 ? s - 1 : s;
+    if (c > 3) c = 1 + c % 3;
+    SetAPen(rp, (UBYTE)(ptr_pen[c] >= 0 ? ptr_pen[c] : 0));
+    RectFill(rp, x, y, x + inner - 1, y + inner - 1);
+    if (px == -p->x && py == -p->y && s >= 3) {                /* the hot spot: a dark square with a light one in it */
+        SetAPen(rp, (UBYTE)mark_pen[0]);
+        Move(rp, x, y); Draw(rp, x + inner - 1, y); Draw(rp, x + inner - 1, y + inner - 1); Draw(rp, x, y + inner - 1); Draw(rp, x, y);
+        if (inner >= 5) {
+            SetAPen(rp, (UBYTE)mark_pen[1]);
+            Move(rp, x + 1, y + 1); Draw(rp, x + inner - 2, y + 1); Draw(rp, x + inner - 2, y + inner - 2); Draw(rp, x + 1, y + inner - 2);
+            Draw(rp, x + 1, y + 1);
+        }
+    }
+}
+
+/* The grid, the four colours to draw with, the one chosen standing out. */
+static void draw_grid(void)
+{
+    struct RastPort *rp = win->RPort;
+    pf_pntr p;
+    int k, px, py, have = pf_pntr_get(&cur, sel_type, &p);
+    SetAPen(rp, (UBYTE)(grid_pen >= 0 ? grid_pen : 0));
+    RectFill(rp, gx, gy, gx + gbw - 5, gy + gbh - 5);
+    if (have)
+        for (py = 0; py < p.height; py++)
+            for (px = 0; px < p.width; px++) draw_cell(&p, px, py);
+    for (k = 0; k < 4; k++) {
+        int x = swx + k * (sws + 4);
+        SetAPen(rp, (UBYTE)(ptr_pen[k] >= 0 ? ptr_pen[k] : 0));
+        RectFill(rp, x + 2, swy + 2, x + sws - 3, swy + sws - 3);
+        DrawBevelBox(rp, x, swy, sws, sws, GT_VisualInfo, (ULONG)vi, GTBB_Recessed, k == draw_colour, TAG_DONE);
+        if (k == 0) {                                          /* clear: the grey with a line through it */
+            SetAPen(rp, (UBYTE)mark_pen[0]);
+            Move(rp, x + 3, swy + sws - 4); Draw(rp, x + sws - 4, swy + 3);
+        }
+    }
+}
+
 static void pointer_draw(void)
 {
     struct RastPort *rp = win->RPort;
@@ -380,6 +444,21 @@ static void pointer_draw(void)
     if (tf) SetFont(rp, tf);
     free_pens();
     bg = pen_for(0xaa, 0xaa, 0xaa);                /* the OS's grey, which every pointer is drawn to stand on */
+    if (advanced) {
+        pf_pntr p;
+        int k, have = pf_pntr_get(&cur, sel_type, &p);
+        ptr_pen[0] = bg;
+        for (k = 1; k < 4; k++)
+            ptr_pen[k] = have && k <= p.ncolours ? pen_for(p.rgb[3 * (k - 1)], p.rgb[3 * (k - 1) + 1], p.rgb[3 * (k - 1) + 2]) : bg;
+        grid_pen = pen_for(0x77, 0x77, 0x77);
+        mark_pen[0] = dri ? dri->dri_Pens[SHADOWPEN] : 1;
+        mark_pen[1] = dri ? dri->dri_Pens[SHINEPEN] : 2;
+        DrawBevelBox(rp, gx - 2, gy - 2, gbw, gbh, GT_VisualInfo, (ULONG)vi, GTBB_Recessed, TRUE, TAG_DONE);
+        draw_grid();
+        if (tf) { SetFont(rp, was); CloseFont(tf); }
+        if (dri) FreeScreenDrawInfo(scr, dri);
+        return;
+    }
     SetAPen(rp, (UBYTE)(bg >= 0 ? bg : 0));
     RectFill(rp, ppx, ppy, ppx + ppw - 1, ppy + pph - 1);
     DrawBevelBox(rp, ppx - 2, ppy - 1, ppw + 4, pph + 2, GT_VisualInfo, (ULONG)vi, GTBB_Recessed, TRUE, TAG_DONE);
@@ -387,49 +466,82 @@ static void pointer_draw(void)
         SetAPen(rp, (UBYTE)text);
         Move(rp, ppx + 6, ppy + rp->TxBaseline + 4);
         Text(rp, (STRPTR)"No pointers in the file yet.", 28);
-    } else if (!advanced) {
+    } else {
         draw_pointer(0, ppx + 6, ppy + 4, ppw / 2 - 12, pph - 8, text);
         draw_pointer(1, ppx + ppw / 2 + 6, ppy + 4, ppw / 2 - 12, pph - 8, text);
-    } else
-        draw_pointer(sel_type, ppx + 6, ppy + 4, ppw - 12, pph - 8, text);
+    }
     if (tf) { SetFont(rp, was); CloseFont(tf); }
     if (dri) FreeScreenDrawInfo(scr, dri);
 }
 
 static int pointer_make(int row)
 {
-    int listh = 6 * (fh + 1) + 4, lw = 200, y0 = row + fh + 4, end;
+    int y0 = row + fh + 4, end;
     list_drawer(POINTER_SETS, &sets);
     pointer_types();
-    if (type_row(sel_type) < 0) sel_type = 0;
-    G(LISTVIEW_KIND, G_PSETS, L, y0, lw, listh, "Pointer sets", PLACETEXT_ABOVE, GTLV_Labels, (ULONG)&sets.list,
-      GTLV_ShowSelected, NULL, GTLV_Selected, sel_set, GTLV_MakeVisible, sel_set < 0 ? 0 : sel_set);
-    end = y0 + listh + 4;
+    if (type_row(sel_type) < 0) sel_type = types.n ? type_of[0] : 0;
     if (!advanced) {
+        int listh = 6 * (fh + 1) + 4, lw = 200;
+        G(LISTVIEW_KIND, G_PSETS, L, y0, lw, listh, "Pointer sets", PLACETEXT_ABOVE, GTLV_Labels, (ULONG)&sets.list,
+          GTLV_ShowSelected, NULL, GTLV_Selected, sel_set, GTLV_MakeVisible, sel_set < 0 ? 0 : sel_set);
         ppx = L + lw + 20; ppy = y0; ppw = W - 20 - lw - 20; pph = listh;
-    } else {
-        int bw = (lw - 6) / 2, tlw = 170, hx;
-        G(BUTTON_KIND, G_PUSESET, L, end, bw, lh, "The set", 0, GA_Disabled, sel_set < 0);
-        G(BUTTON_KIND, G_PONLY, L + bw + 6, end, bw, lh, "This one", 0, GA_Disabled, sel_set < 0);
-        end += lh + 4;
-        G(LISTVIEW_KIND, G_PTYPES, L + lw + 16, y0, tlw, listh, "Pointer", PLACETEXT_ABOVE, GTLV_Labels, (ULONG)&types.list,
-          GTLV_ShowSelected, NULL, GTLV_Selected, type_row(sel_type), GTLV_MakeVisible, type_row(sel_type) < 0 ? 0 : type_row(sel_type));
-        ppx = L + lw + 16 + tlw + 16; ppy = y0; ppw = L + W - 20 - ppx; pph = listh;
-        hx = ppx + tw("Hot spot") + 8;
-        G(INTEGER_KIND, G_PHOTX, hx, y0 + listh + 4, 44, lh, "Hot spot", PLACETEXT_LEFT, GTIN_MaxChars, 3);
-        G(INTEGER_KIND, G_PHOTY, hx + 50, y0 + listh + 4, 44, lh, NULL, 0, GTIN_MaxChars, 3);
+        return y0 + listh + 4;
     }
-    return end;
+    {
+        /* Advanced: the sets and the types; the pointer in fat bits; its colours and hot spot beside it. Six rows
+         * beside the grid, which is 24 pixels tall: 5 a pixel on a 256-line screen, larger on a big one. */
+        int step = lh + 2, lw, tlw, avail, dw, dx, bw, sl, sw, hx, iw, listh, k;
+        gs = (6 * step) / 24 + 1;
+        if (gs > 8) gs = 8;
+        if (tight && gs > 5) gs = 5;
+        gbw = 16 * gs + 4; gbh = 24 * gs + 4;
+        if (gbh < 6 * step) gbh = 6 * step;
+        sl = tw("Green") + 8;
+        dw = sl + 60 + tw("255") + 8;
+        hx = tw("Hot spot") + 8;
+        iw = tw("00") + 12;                        /* the hot spot: 0 to 15 across, 0 to 23 down */
+        if (dw < hx + 26 + 2 * (iw + 4)) dw = hx + 26 + 2 * (iw + 4);
+        if (dw < 4 * (lh + 4)) dw = 4 * (lh + 4);
+        avail = W - 20 - gbw - dw - 3 * 8;
+        lw = avail / 2; tlw = avail - lw;
+        listh = gbh - lh - 4;
+        G(LISTVIEW_KIND, G_PSETS, L, y0, lw, listh, "Pointer sets", PLACETEXT_ABOVE, GTLV_Labels, (ULONG)&sets.list,
+          GTLV_ShowSelected, NULL, GTLV_Selected, sel_set, GTLV_MakeVisible, sel_set < 0 ? 0 : sel_set);
+        bw = (lw - 6) / 2;
+        G(BUTTON_KIND, G_PUSESET, L, y0 + listh + 4, bw, lh, "The set", 0, GA_Disabled, sel_set < 0);
+        G(BUTTON_KIND, G_PONLY, L + bw + 6, y0 + listh + 4, lw - bw - 6, lh, "This one", 0, GA_Disabled, sel_set < 0);
+        G(LISTVIEW_KIND, G_PTYPES, L + lw + 8, y0, tlw, listh + lh + 4, "Pointer", PLACETEXT_ABOVE, GTLV_Labels, (ULONG)&types.list,
+          GTLV_ShowSelected, NULL, GTLV_Selected, type_row(sel_type), GTLV_MakeVisible, type_row(sel_type) < 0 ? 0 : type_row(sel_type));
+        gx = L + lw + 8 + tlw + 8 + 2; gy = y0 + 2;
+        dx = L + W - 20 - dw;
+        swx = dx; swy = y0; sws = lh;
+        sw = dw - sl - tw("255") - 8;
+        for (k = 0; k < 3; k++) {
+            static const char *const rgb_label[3] = { "Red", "Green", "Blue" };
+            G(SLIDER_KIND, G_PCOLR + k, dx + sl, y0 + (k + 1) * step, sw, lh, rgb_label[k], PLACETEXT_LEFT, GTSL_Min, 0, GTSL_Max, 255,
+              GTSL_LevelFormat, (ULONG)"%3ld", GTSL_MaxLevelLen, 3, GTSL_LevelPlace, PLACETEXT_RIGHT, GA_RelVerify, TRUE, GA_Immediate, TRUE);
+        }
+        G(CHECKBOX_KIND, G_PHOT, dx + hx, y0 + 4 * step, 26, lh, "Hot spot", PLACETEXT_LEFT, GTCB_Scaled, TRUE);
+        G(INTEGER_KIND, G_PHOTX, dx + hx + 30, y0 + 4 * step, iw, lh, NULL, 0, GTIN_MaxChars, 3);
+        G(INTEGER_KIND, G_PHOTY, dx + hx + 34 + iw, y0 + 4 * step, iw, lh, NULL, 0, GTIN_MaxChars, 3);
+        G(BUTTON_KIND, G_PCLEAR, dx, y0 + 5 * step, dw, lh, "Clear the pointer", 0, TAG_DONE);
+        end = y0 + gbh;
+        if (end < y0 + listh + lh + 4) end = y0 + listh + lh + 4;
+        return end + 4;
+    }
 }
 
 static void pointer_show(void)
 {
     pf_pntr p;
-    int have = pf_pntr_get(&cur, sel_type, &p);
+    int have = pf_pntr_get(&cur, sel_type, &p), k, on = have && draw_colour >= 1 && draw_colour <= p.ncolours;
     SETINT(G_PHOTX, have ? -p.x : 0, !have);
     SETINT(G_PHOTY, have ? -p.y : 0, !have);
     SET(G_PUSESET, GA_Disabled, sel_set < 0);
     SET(G_PONLY, GA_Disabled, sel_set < 0);
+    SET(G_PHOT, GTCB_Checked, hot_mode, GA_Disabled, !have);
+    SET(G_PCLEAR, GA_Disabled, !have);
+    for (k = 0; k < 3; k++) SET(G_PCOLR + k, GTSL_Level, on ? p.rgb[3 * (draw_colour - 1) + k] : 0, GA_Disabled, !on);
 }
 
 static void pointer_relist(void)
@@ -438,6 +550,43 @@ static void pointer_relist(void)
     pointer_types();
     if (type_row(sel_type) < 0) sel_type = types.n ? type_of[0] : 0;
     SET(G_PTYPES, GTLV_Labels, (ULONG)&types.list, GTLV_Selected, type_row(sel_type));
+}
+
+/* A click (down 1) or a move with the button held (down 0) at mx, my in the window: a colour to draw with, a
+ * pixel drawn, or the hot spot placed. 1 when it was on the grid or the colours. */
+static int pointer_mouse(int mx, int my, int down)
+{
+    pf_pntr p;
+    int px, py, s, k;
+    if (!advanced || damaged) return 0;
+    if (down && my >= swy && my < swy + sws)
+        for (k = 0; k < 4; k++)
+            if (mx >= swx + k * (sws + 4) && mx < swx + k * (sws + 4) + sws) {
+                draw_colour = k;
+                pointer_show();
+                draw_grid();
+                return 1;
+            }
+    if (!pf_pntr_get(&cur, sel_type, &p)) return 0;
+    s = cell_of(&p);
+    if (mx < gx || my < gy) return 0;
+    px = (mx - gx) / s; py = (my - gy) / s;
+    if (px >= p.width || py >= p.height) return 0;
+    if (hot_mode) {
+        if (!down) return 1;
+        pf_pntr_set_hotspot(&cur, sel_type, -px, -py);
+        hot_mode = 0;
+        status("The hot spot is the pixel the pointer clicks with.");
+        pointer_show();
+        draw_grid();
+        return 1;
+    }
+    if (down) painting = draw_colour > p.ncolours ? 0 : draw_colour;
+    if (painting < 0 || pf_pntr_pixel(&p, px, py) == painting) return 1;
+    pf_pntr_set_pixel(&cur, sel_type, px, py, painting);
+    pf_pntr_get(&cur, sel_type, &p);
+    draw_cell(&p, px, py);
+    return 1;
 }
 
 static void pointer_handle(int id, UWORD code, struct Gadget *gg)
@@ -481,6 +630,25 @@ static void pointer_handle(int id, UWORD code, struct Gadget *gg)
             if (y < 0) y = 0;
             if (y >= p.height) y = p.height - 1;
             pf_pntr_set_hotspot(&cur, sel_type, -x, -y);
+        }
+        break;
+    case G_PHOT:
+        hot_mode = gg && (gg->Flags & GFLG_SELECTED) != 0;
+        status(hot_mode ? "Click the pixel the pointer clicks with." : "Click a colour, then the pixels to draw.");
+        break;
+    case G_PCOLR: case G_PCOLG: case G_PCOLB:
+        if (pf_pntr_get(&cur, sel_type, &p) && draw_colour >= 1 && draw_colour <= p.ncolours) {
+            uint8_t rgb[3];
+            memcpy(rgb, p.rgb + 3 * (draw_colour - 1), 3);
+            rgb[id - G_PCOLR] = (uint8_t)code;
+            pf_pntr_set_colour(&cur, draw_colour, rgb);        /* every pointer's: they share their colours */
+            pointer_draw();
+        }
+        break;
+    case G_PCLEAR:
+        if (pf_pntr_clear(&cur, sel_type)) {
+            snprintf(status_text, sizeof status_text, "The %s pointer is clear: draw it, or Cancel.", pointer_names[sel_type]);
+            status(status_text);
         }
         break;
     }
@@ -815,45 +983,125 @@ static void backdrops_handle(int id, UWORD code, struct Gadget *gg)
 
 static const char *const precision_labels[] = { "Exact", "Image", "Icon", "GUI", NULL };
 static const LONG precision_values[4] = { -1, 0, 16, 32 };     /* PRECISION_EXACT, IMAGE, ICON, GUI */
-static const char *const drawers_labels[] = { "Mixed with files", "First", "Last", NULL };
+static const char *const drawers_labels[] = { "Mixed", "First", "Last", NULL };     /* as the OS's Workbench editor words it */
+/* the icon frame, as the OS's Workbench editor names its sizes ("Border Size"); "Its own" only when the file has
+ * a frame none of them is, which choosing it puts back */
+static const char *frame_labels[6] = { "None", "Small", "Medium", "Large", NULL, NULL };
+static int16_t own_emboss[4];
 static pf_wbnc wbn;
 static char wbtitle[256];
+/* the devices Workbench can hide: those mounted with a file system running (not the one SYS: is on), then any
+ * the file hides that aren't mounted now; whether each is hidden */
+static struct names devs;
+static char dev_name[48][34];
+static int dev_hidden[48], ndevs;
+
+static void devices_label(void)
+{
+    int k;
+    char line[40];
+    names_init(&devs);
+    for (k = 0; k < ndevs; k++) {
+        snprintf(line, sizeof line, "%-8s %s", dev_name[k], dev_hidden[k] ? "hidden" : "shown");
+        names_add(&devs, line);
+    }
+}
+
+static void devices_add(const char *name, int hidden)
+{
+    int k;
+    for (k = 0; k < ndevs; k++) {                             /* the same name in either case: there already */
+        const char *a = dev_name[k], *b = name;
+        while (*a && *b && ((*a ^ *b) & ~0x20) == 0) a++, b++;
+        if (!*a && !*b) return;
+    }
+    if (ndevs >= 48 || strlen(name) >= sizeof dev_name[0]) return;
+    strcpy(dev_name[ndevs], name);
+    dev_hidden[ndevs++] = hidden;
+}
+
+/* The list, in the order the DOS list has the devices (the order the OS's Workbench editor shows them in). */
+static void devices_read(void)
+{
+    struct { char name[34]; } found[40];
+    struct DosList *dl;
+    struct MsgPort *sys_port = NULL;
+    BPTR sys = Lock((CONST_STRPTR)"SYS:", ACCESS_READ);
+    char name[34];
+    int n = 0, k;
+    if (sys) { sys_port = ((struct FileLock *)BADDR(sys))->fl_Task; UnLock(sys); }
+    dl = LockDosList(LDF_DEVICES | LDF_READ);
+    while ((dl = NextDosEntry(dl, LDF_DEVICES)) && n < 40) {
+        const UBYTE *b = (const UBYTE *)BADDR(dl->dol_Name);
+        int len = b ? b[0] : 0;
+        if (!dl->dol_Task || dl->dol_Task == sys_port || len < 1 || len > 30) continue;   /* no handler running, or SYS:'s */
+        memcpy(found[n].name, b + 1, (size_t)len);
+        found[n].name[len] = ':'; found[n].name[len + 1] = 0;
+        n++;
+    }
+    UnLockDosList(LDF_DEVICES | LDF_READ);
+    ndevs = 0;
+    for (k = 0; k < n; k++)                                   /* outside the lock: asking a handler may take a while */
+        if (IsFileSystem((CONST_STRPTR)found[k].name)) devices_add(found[k].name, pf_wbhd_is(&cur, found[k].name));
+    for (k = 0; pf_wbhd_get(&cur, k, name, sizeof name); k++) devices_add(name, 1);
+    devices_label();
+}
+
+static int devices_write(void)            /* the hidden ones into the file, in the list's order */
+{
+    const char *hide[48];
+    int k, n = 0;
+    for (k = 0; k < ndevs; k++) if (dev_hidden[k]) hide[n++] = dev_name[k];
+    return pf_wbhd_set(&cur, hide, n);
+}
 
 static int workbench_make(int row)
 {
-    static const char *const left[] = { "Borders round icons", "Disk gauge", "Screen title bar", "Icon label length", "NewIcons",
-                                        "Colour icons", "Icon colours", "Lock pens 4 to 7", NULL };
-    static const char *const right[] = { "Default stack", "Drawers in lists", "Oldest first", "Keep lists in view",
-                                         "Title update ms", "Copy buffer", "Type-ahead s", "Title", NULL };
-    int step = advanced ? lh + 2 : lh + 4, r2 = row;
-    columns(left, advanced ? right : NULL);
-    G(CHECKBOX_KIND, G_WBORDERS, X1, row, 26, lh, "Borders round icons", PLACETEXT_LEFT, GTCB_Scaled, TRUE); row += step;
-    G(CHECKBOX_KIND, G_WGAUGE, X1, row, 26, lh, "Disk gauge", PLACETEXT_LEFT, GTCB_Scaled, TRUE); row += step;
-    G(CHECKBOX_KIND, G_WTITLEBAR, X1, row, 26, lh, "Screen title bar", PLACETEXT_LEFT, GTCB_Scaled, TRUE); row += step;
-    G(INTEGER_KIND, G_WLABELLEN, X1, row, 60, lh, "Icon label length", PLACETEXT_LEFT, GTIN_MaxChars, 3); row += step;
-    if (advanced) {
-        int cw = W1 > 160 ? 160 : W1, iw = W2 > 100 ? 100 : W2;
-        G(CHECKBOX_KIND, G_WNEWICONS, X1, row, 26, lh, "NewIcons", PLACETEXT_LEFT, GTCB_Scaled, TRUE); row += step;
-        G(CHECKBOX_KIND, G_WCOLICONS, X1, row, 26, lh, "Colour icons", PLACETEXT_LEFT, GTCB_Scaled, TRUE); row += step;
-        G(CYCLE_KIND, G_WPRECISION, X1, row, cw, lh, "Icon colours", PLACETEXT_LEFT, GTCY_Labels, (ULONG)precision_labels); row += step;
-        G(CHECKBOX_KIND, G_WLOCKPENS, X1, row, 26, lh, "Lock pens 4 to 7", PLACETEXT_LEFT, GTCB_Scaled, TRUE); row += step;
-        G(INTEGER_KIND, G_WSTACK, X2, r2, iw, lh, "Default stack", PLACETEXT_LEFT, GTIN_MaxChars, 8); r2 += step;
-        G(CYCLE_KIND, G_WDRAWERS, X2, r2, W2, lh, "Drawers in lists", PLACETEXT_LEFT, GTCY_Labels, (ULONG)drawers_labels); r2 += step;
-        G(CHECKBOX_KIND, G_WOLDFIRST, X2, r2, 26, lh, "Oldest first", PLACETEXT_LEFT, GTCB_Scaled, TRUE); r2 += step;
-        G(CHECKBOX_KIND, G_WBOUND, X2, r2, 26, lh, "Keep lists in view", PLACETEXT_LEFT, GTCB_Scaled, TRUE); r2 += step;
-        G(INTEGER_KIND, G_WDELAY, X2, r2, iw, lh, "Title update ms", PLACETEXT_LEFT, GTIN_MaxChars, 5); r2 += step;
-        G(INTEGER_KIND, G_WCOPYBUF, X2, r2, iw, lh, "Copy buffer", PLACETEXT_LEFT, GTIN_MaxChars, 9); r2 += step;
-        G(INTEGER_KIND, G_WRESTART, X2, r2, iw, lh, "Type-ahead s", PLACETEXT_LEFT, GTIN_MaxChars, 3); r2 += step;
-        G(STRING_KIND, G_WTITLE, X2, r2, W2, lh, "Title", PLACETEXT_LEFT, GTST_MaxChars, 200); r2 += step;
+    static const char *const simple[] = { "Icon borders", "Disk gauge", "Screen title bar", "Icon label length", NULL };
+    static const char *const left[] = { "Icon borders", "Icon label length", "NewIcons", "Colour icons", "Icon colours",
+                                        "Lock pens 4 to 7", "Hidden devices", NULL };
+    static const char *const right[] = { "Disk gauge", "Screen title", "Title update ms", "Default stack", "Drawers in lists",
+                                         "Oldest first", "Keep lists in view", "Copy buffer", "Type-ahead s", NULL };
+    /* Advanced: icons and the hidden devices on the left, the screen and the drawers on the right; on a 256-line
+     * screen one line between the rows, so it fits */
+    int step = advanced ? (tight ? lh + 1 : lh + 2) : lh + 4, r2 = row, fw = widest(frame_labels) + 34, cw, iw, listh;
+    columns(advanced ? left : simple, advanced ? right : NULL);
+    if (fw > W1) fw = W1;
+    G(CYCLE_KIND, G_WFRAME, X1, row, fw, lh, "Icon borders", PLACETEXT_LEFT, GTCY_Labels, (ULONG)frame_labels); row += step;
+    if (!advanced) {
+        G(CHECKBOX_KIND, G_WGAUGE, X1, row, 26, lh, "Disk gauge", PLACETEXT_LEFT, GTCB_Scaled, TRUE); row += step;
+        G(CHECKBOX_KIND, G_WTITLEBAR, X1, row, 26, lh, "Screen title bar", PLACETEXT_LEFT, GTCB_Scaled, TRUE); row += step;
+        G(INTEGER_KIND, G_WLABELLEN, X1, row, 60, lh, "Icon label length", PLACETEXT_LEFT, GTIN_MaxChars, 3); row += step;
+        return row;
     }
+    cw = W1 > 160 ? 160 : W1;
+    iw = W2 > 100 ? 100 : W2;
+    listh = 4 * (fh + 1) + 4;
+    G(INTEGER_KIND, G_WLABELLEN, X1, row, 60, lh, "Icon label length", PLACETEXT_LEFT, GTIN_MaxChars, 3); row += step;
+    G(CHECKBOX_KIND, G_WNEWICONS, X1, row, 26, lh, "NewIcons", PLACETEXT_LEFT, GTCB_Scaled, TRUE); row += step;
+    G(CHECKBOX_KIND, G_WCOLICONS, X1, row, 26, lh, "Colour icons", PLACETEXT_LEFT, GTCB_Scaled, TRUE); row += step;
+    G(CYCLE_KIND, G_WPRECISION, X1, row, cw, lh, "Icon colours", PLACETEXT_LEFT, GTCY_Labels, (ULONG)precision_labels); row += step;
+    G(CHECKBOX_KIND, G_WLOCKPENS, X1, row, 26, lh, "Lock pens 4 to 7", PLACETEXT_LEFT, GTCB_Scaled, TRUE); row += step;
+    G(LISTVIEW_KIND, G_WHIDDEN, X1, row, W1, listh, "Hidden devices", PLACETEXT_LEFT, GTLV_Labels, (ULONG)&devs.list);
+    row += listh + 4;
+    G(CHECKBOX_KIND, G_WGAUGE, X2, r2, 26, lh, "Disk gauge", PLACETEXT_LEFT, GTCB_Scaled, TRUE); r2 += step;
+    G(CHECKBOX_KIND, G_WTITLEBAR, X2, r2, 26, lh, "Screen title", PLACETEXT_LEFT, GTCB_Scaled, TRUE);
+    G(STRING_KIND, G_WTITLE, X2 + 32, r2, W2 - 32, lh, NULL, 0, GTST_MaxChars, 200); r2 += step;
+    G(INTEGER_KIND, G_WDELAY, X2, r2, iw, lh, "Title update ms", PLACETEXT_LEFT, GTIN_MaxChars, 5); r2 += step;
+    G(INTEGER_KIND, G_WSTACK, X2, r2, iw, lh, "Default stack", PLACETEXT_LEFT, GTIN_MaxChars, 8); r2 += step;
+    G(CYCLE_KIND, G_WDRAWERS, X2, r2, W2, lh, "Drawers in lists", PLACETEXT_LEFT, GTCY_Labels, (ULONG)drawers_labels); r2 += step;
+    G(CHECKBOX_KIND, G_WOLDFIRST, X2, r2, 26, lh, "Oldest first", PLACETEXT_LEFT, GTCB_Scaled, TRUE); r2 += step;
+    G(CHECKBOX_KIND, G_WBOUND, X2, r2, 26, lh, "Keep lists in view", PLACETEXT_LEFT, GTCB_Scaled, TRUE); r2 += step;
+    G(INTEGER_KIND, G_WCOPYBUF, X2, r2, iw, lh, "Copy buffer", PLACETEXT_LEFT, GTIN_MaxChars, 9); r2 += step;
+    G(INTEGER_KIND, G_WRESTART, X2, r2, iw, lh, "Type-ahead s", PLACETEXT_LEFT, GTIN_MaxChars, 3); r2 += step;
     return row > r2 ? row : r2;
 }
 
 static void workbench_show(void)
 {
-    int k, prec = 2;
+    int k, prec = 2, frame = pf_wbnc_frame(&wbn);
     for (k = 0; k < 4; k++) if (precision_values[k] == wbn.precision) prec = k;
-    SET(G_WBORDERS, GTCB_Checked, !wbn.borderless, GA_Disabled, damaged);
+    SET(G_WFRAME, GTCY_Active, frame >= 0 ? frame : 4, GA_Disabled, damaged);
     SET(G_WGAUGE, GTCB_Checked, !wbn.nogauge, GA_Disabled, damaged);
     SET(G_WTITLEBAR, GTCB_Checked, !wbn.notitlebar, GA_Disabled, damaged);
     SETINT(G_WLABELLEN, wbn.maxname, damaged);
@@ -861,6 +1109,7 @@ static void workbench_show(void)
     SET(G_WCOLICONS, GTCB_Checked, wbn.coloricons, GA_Disabled, damaged);
     SET(G_WPRECISION, GTCY_Active, prec, GA_Disabled, damaged);
     SET(G_WLOCKPENS, GTCB_Checked, wbn.lockpens, GA_Disabled, damaged);
+    SET(G_WHIDDEN, GA_Disabled, damaged);
     SETINT(G_WSTACK, wbn.stack, damaged);
     SET(G_WDRAWERS, GTCY_Active, (wbn.flags & PF_WBF_DRAWERPOSMASK) <= 2 ? (wbn.flags & PF_WBF_DRAWERPOSMASK) : 0, GA_Disabled, damaged);
     SET(G_WOLDFIRST, GTCB_Checked, (wbn.flags & PF_WBF_OLDDATESFIRST) != 0, GA_Disabled, damaged);
@@ -880,7 +1129,10 @@ static void workbench_handle(int id, UWORD code, struct Gadget *gg)
     if (id == G_WLABELLEN || id == G_WSTACK || id == G_WDELAY || id == G_WCOPYBUF || id == G_WRESTART)
         num = ((struct StringInfo *)gg->SpecialInfo)->LongInt;
     switch (id) {
-    case G_WBORDERS: wbn.borderless = !sel; break;
+    case G_WFRAME:
+        if (code <= 3) pf_wbnc_set_frame(&wbn, code);
+        else { memcpy(wbn.emboss, own_emboss, sizeof own_emboss); wbn.borderless = 0; }
+        break;
     case G_WGAUGE: wbn.nogauge = !sel; break;
     case G_WTITLEBAR: wbn.notitlebar = !sel; break;
     case G_WLABELLEN: wbn.maxname = clamp(num, 4, 999); break;
@@ -888,6 +1140,19 @@ static void workbench_handle(int id, UWORD code, struct Gadget *gg)
     case G_WCOLICONS: wbn.coloricons = sel; break;
     case G_WPRECISION: if (code < 4) wbn.precision = precision_values[code]; break;
     case G_WLOCKPENS: wbn.lockpens = sel; break;
+    case G_WHIDDEN:
+        if (code >= ndevs) return;
+        dev_hidden[code] = !dev_hidden[code];
+        SET(G_WHIDDEN, GTLV_Labels, ~0UL);
+        devices_label();
+        SET(G_WHIDDEN, GTLV_Labels, (ULONG)&devs.list);
+        if (!devices_write()) status("No memory for that.");
+        else {
+            snprintf(status_text, sizeof status_text, dev_hidden[code] ? "Workbench won't show %s." : "Workbench shows %s again.",
+                     dev_name[code]);
+            status(status_text);
+        }
+        return;
     case G_WSTACK: wbn.stack = (ULONG)clamp(num, 4096, 1048576); break;
     case G_WDRAWERS: wbn.flags = (wbn.flags & ~PF_WBF_DRAWERPOSMASK) | code; break;
     case G_WOLDFIRST: wbn.flags = sel ? wbn.flags | PF_WBF_OLDDATESFIRST : wbn.flags & ~PF_WBF_OLDDATESFIRST; break;
@@ -978,9 +1243,15 @@ static void asl_handle(int id, UWORD code, struct Gadget *gg)
 static void page_open(void)                /* the page's own state from the file just read */
 {
     switch (ap) {
-    case AP_POINTER: sel_set = -1; pf_init(&setfile); break;
+    case AP_POINTER: sel_set = -1; hot_mode = 0; pf_init(&setfile); break;
     case AP_COLOURS: break;                    /* colours_open() needs the screen: in gui_once */
-    case AP_WORKBENCH: pf_wbnc_get(&cur, &wbn); pf_wbtf_get(&cur, wbtitle, sizeof wbtitle); break;
+    case AP_WORKBENCH:
+        pf_wbnc_get(&cur, &wbn);
+        pf_wbtf_get(&cur, wbtitle, sizeof wbtitle);
+        memcpy(own_emboss, wbn.emboss, sizeof own_emboss);   /* "Its own" in the list only for a frame the sizes don't name */
+        frame_labels[4] = pf_wbnc_frame(&wbn) < 0 ? "Its own" : NULL;
+        devices_read();
+        break;
     case AP_ASL: pf_asl_get(&cur, &asl); break;
     }
 }
@@ -1121,6 +1392,8 @@ static int gui_once(void)
     lh = fh + 6;
     L = 10;
     W = 620;
+    tight = scr->Height < 400;
+    painting = -1;
     if (ap == AP_COLOURS) colours_open();
     top = scr->WBorTop + fh + 1 + 6;
     last = CreateContext(&glist);
@@ -1148,7 +1421,7 @@ static int gui_once(void)
     menus[6].nm_Flags = CHECKIT | MENUTOGGLE | (advanced ? CHECKED : 0);
     win = lt_open(scr, wl, wt, W, row - inner, glist,
                   IDCMP_CLOSEWINDOW | IDCMP_REFRESHWINDOW | IDCMP_MENUPICK | BUTTONIDCMP | CYCLEIDCMP | LISTVIEWIDCMP | STRINGIDCMP |
-                  INTEGERIDCMP | CHECKBOXIDCMP | SLIDERIDCMP | PALETTEIDCMP, pages[ap].title);
+                  INTEGERIDCMP | CHECKBOXIDCMP | SLIDERIDCMP | PALETTEIDCMP | IDCMP_MOUSEBUTTONS, pages[ap].title);
     if (!win) { rc = RETURN_FAIL; goto out; }
     if ((menu = CreateMenus(menus, TAG_DONE)) && LayoutMenus(menu, vi, GTMN_NewLookMenus, TRUE, TAG_DONE)) SetMenuStrip(win, menu);
     GT_RefreshWindow(win, NULL);
@@ -1183,8 +1456,16 @@ static int gui_once(void)
             ULONG cls = m->Class;
             UWORD code = m->Code;
             struct Gadget *gg = (struct Gadget *)m->IAddress;
+            WORD mx = m->MouseX, my = m->MouseY;
             int id;
             GT_ReplyIMsg(m);
+            /* drawing the pointer (Advanced): the button down on the grid or a colour, moves while it is held */
+            if (cls == IDCMP_MOUSEBUTTONS && ap == AP_POINTER) {
+                if (code == SELECTDOWN && pointer_mouse(mx, my, 1) && painting >= 0) ReportMouse(TRUE, win);
+                else if (code == SELECTUP && painting >= 0) { painting = -1; ReportMouse(FALSE, win); }
+                continue;
+            }
+            if (cls == IDCMP_MOUSEMOVE && painting >= 0) { pointer_mouse(mx, my, 0); continue; }
             if (cls == IDCMP_CLOSEWINDOW) { if (test_until) put_back(); quit = 1; }
             else if (cls == IDCMP_MENUPICK) {
                 UWORD mc = code;
@@ -1207,9 +1488,12 @@ static int gui_once(void)
                 if (ap == AP_POINTER) pointer_draw();
             }
             else if ((cls == IDCMP_GADGETUP || cls == IDCMP_GADGETDOWN || cls == IDCMP_MOUSEMOVE) && gg) {
-                if (cls == IDCMP_MOUSEMOVE && gg != gad[G_CR] && gg != gad[G_CG] && gg != gad[G_CB]) continue;
+                /* the sliders that show their colour as they move: the Colours tab's, the pointer's */
+                int slider = gg == gad[G_CR] || gg == gad[G_CG] || gg == gad[G_CB] || gg == gad[G_PCOLR] || gg == gad[G_PCOLG] ||
+                             gg == gad[G_PCOLB];
+                if (cls == IDCMP_MOUSEMOVE && !slider) continue;
                 id = gg->GadgetID;
-                if (cls == IDCMP_GADGETDOWN && id != G_CR && id != G_CG && id != G_CB) continue;
+                if (cls == IDCMP_GADGETDOWN && !slider) continue;
                 if (id == G_SAVE || id == G_USE) { keep(id == G_SAVE); kept = 1; quit = 1; }
                 else if (id == G_TEST) test();
                 else if (id == G_CANCEL) { if (test_until) put_back(); quit = 1; }
@@ -1231,6 +1515,8 @@ out:
     if (timer) CloseDevice((struct IORequest *)tr);
     if (tr) DeleteIORequest((struct IORequest *)tr);
     if (tport) DeleteMsgPort(tport);
+    if (win && painting >= 0) ReportMouse(FALSE, win);       /* the window may go on to another page */
+    painting = -1;
     if (rc != 99) page_close(kept);
     else if (ap == AP_POINTER) free_pens();
     if (win) { ClearMenuStrip(win); lt_close(win, glist); win = NULL; }
@@ -1261,6 +1547,7 @@ int appearance_main(int tab)
     page_open();
     advanced = read_view();
     strcpy(status_text, damaged ? "This file can't be read whole, so nothing in it is changed." : p->hint);
+    if (ap == AP_POINTER && advanced && !damaged) strcpy(status_text, "Choose a pointer, click a colour, then its pixels.");
     while ((r = gui_once()) == 99) ;
     pf_free(&cur); pf_free(&start); pf_free(&before);
     if (AslBase) CloseLibrary(AslBase);
