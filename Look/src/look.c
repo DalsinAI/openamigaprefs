@@ -60,7 +60,7 @@
 #ifdef IN_OPENBENCH
 static                                     /* built in: OpenBench's globals are its own */
 #endif
-const char version[] __attribute__((used)) = "$VER: Look 0.4.2 (10.10.2026) OpenPrefs, Dalsin Limited";
+const char version[] __attribute__((used)) = "$VER: Look 0.5 (12.10.2026) OpenPrefs, Dalsin Limited";
 
 #define PREFS_ENV "ENV:OpenGadTools/Look"
 #define PREFS_ENVARC "ENVARC:OpenGadTools/Look"
@@ -300,7 +300,7 @@ static void write_label_style(int style, int save)
     for (int k = 0; k < (save ? 2 : 1); k++) {
         LONG len = 0;
         UBYTE *d = (UBYTE *)read_file(paths[k], &len), *c;
-        if (d && (c = wbfont_chunk(d, len))) {
+        if (d && (c = wbfont_chunk(d, len)) && label_style(c) != style) {   /* only a file whose style differs */
             struct FontPrefs *fp = (struct FontPrefs *)c;
             fp->fp_DrawMode = style == 1 ? JAM2 : JAM1;
             fp->fp_SpecialDrawMode = style == 2 ? 1 : style == 3 ? 2 : 0;
@@ -531,7 +531,7 @@ enum {
 static const char *mode_labels[] = { "Light", "Dark", "By the clock", NULL };
 static const char *lite_labels[] = { "Automatic", "On", "Off", NULL };
 static const char *themed_labels[] = { "Themed", "Classic", NULL };
-static const char *label_labels[] = { "Plain", "Fields", "Shadow", "Outline", NULL };
+static const char *label_labels[] __attribute__((unused)) = { "Plain", "Fields", "Shadow", "Outline", NULL };   /* not in OpenLook (LT_ONE) */
 static const char *qual_labels[] = { "Any click", "Left Alt", "Left Amiga", "Ctrl", NULL };
 static const char *qual_values[] = { "NONE", "LALT", "LCOMMAND", "CONTROL" };
 static STRPTR profile_labels[MAX_PROFILES + 2];
@@ -684,7 +684,7 @@ static int gui_once(void)
     lh = fh + 6;
     top = scr->WBorTop + fh + 1 + 6;
     tabs_y = top;
-    top += lh + 8;                                   /* the tabs (looktabs.h) */
+    top += lt_space(scr->Font, W - 20, lh) + 8;     /* the tabs (looktabs.h): one row, or two */
     build_theme_list();
     for (i = 0; i < nprofiles; i++) profile_labels[i] = (STRPTR)profile_names[i];
     if (!nprofiles) profile_labels[nprofiles++] = (STRPTR)"(no profiles)";
@@ -704,7 +704,8 @@ static int gui_once(void)
     /* the left column: themes and the preview */
     row = top + fh + 4;
     G(LISTVIEW_KIND, G_THEMES, L, row, 270, 6 * (fh + 1) + 4, "Theme", PLACETEXT_ABOVE, GTLV_Labels, (ULONG)&theme_list, GTLV_ShowSelected, NULL);
-    px = L; py = row + 6 * (fh + 1) + 10; pw = 270; ph = 120;
+    /* the preview: shorter on a screen under 400 lines, so the Simple view fits 640 x 256 (OpenLook 1.1) */
+    px = L; py = row + 6 * (fh + 1) + 10; pw = 270; ph = scr->Height < 400 ? 56 : 120;
 
     /* the right column */
     row = top;
@@ -726,7 +727,9 @@ static int gui_once(void)
     G(CYCLE_KIND, G_PUB, R + 110, row, 200, lh, "Other screens", PLACETEXT_LEFT, GTCY_Labels, (ULONG)themed_labels); row += lh + 4;
     G(CYCLE_KIND, G_CUSTOM, R + 110, row, 200, lh, "Game screens", PLACETEXT_LEFT, GTCY_Labels, (ULONG)themed_labels); row += lh + 4;
     G(STRING_KIND, G_NEVER, R + 110, row, 200, lh, "Never touch", PLACETEXT_LEFT, GTST_MaxChars, 150); row += lh + 8;
+#ifndef LT_ONE                                     /* in OpenLook the icon labels are on the Fonts tab */
     G(CYCLE_KIND, G_LABELS, R + 110, row, 200, lh, "Icon labels", PLACETEXT_LEFT, GTCY_Labels, (ULONG)label_labels); row += lh + 8;
+#endif
     }
     G(CYCLE_KIND, G_PROFILE, R + 110, row, 130, lh, "Profile", PLACETEXT_LEFT, GTCY_Labels, (ULONG)profile_labels);
     G(BUTTON_KIND, G_APPLYPROFILE, R + 244, row, 66, lh, "Load", 0, GA_Disabled, profile_labels[0][0] == '('); row += lh + 2;
@@ -747,7 +750,7 @@ static int gui_once(void)
         row += lh + 8;
     }
     if (!g) { rc = RETURN_FAIL; goto out; }
-    wt = scr->BarHeight + 10;
+    wt = scr->BarHeight + (scr->Height < 400 ? 1 : 10);
     lt_place(&wl, &wt);
     menus[6].nm_Flags = CHECKIT | MENUTOGGLE | (advanced ? CHECKED : 0);
     win = lt_open(scr, wl, wt, W, row - scr->WBorTop - fh - 1, glist, IDCMP_CLOSEWINDOW | IDCMP_REFRESHWINDOW | IDCMP_MENUPICK | LISTVIEWIDCMP | BUTTONIDCMP | CYCLEIDCMP | STRINGIDCMP | CHECKBOXIDCMP | INTEGERIDCMP, "OpenPrefs Look 0.3");
@@ -863,10 +866,13 @@ static int gui_once(void)
                     redraw = 0;
                     break;
                 case G_USE: put_in_place(0); focus_now(); test_until = 0; quit = 1; break;
-                case LT_ID + LT_WINDOWS: case LT_ID + LT_TITLEBAR: case LT_ID + LT_MENUS:   /* another tab: keep, as Use, and hand over */
-                    put_in_place(0); focus_now(); test_until = 0; lt_go(win, gg->GadgetID - LT_ID); quit = 1; break;
                 case G_SAVE: put_in_place(1); focus_now(); test_until = 0; quit = 1; break;
                 case G_CANCEL: if (test_until) go_back(); quit = 1; break;
+                default:
+                    if (LT_IS(gg->GadgetID) && gg->GadgetID != LT_ID + LT_LOOK) {   /* another tab: keep, as Use, and hand over */
+                        put_in_place(0); focus_now(); test_until = 0; lt_go(win, gg->GadgetID - LT_ID); quit = 1;
+                    }
+                    break;
                 }
                 if (redraw && !quit) show(&cur);
             }

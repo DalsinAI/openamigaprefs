@@ -63,7 +63,7 @@
 #include "../../Common/looktabs.h"
 
 #ifndef IN_OPENBENCH
-const char version[] __attribute__((used)) = "$VER: Menus 0.2.3 (10.10.2026) OpenPrefs, Dalsin Limited";
+const char version[] __attribute__((used)) = "$VER: Menus 0.2.4 (12.10.2026) OpenPrefs, Dalsin Limited";
 #endif
 
 #define PREFS_ENV "ENV:OpenMenus/Menus"
@@ -531,7 +531,7 @@ static int make_gadgets(struct Screen *scr, APTR vi, struct Gadget **glist, int 
      ng.ng_Flags = (flags), ng.ng_GadgetID = (id), g = gad[id] = CreateGadget(kind, g, &ng, __VA_ARGS__, TAG_DONE))
 
     g = lt_make(g, &ng, bl + 8, top, W - 16, lh, LT_MENUS);
-    top += lh + 8;                                   /* below the tabs (looktabs.h) */
+    top += lt_space(scr->Font, W - 16, lh) + 8;     /* below the tabs (looktabs.h): one row, or two */
     /* the right column: the preview, in both views */
     px = rx0; py = top; pw = rx + rg - rx0; ph = 6 * (fh + 3) + (gp < 4 ? 8 : 22);
     row = row2 = top;
