@@ -101,7 +101,7 @@
 #include "barlogo.h"
 #include "obmsg.h"
 
-const char version[] __attribute__((used)) = "$VER: OpenTitle 0.6.14 (12.10.2026) OpenPrefs, Dalsin Limited";
+const char version[] __attribute__((used)) = "$VER: OpenTitle 0.6.15 (12.10.2026) OpenPrefs, Dalsin Limited";
 
 struct IntuitionBase *IntuitionBase;
 struct GfxBase *GfxBase;
@@ -359,8 +359,9 @@ static ULONG omc_cores(void)
     return n > 1024 ? 0 : n;
 }
 
-/* The GPUs (0.6.9): AmigaChrome's graphics boards, ACRTG (Dalsin $DA15, product 9, up to four), counted
- * through AutoConfig as the cores are. 0 on a machine without one. */
+/* The GPUs (0.6.9): AmigaChrome's graphics boards, ACRTG (Dalsin $DA15, up to four), counted
+ * through AutoConfig as the cores are: product 9, the 16 MiB board, and product 15, the 64 MiB one (0.6.15;
+ * before, a 64 MiB machine showed GPU = 0). 0 on a machine without one. */
 static ULONG board_gpus(void)
 {
     ULONG n = 0;
@@ -368,6 +369,8 @@ static ULONG board_gpus(void)
     if (ExpansionBase) {
         struct ConfigDev *cd = NULL;
         while ((cd = FindConfigDev(cd, 0xDA15, 9)) && n < 16) n++;
+        cd = NULL;
+        while ((cd = FindConfigDev(cd, 0xDA15, 15)) && n < 16) n++;
         CloseLibrary((struct Library *)ExpansionBase);
         ExpansionBase = NULL;
     }
