@@ -54,3 +54,60 @@ locale.library runs on its own built-in region (united_states, GMT offset
 
 Tested in lab `gcc16-c` (a copy of Instance-32), built into OpenBench and
 stand-alone.
+
+## 0.2 (12 October 2026): a place, and summer time by itself
+
+The decision (12 October 2026): the user picks a place, such as
+Europe/London, not an offset; on AmigaChrome the host hands the Amiga its zone
+and offset; on a real Amiga the Team's locale side carries the summer time
+rules and switches by itself; Locale prefs, as the Team writes them, are the
+one owner of the zone. The whole design, with the host's side and ACFS's
+dates, is amigachrome `docs/design/Design-Time-Zones.md`.
+
+| Setting | Where it goes |
+| --- | --- |
+| Time zone: a region (Africa ... Pacific, UTC), then a place in it | Locale prefs: the place and its rule in a chunk of the Team's, `ZONE` (`struct ZonePrefs`: place, POSIX rule, flags), beside `LCLE`; the place's offset now in `lp_GMTOffset`, as before |
+
+- **The places** are the tz database's `zone.tab` and UTC: 419, in
+  `src/zones.h`, made by `tools/make_zones.py` from the host's
+  `/usr/share/zoneinfo` (tz database 2026c, public domain; nothing fetched).
+  Each has the POSIX rule its TZif file ends with; the few that change in ways
+  a rule can't say (Morocco's Ramadan; Edmonton and Vancouver moving to one
+  time all year) carry their changes from 2026, and the rule holds after.
+  `src/tzrule.c` runs them, with no library, so the host tests build it too.
+- **On AmigaChrome** (the ACBridge board is there, and `accontrol.device`
+  answers), the place and offset are the host's: the window shows them
+  ("Europe/London, the host's: UTC+1:00 BST, summer time"), and the region and
+  place lists are greyed. The battery clock runs on the host's time, so a
+  different place would need the runtime to run the clock in it.
+- **On a real Amiga** the offset saved is the place's at the clock's time.
+  Picking a place doesn't move the clock: the clock is taken as right, and the
+  offset as what was wrong.
+- **`OpenDateTime KEEP`**, the background part, keeps `lp_GMTOffset` right:
+  on AmigaChrome it asks the host once a minute and, when the offset changes,
+  sets the system clock on to the battery clock, which has moved with the
+  host; on a real Amiga it looks just after each change of the place's rule,
+  moves the clock (and the battery clock) by the change and saves the offset.
+  `ENV:` is written before the system clock moves and `ENVARC:` before the
+  battery clock does, so a failed write never moves a clock twice. One runs at
+  a time (the port `OpenDateTime.keeper`); Ctrl-C stops it; Use and Save send
+  it Ctrl-E, to look again at once. It writes a line to its output when what
+  it did changes. To start it at boot: `Run >NIL: SYS:Prefs/OpenDateTime KEEP`
+  in `S:User-Startup` (not added by anything yet).
+- **`OpenDateTime ZONE Europe/London [USE|SAVE]`** sets the place from the
+  Shell (on its own, as Use). **`OpenDateTime INFO`** says the place, the
+  offset saved and in use, the host's, the clock and the next change.
+- With no Locale prefs at all on AmigaChrome, KEEP writes `ENV:` with the
+  editor's defaults (the United Kingdom, english) and the host's zone, so the
+  offset is right; `ENVARC:` waits for a Save.
+- **Open: the autumn change holds waits.** Kickstart 3.2's `timer.device`
+  counts `Delay()` and `C:Wait` to a moment on the system clock, so when KEEP
+  sets the clock back, every wait in progress holds until the clock catches up
+  (an hour at a real change). Seen in the lab; the choices are in the amigachrome
+  design, section 5a.
+
+Host tests: `DateTime/test/run.sh` (the host's C compiler): Europe/London's
+last-Sunday changes in March and October from 2026 to 2030, KEEP's step on
+either side of each and after a switch-off; Asia/Tokyo, with no summer time;
+other places; and all 419 against the host's own tz data, every hour of 2026
+to 2030 and at each change.
