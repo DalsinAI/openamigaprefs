@@ -22,3 +22,35 @@ kept. From the Shell: `OpenDateTime [FROM file] [USE] [SAVE]`.
 Installed as `SYS:Prefs/OpenDateTime`. To come: the clock's 12 or 24 hours
 and the date's format for OpenTitle, and time-server setting (OpenSocket's
 sntp).
+
+## 0.1.2 (12 October 2026): the region when none is saved, and the picks shown
+
+Seen in a lab copy of Instance-32: the time zone read UTC+0:00 while the clock
+was on British Summer Time, and no country was highlighted. That Amiga has no
+Locale prefs at all (neither `ENV:` nor `ENVARC:` has `Sys/Locale.prefs`), so
+locale.library runs on its own built-in region (united_states, GMT offset
+-300, which FormatDate's `%z` prints as +0500). Three faults came out of it:
+
+- **The defaults.** With nothing saved, the editor showed the United Kingdom
+  at UTC+0:00. It now shows the United Kingdom's zone for the clock's date:
+  UTC+1:00 from the last Sunday of March to the last Sunday of October,
+  UTC+0:00 otherwise. The status line says that no region is saved yet.
+  AmigaOS's zone is one fixed offset with no summer time of its own, so a
+  saved zone stays as it was saved: it has to be changed when the clocks
+  change.
+- **Use and Save with nothing saved wrote an empty country.** The record
+  went out with the United Kingdom's name but no date, time or number
+  formats, and locale.library didn't take it: the machine kept its
+  built-in region. Twice in the lab, `ENV:Sys/Locale.prefs` was then held
+  open ("object is in use"), so the next Use couldn't write it; what holds
+  it was not found. The country's formats are now read from its file whenever the
+  record has none, from the window and from the Shell's `USE` and `SAVE`.
+- **No highlight in the lists.** 0.1.1 removed `GTLV_ShowSelected` to lose
+  the box beside the picked row, and the highlight went with it. The box was
+  the row's name: GadTools draws it in JAM2, and OpenLook gives JAM2 text a
+  cell of its own colour. Each row is now drawn by the editor
+  (`GTLV_CallBack`): the whole row in the fill colour when picked, the name
+  in JAM1 over it. The pick shows as one even bar.
+
+Tested in lab `gcc16-c` (a copy of Instance-32), built into OpenBench and
+stand-alone.

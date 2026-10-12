@@ -30,6 +30,7 @@
 #include <intuition/intuition.h>
 #include <libraries/gadtools.h>
 #include <utility/date.h>
+#include <utility/hooks.h>
 #include <prefs/prefhdr.h>
 #include <prefs/locale.h>
 #include <proto/exec.h>
@@ -43,7 +44,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-static const char version[] __attribute__((used)) = "$VER: OpenDateTime 0.1.1 (10.10.2026) OpenPrefs, MIT, Copyright (c) 2026 Dalsin Limited";
+static const char version[] __attribute__((used)) = "$VER: OpenDateTime 0.1.2 (12.10.2026) OpenPrefs, MIT, Copyright (c) 2026 Dalsin Limited";
 
 #ifdef IN_OPENBENCH
 /* inside OpenBench, a global UtilityBase could be another built-in's: every UtilityBase below, and in
@@ -70,6 +71,8 @@ static LONG same_name(const char *a, const char *b)
 static struct LocalePrefs lp;
 static UBYTE *file_data;                        /* the whole file read, to keep its other chunks */
 static LONG file_len;
+static int region_saved;                        /* 1 when Locale prefs were read; 0: the defaults below */
+static LONG uk_offset_today(void);
 
 static ULONG get32(const UBYTE *p) { return ((ULONG)p[0] << 24) | ((ULONG)p[1] << 16) | ((ULONG)p[2] << 8) | p[3]; }
 static void put32(UBYTE *p, ULONG v) { p[0] = v >> 24; p[1] = v >> 16; p[2] = v >> 8; p[3] = v; }
@@ -104,6 +107,9 @@ static UBYTE *chunk(UBYTE *d, LONG len, const char *id, LONG *n)
     return NULL;
 }
 
+/* Locale prefs from path. With none saved (no file, or no LCLE in it), the defaults: the United Kingdom,
+ * english, and the United Kingdom's zone today (UTC+1:00 in British Summer Time). locale.library's own
+ * defaults (united_states, its GMT offset -300) are not a region anyone chose, so they aren't shown. */
 static void load_locale(const char *path)
 {
     UBYTE *c;
@@ -111,11 +117,14 @@ static void load_locale(const char *path)
     memset(&lp, 0, sizeof lp);
     strcpy(lp.lp_CountryName, "united_kingdom");
     strcpy(lp.lp_PreferredLanguages[0], "english");
+    region_saved = 0;
     if (file_data) { FreeVec(file_data); file_data = NULL; }
     file_data = read_all(path, &file_len);
     if (file_data && file_len >= 12 && !memcmp(file_data, "FORM", 4) && !memcmp(file_data + 8, "PREF", 4) &&
-        (c = chunk(file_data, file_len, "LCLE", &n)))
+        (c = chunk(file_data, file_len, "LCLE", &n))) {
         memcpy(&lp, c, n < (LONG)sizeof lp ? n : (LONG)sizeof lp);
+        region_saved = 1;
+    } else lp.lp_GMTOffset = uk_offset_today();
 }
 
 static int write_file(const char *path, const UBYTE *data, LONG len)
@@ -247,6 +256,27 @@ static void read_clock(struct ClockData *cd)
     Amiga2Date(secs, cd);
 }
 
+/* The United Kingdom's zone on the clock's date, as Locale prefs keeps it (minutes west): -60 (UTC+1:00) in
+ * British Summer Time, from the last Sunday of March to the last Sunday of October, else 0. AmigaOS keeps no
+ * summer time of its own, so this is only the default shown when no region is saved. */
+static LONG uk_offset_today(void)
+{
+    struct ClockData now, last;
+    int last_sunday, after;
+    read_clock(&now);
+    if (now.month > 3 && now.month < 10) return -60;
+    if (now.month < 3 || now.month > 10) return 0;
+    memset(&last, 0, sizeof last);                     /* the 31st of March or October, for its weekday */
+    last.mday = 31;
+    last.month = now.month;
+    last.year = now.year;
+    last.hour = 12;
+    Amiga2Date(Date2Amiga(&last), &last);
+    last_sunday = 31 - last.wday;
+    after = now.mday > last_sunday || (now.mday == last_sunday && now.hour >= (now.month == 3 ? 1 : 2));
+    return now.month == 3 ? (after ? -60 : 0) : (after ? 0 : -60);
+}
+
 static const char *const month_names[] = { "January", "February", "March", "April", "May", "June", "July", "August",
                                            "September", "October", "November", "December", NULL };
 static const char *const month_dos[] = { "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec" };
@@ -291,6 +321,42 @@ static int zone_of(LONG gmt_offset)
     int i = (int)((east + 720) / 30);
     return i < 0 ? 0 : i >= ZONES ? ZONES - 1 : i;
 }
+
+/* ---- the lists' rows ------------------------------------------------------------ */
+
+/* GadTools draws a list row's name in JAM2, and on a themed screen OpenLook gives that text a cell of its own
+ * colour, so the picked row showed a box beside its bar (0.1); 0.1.1 took the pick's highlight away with the
+ * box. Each row is drawn here instead: the whole row in FILLPEN when picked (BACKGROUNDPEN when not), then the
+ * name in JAM1 over it, so the bar is one colour from end to end. */
+static ULONG row_draw(struct Hook *hook __asm("a0"), struct Node *node __asm("a2"), struct LVDrawMsg *msg __asm("a1"))
+{
+    struct RastPort *rp;
+    UWORD *pens;
+    struct Rectangle *b;
+    struct TextExtent te;
+    LONG len, fit, h;
+    int picked;
+    (void)hook;
+    if (msg->lvdm_MethodID != LV_DRAW) return LVCB_UNKNOWN;
+    rp = msg->lvdm_RastPort;
+    pens = msg->lvdm_DrawInfo->dri_Pens;
+    b = &msg->lvdm_Bounds;
+    picked = msg->lvdm_State == LVR_SELECTED || msg->lvdm_State == LVR_SELECTEDDISABLED;
+    SetDrMd(rp, JAM1);
+    SetAPen(rp, picked ? pens[FILLPEN] : pens[BACKGROUNDPEN]);
+    RectFill(rp, b->MinX, b->MinY, b->MaxX, b->MaxY);
+    len = node && node->ln_Name ? (LONG)strlen((const char *)node->ln_Name) : 0;
+    h = b->MaxY - b->MinY + 1;
+    fit = len ? (LONG)TextFit(rp, (STRPTR)node->ln_Name, len, &te, NULL, 1, b->MaxX - b->MinX + 1 - 4, h) : 0;
+    if (fit > 0) {
+        SetAPen(rp, picked ? pens[FILLTEXTPEN] : pens[TEXTPEN]);
+        Move(rp, b->MinX + 2, b->MinY + (h - rp->TxHeight) / 2 + rp->TxBaseline);
+        Text(rp, (STRPTR)node->ln_Name, fit);
+    }
+    return LVCB_OK;
+}
+
+static struct Hook row_hook;
 
 /* ---- the window --------------------------------------------------------------- */
 
@@ -347,7 +413,10 @@ static int put_in_place(int save)
         if (!set_clock(&cd)) { status("The clock couldn't be set (C:Date or C:SetClock failed)."); return 0; }
     }
     lp.lp_GMTOffset = -(-720 + sel_zone * 30);
-    if (sel_country >= 0 && same_name(names_c[sel_country], lp.lp_CountryName)) load_country(names_c[sel_country]);
+    /* the country's formats: when another country was picked, or when there are none yet (nothing was saved,
+     * and the record would otherwise go out with empty date and number formats) */
+    if (sel_country >= 0 && (same_name(names_c[sel_country], lp.lp_CountryName) || !lp.lp_CountryData.cp_DateFormat[0]))
+        load_country(names_c[sel_country]);
     if (sel_language >= 0 && same_name(names_l[sel_language], lp.lp_PreferredLanguages[0])) {
         int i;
         for (i = 9; i > 0; i--) memcpy(lp.lp_PreferredLanguages[i], lp.lp_PreferredLanguages[i - 1], 30);
@@ -407,7 +476,8 @@ static int gui(void)
     if (half < 200) half = 200;
     W = 12 + 2 * half + 12 + 12;
     lvh = 7 * (fh + 1) + 4;
-    snprintf(status_text, sizeof status_text, "%s", "Change what you like, then Use or Save.");
+    snprintf(status_text, sizeof status_text, "%s", region_saved ? "Change what you like, then Use or Save."
+             : "No region is saved on this Amiga yet: check the zone, country and language, then Save.");
 
     g = CreateContext(&glist);
     memset(&ng, 0, sizeof ng);
@@ -433,12 +503,16 @@ static int gui(void)
           GTCY_Labels, (ULONG)zone_labels, GTCY_Active, sel_zone);
         row += lh + 10 + fh + 2;
     }
+    /* the pick highlighted in the list itself (GTLV_ShowSelected NULL), each row drawn by row_draw */
+    row_hook.h_Entry = (ULONG (*)())row_draw;
+    row_hook.h_SubEntry = NULL;
+    row_hook.h_Data = NULL;
     G(LISTVIEW_KIND, G_COUNTRY, 12, row, half, lvh, "Country", PLACETEXT_ABOVE,
-      GTLV_Labels, (ULONG)&list_c, GTLV_Selected, (ULONG)sel_country,
-      GTLV_Top, (ULONG)(sel_country > 3 ? sel_country - 3 : 0));
+      GTLV_Labels, (ULONG)&list_c, GTLV_ShowSelected, (ULONG)NULL, GTLV_Selected, (ULONG)sel_country,
+      GTLV_CallBack, (ULONG)&row_hook, GTLV_Top, (ULONG)(sel_country > 3 ? sel_country - 3 : 0));
     G(LISTVIEW_KIND, G_LANGUAGE, 12 + half + 12, row, half, lvh, "Language", PLACETEXT_ABOVE,
-      GTLV_Labels, (ULONG)&list_l, GTLV_Selected, (ULONG)sel_language,
-      GTLV_Top, (ULONG)(sel_language > 3 ? sel_language - 3 : 0));
+      GTLV_Labels, (ULONG)&list_l, GTLV_ShowSelected, (ULONG)NULL, GTLV_Selected, (ULONG)sel_language,
+      GTLV_CallBack, (ULONG)&row_hook, GTLV_Top, (ULONG)(sel_language > 3 ? sel_language - 3 : 0));
     row += lvh + 8;
     G(TEXT_KIND, G_STATUS, 12, row, W - 24, lh, NULL, 0, GTTX_Text, (ULONG)status_text, GTTX_Border, TRUE);
     row += lh + 6;
@@ -450,7 +524,7 @@ static int gui(void)
         row += lh + 8;
     }
     if (!g) { rc = RETURN_FAIL; goto out; }
-    win = OpenWindowTags(NULL, WA_Title, (ULONG)"Date and time", WA_ScreenTitle, (ULONG)"OpenDateTime 0.1", WA_PubScreen, (ULONG)scr,
+    win = OpenWindowTags(NULL, WA_Title, (ULONG)"Date and time", WA_ScreenTitle, (ULONG)"OpenDateTime 0.1.2", WA_PubScreen, (ULONG)scr,
                          WA_Left, (scr->Width - W) / 2 > 0 ? (scr->Width - W) / 2 : 0, WA_Top, scr->BarHeight + 20,
                          WA_InnerWidth, W, WA_InnerHeight, row - scr->WBorTop - fh - 1,
                          WA_Gadgets, (ULONG)glist, WA_DragBar, TRUE, WA_DepthGadget, TRUE, WA_CloseGadget, TRUE, WA_Activate, TRUE,
@@ -527,6 +601,7 @@ int main(int argc, char **argv)
     if (!(UtilityBase = OpenLibrary((STRPTR)"utility.library", 39))) { if (rd) FreeArgs(rd); return RETURN_FAIL; }
     load_locale(args[0] ? (const char *)args[0] : LOCALE_ENV);
     if (args[1] || args[2]) {                    /* from the Shell: put a file (FROM) in place, no window */
+        if (!lp.lp_CountryData.cp_DateFormat[0]) load_country(lp.lp_CountryName);
         rc = (args[2] && !save_locale(LOCALE_ENVARC)) || !save_locale(LOCALE_ENV) ? RETURN_ERROR : RETURN_OK;
     } else rc = gui();
     if (rd) FreeArgs(rd);
