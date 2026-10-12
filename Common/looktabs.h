@@ -125,10 +125,28 @@ static BP_UNUSED_LT int lt_layout(struct TextAttr *ta, int x, int y, int w, int 
     return row + 1;
 }
 
-/* The height the tab rows take in the font ta within w: what a page leaves above its first gadget. */
+/* The width the tabs may take: the page's own; in OpenLook (LT_ONE) at least LT_ONE_W, and the window's when
+ * another page made it wider, so every page has the same rows of tabs and a narrow page (Title bar) gets no
+ * third row (lt_open() makes the window wide enough for them). */
+#define LT_ONE_W 600
+static BP_UNUSED_LT int lt_width(int w)
+{
+#ifdef LT_ONE
+    if (w < LT_ONE_W) w = LT_ONE_W;
+    if (lt_win && lt_win_w - 20 > w) return lt_win_w - 20;
+#endif
+    return w;
+}
+
+/* The height the tab rows take in the font ta within w: what a page leaves above its first gadget. The tabs'
+ * places as lt_make() left them are kept (a page may ask after making its tabs), so lt_draw() draws them there. */
 static BP_UNUSED_LT int lt_space(struct TextAttr *ta, int w, int lh)
 {
-    return lt_layout(ta, 0, 0, w, lh, -1) * lh;
+    int tx[LT_N], ty[LT_N], wd[LT_N], rows;
+    memcpy(tx, lt_tx, sizeof tx); memcpy(ty, lt_ty, sizeof ty); memcpy(wd, lt_tw, sizeof wd);
+    rows = lt_layout(ta, 0, 0, lt_width(w), lh, -1);
+    memcpy(lt_tx, tx, sizeof tx); memcpy(lt_ty, ty, sizeof ty); memcpy(lt_tw, wd, sizeof wd);
+    return rows * lh;
 }
 
 /* The tabs' click areas, at x, y within w (their rows lh high, lt_space() in all). Returns the last gadget
@@ -138,6 +156,7 @@ static struct Gadget *lt_make(struct Gadget *g, struct NewGadget *ng, int x, int
     struct TextAttr *ta = (struct TextAttr *)ng->ng_TextAttr;       /* NewGadget's is const */
     int i;
     lt_ta = ta;
+    w = lt_width(w);
     lt_x = x; lt_y = y; lt_w = w; lt_h = lh; lt_me = me;
     lt_rows = lt_layout(ta, x, y, w, lh, me);
     for (i = 0; i < LT_N && g; i++) {
@@ -273,6 +292,7 @@ static BP_UNUSED_LT struct Window *lt_open(struct Screen *scr, int left, int top
                                            ULONG idcmp, const char *screen_title)
 {
 #ifdef LT_ONE
+    if (lt_me >= 0 && W < lt_x + lt_w + 10) W = lt_x + lt_w + 10;   /* room for the tabs and the page's frame */
     if (lt_win) {
         struct IntuiMessage *m;
         int w = W > lt_win_w ? W : lt_win_w, h = H > lt_win_h ? H : lt_win_h;
