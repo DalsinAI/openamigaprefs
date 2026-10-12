@@ -10,7 +10,7 @@ and stays in `SYS:Prefs` to run again. MIT, Copyright (c) 2026 Dalsin Limited.
 | --- | --- |
 | 1. Welcome | What this machine is (`ENV:OpenUp/Summary` from `OpenUpTool DETECT`, or the CPU and FPU when that is missing). **Simple** or **Advanced**. "Don't show this at start again" |
 | 2. Your desktop | The desktop profiles in `SYS:Prefs/Presets/OpenPrefs` (Modern, Lite 68040, Classic 3.2, and any added), each with its own line saying what it is for. "Choose by machine at every start". In Advanced, one button each for Look, Menus, Windows, Dock and File types (greyed when that editor isn't installed) |
-| 3. Screen, printer and network (Advanced) | Screen mode, Printer, OpenPrint, Network (`SYS:Prefs/OpenSocket`), Fonts: the editors themselves |
+| 3. Screen, printer and network (Advanced) | Screen mode, Printer, OpenPrint (`SYS:Utilities/OpenPrint/Printers and Queue`), Network (`SYS:Tools/Commodities/OpenSocketControl`), Fonts: the editors themselves |
 | 4. What starts with the machine (Advanced) | Every line in OpenUp's marked block in `S:User-Startup`, in plain words ("The theme on windows and gadgets (OpenLook)"), each with a switch |
 | 5. All set | Finish |
 
@@ -65,6 +65,16 @@ install puts every line back on.
     # its first start: a project icon in WBStartup (Setup sees it was started from there)
     setup.add("WBStartup/OpenUp-Setup", b"", "SYS:WBStartup/OpenUp-Setup")   # an empty project file
     setup.add("WBStartup/OpenUp-Setup.info", <a project icon: default tool SYS:Prefs/OpenUp-Setup, tooltype DONOTWAIT>, "SYS:WBStartup/OpenUp-Setup.info")
+
+## 0.1.3 (12 October 2026)
+
+Page 3's **OpenPrint...** and **Network...** were always greyed: they looked
+for `SYS:Prefs/OpenPrint` and `SYS:Prefs/OpenSocket`, which no part
+installs. They now open what the title bar's cog opens: OpenPrint's
+Printers and Queue (`SYS:Utilities/OpenPrint/Printers and Queue`) and
+OpenSocketControl (`SYS:Tools/Commodities/OpenSocketControl`). The same
+code is OpenBench's built-in OpenUp-Setup, so it changes there with
+OpenBench's next build.
 
 ## Next
 

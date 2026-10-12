@@ -101,7 +101,7 @@
 #include "barlogo.h"
 #include "obmsg.h"
 
-const char version[] __attribute__((used)) = "$VER: OpenTitle 0.6.13 (11.10.2026) OpenPrefs, Dalsin Limited";
+const char version[] __attribute__((used)) = "$VER: OpenTitle 0.6.14 (12.10.2026) OpenPrefs, Dalsin Limited";
 
 struct IntuitionBase *IntuitionBase;
 struct GfxBase *GfxBase;
@@ -1619,7 +1619,9 @@ int main(void)
         /* Workbench is shutting down (Font prefs' Use, a screen mode): no window, no lock on its screen until it is back */
         switch (wbc_take()) {
         case WBC_CLOSE: close_all(); wb_down = 1; wbc_closed(); break;
-        case WBC_OPEN:  wb_down = 2; break;
+        /* 0.6.14: only when the windows are down; a refused CloseWorkBench and the OpenWorkBench after it say
+         * "open" twice, and the second opened every bar window again over the first */
+        case WBC_OPEN:  if (wb_down) wb_down = 2; break;
         }
         if (wb_down == 2 && open_all()) wb_down = 0;
         if (wb_down) { port_events(port); ts_replies(); continue; }

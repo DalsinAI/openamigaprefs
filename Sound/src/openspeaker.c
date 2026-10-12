@@ -68,7 +68,7 @@
 #include "popuptheme.h"
 #include "barpaint.h"
 
-const char version[] __attribute__((used)) = "$VER: OpenSpeaker 0.1.3 (11.10.2026) OpenPrefs, Dalsin Limited";
+const char version[] __attribute__((used)) = "$VER: OpenSpeaker 0.1.4 (12.10.2026) OpenPrefs, Dalsin Limited";
 
 struct IntuitionBase *IntuitionBase;
 struct Library *CyberGfxBase;
@@ -568,7 +568,9 @@ int main(void)
         /* Workbench is shutting down (Font prefs' Use, a screen mode): no window, no lock on its screen until it is back */
         switch (wbc_take()) {
         case WBC_CLOSE: if (pop) pop_close(0); close_speaker(); wb_down = 1; wbc_closed(); break;
-        case WBC_OPEN:  wb_down = 2; break;
+        /* 0.1.4: only when the speaker is down; a refused CloseWorkBench and the OpenWorkBench after it
+         * say "open" twice, and the second opened a second speaker */
+        case WBC_OPEN:  if (wb_down) wb_down = 2; break;
         }
         if (wb_down == 2 && open_speaker()) wb_down = 0;
         if (got & SIGBREAKF_CTRL_F) {                       /* Sound prefs changed the settings */
