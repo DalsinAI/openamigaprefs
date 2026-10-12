@@ -69,7 +69,7 @@ static void round_trips(void)
     static const char *const names[] = {
         "sample-font.prefs", "sample-asl.prefs", "sample-asl-default.prefs", "sample-workbench.prefs",
         "sample-workbench-default.prefs", "sample-wbpattern-openup.prefs", "sample-wbpattern-classic.prefs",
-        "sample-palette-default.prefs"
+        "sample-palette-default.prefs", "sample-font-helvetica13-classic.prefs"
     };
     unsigned k;
     for (k = 0; k < sizeof names / sizeof names[0]; k++) {
@@ -161,8 +161,25 @@ static void fonts(void)
     CHECK(!strcmp(t.name, "CGTriumvirate.font"), "the name ends at its 0");
     CHECK(pf_font_put(&f, &t) && f.ch[1].data[28 + 19] == 'x', "kept");
     strcpy(t.name, "XEN.font");
-    CHECK(pf_font_put(&f, &t) && f.ch[1].data[28 + 19] == 0 && !strcmp((char *)f.ch[1].data + 28, "XEN.font"), "a new name: zeros after it");
+    CHECK(pf_font_put(&f, &t) && !strcmp((char *)f.ch[1].data + 28, "XEN.font") && f.ch[1].data[28 + 9] == 'r' &&
+          f.ch[1].data[28 + 19] == 'x', "a new name over the old, the bytes after its 0 as they were (as Font copies it)");
     pf_free(&f); pf_free(&g); free(b);
+}
+
+/* OS 3.2.3's Font, from sample-font.prefs, Screen Text set to helvetica 13 in its window and Use: the same
+ * change made here gives its file byte for byte (ASL gives both the flags 0x62). */
+static void fonts_as_classic(void)
+{
+    pf_file f;
+    pf_font scr;
+    uint8_t *b, *want;
+    long len, wlen;
+    parse_sample(&f, "sample-font.prefs", &b, &len);
+    want = load("sample-font-helvetica13-classic.prefs", &wlen);
+    pf_font_get(&f, PF_SCREENFONT, &scr);
+    strcpy(scr.name, "helvetica.font"); scr.ysize = 13; scr.style = 0; scr.flags = 0x62;
+    CHECK(pf_font_put(&f, &scr) && same_as(&f, want, wlen), "Font's own file for helvetica 13: %ld bytes differ", differing(&f, want, wlen));
+    pf_free(&f); free(b); free(want);
 }
 
 /* ---- palette.prefs ---------------------------------------------------------------------------------- */
@@ -347,6 +364,7 @@ int main(int argc, char **argv)
     damaged();
     list();
     fonts();
+    fonts_as_classic();
     palette();
     wbpattern();
     workbench();

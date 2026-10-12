@@ -45,17 +45,19 @@ static uint8_t *working_copy(const pf_file *f, int i, uint32_t len, uint32_t *ou
     return p;
 }
 
-/* A C string field of `size` bytes at d: rewritten (zeros after the name) only when the name differs,
- * so a field whose bytes after the end were not zero stays as it was. */
+/* A C string field of `size` bytes at d: the name and its 0 written over the old one, the bytes after it
+ * left as they were, as the OS's editors copy a name (OS 3.2.3's Font leaves the end of a longer old name
+ * after the new one's 0); nothing at all is written when the name is the same. */
 static void put_name(uint8_t *d, int size, const char *name)
 {
     char now[256];
-    int k = 0;
+    int k = 0, n = (int)strlen(name);
     while (k < size && k < (int)sizeof now - 1 && d[k]) { now[k] = (char)d[k]; k++; }
     now[k] = 0;
-    if (!strncmp(now, name, (size_t)size - 1) && (int)strlen(name) < size) return;
-    memset(d, 0, (size_t)size);
-    strncpy((char *)d, name, (size_t)size - 1);
+    if (n > size - 1) n = size - 1;
+    if ((int)strlen(now) == n && !strncmp(now, name, (size_t)n)) return;
+    memcpy(d, name, (size_t)n);
+    d[n] = 0;
 }
 
 static void get_name(const uint8_t *d, int size, char *out, int outsize)
