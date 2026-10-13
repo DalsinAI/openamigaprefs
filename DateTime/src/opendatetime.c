@@ -61,7 +61,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-static const char version[] __attribute__((used)) = "$VER: OpenDateTime 0.2.1 (13.10.2026) OpenPrefs, MIT, Copyright (c) 2026 Dalsin Limited";
+static const char version[] __attribute__((used)) = "$VER: OpenDateTime 0.2.2 (13.10.2026) OpenPrefs, MIT, Copyright (c) 2026 Dalsin Limited";
 
 #ifdef IN_OPENBENCH
 /* inside OpenBench, a global UtilityBase could be another built-in's: every UtilityBase below, and in
@@ -686,6 +686,7 @@ static int keeper(void)
             got = Wait(1UL << tport->mp_SigBit | SIGBREAKF_CTRL_C | SIGBREAKF_CTRL_E);
             if (!CheckIO((struct IORequest *)tr)) AbortIO((struct IORequest *)tr);
             WaitIO((struct IORequest *)tr);
+            SetSignal(0, 1UL << tport->mp_SigBit);     /* the aborted request's reply leaves this set: clear it, or every Wait returns at once */
             if (got & SIGBREAKF_CTRL_C) quit = 1;     /* Ctrl-E: the editor saved a place, look again now */
         }
         CloseDevice((struct IORequest *)tr);
