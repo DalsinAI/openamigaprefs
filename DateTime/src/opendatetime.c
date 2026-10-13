@@ -61,7 +61,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-static const char version[] __attribute__((used)) = "$VER: OpenDateTime 0.2 (12.10.2026) OpenPrefs, MIT, Copyright (c) 2026 Dalsin Limited";
+static const char version[] __attribute__((used)) = "$VER: OpenDateTime 0.2.1 (13.10.2026) OpenPrefs, MIT, Copyright (c) 2026 Dalsin Limited";
 
 #ifdef IN_OPENBENCH
 /* inside OpenBench, a global UtilityBase could be another built-in's: every UtilityBase below, and in
@@ -467,15 +467,24 @@ static const char *const month_dos[] = { "Jan", "Feb", "Mar", "Apr", "May", "Jun
 static int set_clock(const struct ClockData *cd)
 {
     char cmd[96];
-    BPTR nil;
+    BPTR nil, nilout;
     LONG rc;
     if (cd->year < 1978 || cd->year > 2077) return 0;   /* what C:Date's two-digit years reach */
     snprintf(cmd, sizeof cmd, "C:Date %02d-%s-%02d %02d:%02d:%02d", cd->mday, month_dos[cd->month - 1], cd->year % 100,
              cd->hour, cd->min, cd->sec);
-    nil = Open((STRPTR)"NIL:", MODE_NEWFILE);
-    rc = SystemTags((STRPTR)cmd, SYS_Input, (ULONG)nil, SYS_Output, (ULONG)NULL, TAG_DONE);
-    if (rc == 0) rc = SystemTags((STRPTR)"C:SetClock SAVE", SYS_Input, (ULONG)nil, SYS_Output, (ULONG)NULL, TAG_DONE);
-    if (nil) Close(nil);
+    /* A synchronous call is given both handles, never a NULL output (the Team's decision of 12 October,
+     * as OpenDock and OpenMenus do): a NIL: input and a NIL: output, opened and closed here. */
+    nil = Open((STRPTR)"NIL:", MODE_OLDFILE);
+    nilout = Open((STRPTR)"NIL:", MODE_NEWFILE);
+    if (!nil || !nilout) {
+        if (nil) Close(nil);
+        if (nilout) Close(nilout);
+        return 0;
+    }
+    rc = SystemTags((STRPTR)cmd, SYS_Input, (ULONG)nil, SYS_Output, (ULONG)nilout, TAG_DONE);
+    if (rc == 0) rc = SystemTags((STRPTR)"C:SetClock SAVE", SYS_Input, (ULONG)nil, SYS_Output, (ULONG)nilout, TAG_DONE);
+    Close(nilout);
+    Close(nil);
     return rc == 0;
 }
 
