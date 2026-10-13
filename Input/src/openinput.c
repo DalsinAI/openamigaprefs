@@ -5,7 +5,12 @@
  *   OpenInput [FROM file] [USE] [SAVE]
  *
  *   - the mouse: its speed, acceleration, the buttons swapped, the double-click
- *     time
+ *     time. Acceleration is the Team's input.device's (amigachrome
+ *     docs/design/Design-Open-Input-Library.md, section 4): it is kept in the
+ *     Team's OIAC chunk, beside ICTL, and works on relative mice only (a real
+ *     port, the PiStorm, Poseidon, the appliance), never on AmigaChrome's
+ *     absolute pointer. The OS's own switch (ICTL's ip_MouseAccel) is saved
+ *     off, so Intuition does not accelerate a second time
  *   - the keyboard: the key repeat delay and rate, in milliseconds
  *   - the keymap, from DEVS:Keymaps
  *   - Gamepads... opens the Gamepads editor (SYS:Prefs/OpenGamepads), so pads live
@@ -45,7 +50,7 @@
 #include "obmsg.h"
 #endif
 
-static const char version[] __attribute__((used)) = "$VER: OpenInput 0.1.1 (10.10.2026) OpenPrefs, MIT, Copyright (c) 2026 Dalsin Limited";
+static const char version[] __attribute__((used)) = "$VER: OpenInput 0.1.2 (13.10.2026) OpenPrefs, MIT, Copyright (c) 2026 Dalsin Limited";
 
 #ifdef IN_OPENBENCH
 /* inside OpenBench, a global UtilityBase could be another built-in's: every UtilityBase below, and in
@@ -78,6 +83,15 @@ struct ip_prefs {
     UBYTE ip_Reserved[3];
 };
 static struct ip_prefs ip;
+
+/* The Team's chunk, OIAC (openamigainput device/teamprefs.h): ten big-endian words, version, flags, enabled,
+ * precision speed, full speed, maximum multiplier (hundredths), maximum pointer speed, exponent (hundredths),
+ * smoothing (hundredths), reset angle. This editor sets "enabled" and keeps the rest as the file has them,
+ * or the input library's defaults ("Balanced"). No chunk: acceleration off. */
+#define OIAC_WORDS 10
+static UWORD oiac[OIAC_WORDS];
+static const UWORD oiac_defaults[OIAC_WORDS] = { 1, 0, 0, 200, 4000, 600, 0, 150, 60, 90 };
+static int had_oiac;
 static UBYTE *file_data;
 static LONG file_len;
 
@@ -128,6 +142,15 @@ static void load_input(const char *path)
     if (file_data && file_len >= 12 && !memcmp(file_data, "FORM", 4) && !memcmp(file_data + 8, "PREF", 4) &&
         (c = chunk(file_data, file_len, "ICTL", &n)))
         memcpy(&ip, c, n < (LONG)sizeof ip ? n : (LONG)sizeof ip);
+    memcpy(oiac, oiac_defaults, sizeof oiac);
+    had_oiac = 0;
+    if (file_data && file_len >= 12 && !memcmp(file_data, "FORM", 4) && !memcmp(file_data + 8, "PREF", 4) &&
+        (c = chunk(file_data, file_len, "OIAC", &n)) && n >= 6) {
+        LONG i, words = n / 2 < OIAC_WORDS ? n / 2 : OIAC_WORDS;
+        for (i = 2; i < words; i++) oiac[i] = (UWORD)(c[2 * i] << 8 | c[2 * i + 1]);
+        had_oiac = 1;
+    }
+    if (!had_oiac && ip.ip_MouseAccel) oiac[2] = 1;   /* an older file's OS switch moves into OIAC when saved */
 }
 
 static int write_file(const char *path, const UBYTE *data, LONG len)
@@ -142,18 +165,20 @@ static int write_file(const char *path, const UBYTE *data, LONG len)
 
 static int save_input(const char *path)
 {
-    LONG size = 12 + 14 + 8 + sizeof ip + file_len + 16, o = 12, k;
+    LONG size = 12 + 14 + 8 + sizeof ip + 8 + 2 * OIAC_WORDS + file_len + 16, o = 12, k, i;
     UBYTE *out = AllocVec(size, MEMF_ANY | MEMF_CLEAR);
     int ok, had_prhd = 0;
     if (!out) return 0;
+    ip.ip_MouseAccel = 0;                        /* the OS's own acceleration: off, so it never stacks with OIAC's */
     memcpy(out, "FORM\0\0\0\0PREF", 12);
     if (file_data && file_len >= 12 && !memcmp(file_data, "FORM", 4)) {
         for (k = 12; k + 8 <= file_len; ) {
             LONG cl = (LONG)get32(file_data + k + 4), all = 8 + cl + (cl & 1);
             if (cl < 0 || k + all > file_len) break;
-            if (memcmp(file_data + k, "ICTL", 4)) {
+            if (memcmp(file_data + k, "ICTL", 4) && memcmp(file_data + k, "OIAC", 4)) {   /* both are written below */
                 if (!memcmp(file_data + k, "PRHD", 4)) had_prhd = 1;
                 memcpy(out + o, file_data + k, all);
+                if (!memcmp(file_data + k, "INPT", 4) && cl >= 44) out[o + 8 + 42] = out[o + 8 + 43] = 0;   /* the OS's struct InputPrefs: its ip_MouseAccel off too */
                 o += all;
             }
             k += all;
@@ -168,6 +193,11 @@ static int save_input(const char *path)
     put32(out + o + 4, sizeof ip);
     memcpy(out + o + 8, &ip, sizeof ip);
     o += 8 + sizeof ip + (sizeof ip & 1);
+    memcpy(out + o, "OIAC", 4);
+    put32(out + o + 4, 2 * OIAC_WORDS);
+    oiac[0] = 1; oiac[1] = 0;                    /* version 1 */
+    for (i = 0; i < OIAC_WORDS; i++) { out[o + 8 + 2 * i] = (UBYTE)(oiac[i] >> 8); out[o + 9 + 2 * i] = (UBYTE)oiac[i]; }
+    o += 8 + 2 * OIAC_WORDS;
     put32(out + 4, o - 8);
     ok = write_file(path, out, o);
     FreeVec(out);
@@ -262,7 +292,7 @@ static void set_ms(struct timeval *tv, LONG ms)
 static int put_in_place(int save)
 {
     ip.ip_PointerTicks = speed_ticks[sel_speed];
-    ip.ip_MouseAccel = accel ? 1 : 0;
+    oiac[2] = accel ? 1 : 0;                     /* the input library's acceleration (OIAC) */
     ip.ip_SwitchMouseButtons = swap ? 1 : 0;
     set_ms(&ip.ip_DoubleClick, number(G_DBL));
     set_ms(&ip.ip_KeyRptDelay, number(G_DELAY));
@@ -319,7 +349,7 @@ static int gui(void)
     make_list();
     sel_keymap = index_of(ip.ip_KeymapName[0] ? ip.ip_KeymapName : ip.ip_Keymap);
     sel_speed = ip.ip_PointerTicks >= 4 ? 0 : ip.ip_PointerTicks >= 2 ? 1 : 2;
-    accel = ip.ip_MouseAccel != 0;
+    accel = oiac[2] != 0;
     swap = ip.ip_SwitchMouseButtons != 0;
 
     fh = scr->Font->ta_YSize;
