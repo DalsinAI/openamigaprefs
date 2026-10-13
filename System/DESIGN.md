@@ -11,7 +11,7 @@ amigachrome `docs/design/Design-Adaptive-Stack.md`.
 
 ## Where it lives
 
-- **A tenth editor, System.** None of the nine combined editors
+- **A tenth editor, System** (decided 13 October 2026). None of the nine combined editors
   (`docs/combined-prefs/DESIGN.md`) is about how the system runs programs, so
   the stack does not fit under Appearance, Desktop or the others. System is the
   home for settings of that kind: the stack first; later, for example, the
@@ -63,4 +63,4 @@ the runtime's cap and counts; the window opened on Workbench with the list.
   adoption (open).
 - **APPLY at boot**: OpenUp to add the line to User-startup.
 - **The window's look**: OpenLook's tabs and theme when a second page comes.
-- **Combined prefs**: System to be added to the editors' list.
+- **Combined prefs**: System is listed there as the tenth editor; it joins the drawer with the others.
