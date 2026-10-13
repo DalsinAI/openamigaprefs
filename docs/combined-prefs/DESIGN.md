@@ -70,6 +70,8 @@ The Sound design from earlier today already shows the answer: one editor for Pau
 | **Printing**    | Printer, PrinterGfx, PrinterPS            | Printer, Graphics, PostScript                          |
 | **Connections** | Serial; fronts OpenSocket                 | Network (when OpenSocket is installed), Serial         |
 
+**A tenth editor, System** (decided 13 October 2026): how the system runs programs, which none of the nine covers. Its first page is Stack, the adaptive stack's caps ([System/DESIGN.md](../../System/DESIGN.md)). It replaces no OS editor.
+
 We considered putting Display inside Appearance. We kept it apart because a screen mode change reopens the Workbench screen and closes every window on it, while everything in Appearance applies at once. We also considered folding Serial into Printing; it fits better next to the network, since both are about talking to other machines. OpenUp Setup stays as it is, and its buttons open the new editors. Third-party editors such as Picasso96Mode, and DefIcons, which draws the default icons the Icon pack thread looks after, stay where they are.
 
 <figure>
