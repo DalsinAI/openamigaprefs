@@ -50,7 +50,7 @@
 #include "obmsg.h"
 #endif
 
-static const char version[] __attribute__((used)) = "$VER: OpenInput 0.1.2 (13.10.2026) OpenPrefs, MIT, Copyright (c) 2026 Dalsin Limited";
+static const char version[] __attribute__((used)) = "$VER: OpenInput 0.1.3 (13.10.2026) OpenPrefs, MIT, Copyright (c) 2026 Dalsin Limited";
 
 #ifdef IN_OPENBENCH
 /* inside OpenBench, a global UtilityBase could be another built-in's: every UtilityBase below, and in
@@ -68,8 +68,11 @@ struct Library *UtilityBase;
 
 /* ---- input.prefs ------------------------------------------------------------- */
 
-/* input.prefs' ICTL chunk as OS 3.1.4 and 3.2 write it (116 bytes). Declared here: the NDK's struct InputPrefs
- * stops short of the last fields. */
+/* input.prefs' ICTL chunk (116 bytes). Declared here: the NDK's struct InputPrefs stops short of the last fields.
+ * Its first 44 bytes are the NDK's struct InputPrefs, the INPT chunk, which OS 3.2's own Input editor (47.9)
+ * writes and the IPrefs beside it applies (a file with ICTL alone was not applied in a lab, 13 October 2026).
+ * So this editor reads ICTL, or INPT when there is no ICTL, and writes both, the same values in each. */
+#define INPT_SIZE 44
 struct ip_prefs {
     char ip_Keymap[16];
     UWORD ip_PointerTicks;
@@ -142,6 +145,11 @@ static void load_input(const char *path)
     if (file_data && file_len >= 12 && !memcmp(file_data, "FORM", 4) && !memcmp(file_data + 8, "PREF", 4) &&
         (c = chunk(file_data, file_len, "ICTL", &n)))
         memcpy(&ip, c, n < (LONG)sizeof ip ? n : (LONG)sizeof ip);
+    else if (file_data && file_len >= 12 && !memcmp(file_data, "FORM", 4) && !memcmp(file_data + 8, "PREF", 4) &&
+             (c = chunk(file_data, file_len, "INPT", &n)) && n >= INPT_SIZE) {
+        memcpy(&ip, c, INPT_SIZE);               /* the OS editor's file: ICTL's other fields keep their defaults */
+        strncpy(ip.ip_KeymapName, ip.ip_Keymap, sizeof ip.ip_Keymap);
+    }
     memcpy(oiac, oiac_defaults, sizeof oiac);
     had_oiac = 0;
     if (file_data && file_len >= 12 && !memcmp(file_data, "FORM", 4) && !memcmp(file_data + 8, "PREF", 4) &&
@@ -165,7 +173,7 @@ static int write_file(const char *path, const UBYTE *data, LONG len)
 
 static int save_input(const char *path)
 {
-    LONG size = 12 + 14 + 8 + sizeof ip + 8 + 2 * OIAC_WORDS + file_len + 16, o = 12, k, i;
+    LONG size = 12 + 14 + 8 + sizeof ip + 8 + INPT_SIZE + 8 + 2 * OIAC_WORDS + file_len + 16, o = 12, k, i;
     UBYTE *out = AllocVec(size, MEMF_ANY | MEMF_CLEAR);
     int ok, had_prhd = 0;
     if (!out) return 0;
@@ -175,10 +183,9 @@ static int save_input(const char *path)
         for (k = 12; k + 8 <= file_len; ) {
             LONG cl = (LONG)get32(file_data + k + 4), all = 8 + cl + (cl & 1);
             if (cl < 0 || k + all > file_len) break;
-            if (memcmp(file_data + k, "ICTL", 4) && memcmp(file_data + k, "OIAC", 4)) {   /* both are written below */
+            if (memcmp(file_data + k, "ICTL", 4) && memcmp(file_data + k, "INPT", 4) && memcmp(file_data + k, "OIAC", 4)) {   /* written below */
                 if (!memcmp(file_data + k, "PRHD", 4)) had_prhd = 1;
                 memcpy(out + o, file_data + k, all);
-                if (!memcmp(file_data + k, "INPT", 4) && cl >= 44) out[o + 8 + 42] = out[o + 8 + 43] = 0;   /* the OS's struct InputPrefs: its ip_MouseAccel off too */
                 o += all;
             }
             k += all;
@@ -193,6 +200,10 @@ static int save_input(const char *path)
     put32(out + o + 4, sizeof ip);
     memcpy(out + o + 8, &ip, sizeof ip);
     o += 8 + sizeof ip + (sizeof ip & 1);
+    memcpy(out + o, "INPT", 4);                  /* the same values as the OS's struct InputPrefs, for OS 3.2's IPrefs */
+    put32(out + o + 4, INPT_SIZE);
+    memcpy(out + o + 8, &ip, INPT_SIZE);
+    o += 8 + INPT_SIZE;
     memcpy(out + o, "OIAC", 4);
     put32(out + o + 4, 2 * OIAC_WORDS);
     oiac[0] = 1; oiac[1] = 0;                    /* version 1 */
