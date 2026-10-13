@@ -55,6 +55,10 @@ locale.library runs on its own built-in region (united_states, GMT offset
 Tested in lab `gcc16-c` (a copy of Instance-32), built into OpenBench and
 stand-alone.
 
+## 0.2.1 (13 October 2026): no NULL output
+
+Setting the clock runs `C:Date` and `C:SetClock SAVE` with a `NIL:` input and a `NIL:` output, opened and closed around the calls. Before, the output was NULL. The Team's decision of 12 October: every synchronous call gets explicit handles, as OpenDock and OpenMenus do. If `NIL:` can't be opened, the clock is not set.
+
 ## 0.2 (12 October 2026): a place, and summer time by itself
 
 The decision (12 October 2026): the user picks a place, such as
