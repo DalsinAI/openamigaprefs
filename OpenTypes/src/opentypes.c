@@ -34,7 +34,7 @@
  * each run sets again the ones it counts on. The stand-alone OpenTypes builds
  * as before.
  *
- * MIT, Copyright (c) 2026 Dalsin Limited. */
+ * MIT, Copyright (c) 2026 AmigaChrome Team. */
 #include <exec/types.h>
 #include <exec/memory.h>
 #include <exec/lists.h>
@@ -60,7 +60,7 @@
 #include <string.h>
 
 #ifndef IN_OPENBENCH
-static const char version[] __attribute__((used)) = "$VER: OpenTypes 0.2.3 (11.10.2026) MIT, Copyright (c) 2026 Dalsin Limited";
+static const char version[] __attribute__((used)) = "$VER: OpenTypes 0.2.3 (11.10.2026) MIT, Copyright (c) 2026 AmigaChrome Team";
 /* The window runs on 32 KB, however OpenTypes is started: on a Shell's 4 KB
  * (Run, a script, the dock's default) the window's calls overran the stack and
  * closing the window rebooted the machine (11 Oct 2026). libnix's start code

@@ -1,4 +1,4 @@
-/* sp_amiga: see sp_amiga.h. MIT, Copyright (c) 2026 Dalsin Limited. */
+/* sp_amiga: see sp_amiga.h. MIT, Copyright (c) 2026 AmigaChrome Team. */
 #include <exec/memory.h>
 #include <exec/ports.h>
 #include <exec/tasks.h>

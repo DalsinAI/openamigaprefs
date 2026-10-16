@@ -11,7 +11,7 @@
  * OpenSpeaker alike. The OS files are kept byte for byte where we change
  * nothing: chunks we don't know go back as they came.
  *
- * MIT, Copyright (c) 2026 Dalsin Limited. */
+ * MIT, Copyright (c) 2026 AmigaChrome Team. */
 #ifndef SP_CORE_H
 #define SP_CORE_H
 

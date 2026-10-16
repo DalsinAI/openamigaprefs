@@ -1,6 +1,6 @@
 /* Host tests for the Sound editor's settings and files (sp_core.c).
  *   tests/run.sh
- * MIT, Copyright (c) 2026 Dalsin Limited. */
+ * MIT, Copyright (c) 2026 AmigaChrome Team. */
 #include "sp_core.h"
 
 #include <stdio.h>

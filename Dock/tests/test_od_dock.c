@@ -1,4 +1,4 @@
-/* Host tests for od_dock.c. MIT, Copyright (c) 2026 Dalsin Limited. */
+/* Host tests for od_dock.c. MIT, Copyright (c) 2026 AmigaChrome Team. */
 #include "od_dock.h"
 #include <stdio.h>
 #include <stdlib.h>

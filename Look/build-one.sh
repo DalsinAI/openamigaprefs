@@ -3,7 +3,7 @@
 # with the os32 stove (m68k-amigaos-gcc, NDK 3.2).
 #   Look/build-one.sh [OUT_DIR]     (default build/os3)    -> OUT_DIR/OpenLook
 # Each editor is compiled with LT_ONE and its main renamed; the four stand-alone editors still build as before.
-# MIT, Copyright (c) 2026 Dalsin Limited.
+# MIT, Copyright (c) 2026 AmigaChrome Team.
 set -eu
 HERE=$(cd "$(dirname "$0")" && pwd)
 P=$HERE/..

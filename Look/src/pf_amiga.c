@@ -6,7 +6,7 @@
  * WriteChunkBytes() and PopChunk() (which pads an odd chunk). A file that is there already is written under
  * its own name (Font.prefs stays Font.prefs on a disk that keeps the case it was given).
  *
- * MIT, Copyright (c) 2026 Dalsin Limited. */
+ * MIT, Copyright (c) 2026 AmigaChrome Team. */
 #include <exec/types.h>
 #include <exec/memory.h>
 #include <dos/dos.h>

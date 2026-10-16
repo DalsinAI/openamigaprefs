@@ -1,5 +1,5 @@
 /* gp_core: the Gamepads editor's settings and text formats (gp_core.h).
- * MIT, Copyright (c) 2026 Dalsin Limited. */
+ * MIT, Copyright (c) 2026 AmigaChrome Team. */
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>

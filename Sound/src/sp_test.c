@@ -6,7 +6,7 @@
  *          wherever unit 0's mode says: the ACAHI board, a sound card, or
  *          Paula through AHI.
  *
- * MIT, Copyright (c) 2026 Dalsin Limited. */
+ * MIT, Copyright (c) 2026 AmigaChrome Team. */
 #include <exec/memory.h>
 #include <devices/audio.h>
 #include <devices/ahi.h>

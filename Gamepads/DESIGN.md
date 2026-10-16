@@ -2,7 +2,7 @@
 
 The game controllers editor, built on OpenInput (`openinput.library`,
 DalsinAI/openamigainput; its design's section 8 is this page). Pad mapping
-moves here from OpenUSB Prefs. MIT, Copyright (c) 2026 Dalsin Limited.
+moves here from OpenUSB Prefs. MIT, Copyright (c) 2026 AmigaChrome Team.
 
 ![The Gamepads editor testing a modern pad: the pad drawn as a controller, the d-pad's left arm and the triggers' amounts lit in the accent colour](docs/window.png)
 

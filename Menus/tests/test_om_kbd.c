@@ -2,7 +2,7 @@
  * shaped like Workbench's (titles, separators, a disabled item, a submenu,
  * check marks and command keys).
  * Build and run: Menus/tests/run.sh
- * MIT, Copyright (c) 2026 Dalsin Limited. */
+ * MIT, Copyright (c) 2026 AmigaChrome Team. */
 #include "om_kbd.h"
 
 #include <stdio.h>

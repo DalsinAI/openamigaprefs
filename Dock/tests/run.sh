@@ -1,6 +1,6 @@
 #!/bin/sh
 # Host tests for OpenDock's settings and importers (od_dock.c), with the host's cc.
-# MIT, Copyright (c) 2026 Dalsin Limited.
+# MIT, Copyright (c) 2026 AmigaChrome Team.
 set -eu
 HERE=$(cd "$(dirname "$0")" && pwd)
 OUT=${TMPDIR:-/tmp}/od_dock_test

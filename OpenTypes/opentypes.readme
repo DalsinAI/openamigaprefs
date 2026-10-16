@@ -1,6 +1,6 @@
 Short:        Default programs per file type
 Uploader:     (We fill this in at upload time)
-Author:       Dalsin Limited
+Author:       AmigaChrome Team
 Type:         util/wb
 Version:      0.1
 Architecture: m68k-amigaos >= 3.2.0
@@ -24,9 +24,9 @@ GadTools, icon.library only, no patches.
 
 Status: designed; in development.
 
-Free software under the MIT licence, Copyright (c) 2026 Dalsin Limited. Use
+Free software under the MIT licence, Copyright (c) 2026 AmigaChrome Team. Use
 it, change it, fork it and ship it; keep the copyright notice and the licence
 with every copy. If you build on it, please say it is based on OpenPrefs by
-Dalsin Limited.
+the AmigaChrome Team.
 
 Source: https://github.com/DalsinAI/openamigaprefs

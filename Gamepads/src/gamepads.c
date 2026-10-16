@@ -29,7 +29,7 @@
  * name, and the pad it holds is let go as it quits; each start begins as a new program would, since
  * OpenBench's data stays from one start to the next.
  *
- * MIT, Copyright (c) 2026 Dalsin Limited. */
+ * MIT, Copyright (c) 2026 AmigaChrome Team. */
 #include <exec/types.h>
 #include <exec/memory.h>
 #include <exec/ports.h>
@@ -62,7 +62,7 @@
 static struct Library *gamepads_openinput;
 #define OpenInputBase gamepads_openinput
 #else
-const char version[] __attribute__((used)) = "$VER: Gamepads 0.2 (9.10.2026) OpenPrefs, Dalsin Limited";
+const char version[] __attribute__((used)) = "$VER: Gamepads 0.2 (9.10.2026) OpenPrefs, AmigaChrome Team";
 
 struct Library *OpenInputBase;
 #endif
