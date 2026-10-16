@@ -43,7 +43,7 @@ static struct Library *opensystem_expansion;
 
 #define STACK_ENV "ENV:OpenAmiga/Stack"
 #define STACK_ENVARC "ENVARC:OpenAmiga/Stack"
-#define DALSIN_MANUFACTURER 0xDA15
+#define AMIGACHROME_MANUFACTURER 0xDA15
 #define LOCAL_PRODUCT 12             /* AC090's memory controller */
 #define AAPLUS_PRODUCT 14            /* the AA+ board's controller: the same registers */
 #define STK_REGS 0x900
@@ -145,8 +145,8 @@ static volatile ULONG *stack_regs(void)
     struct ConfigDev *cd = NULL;
     volatile ULONG *r;
     if (!ExpansionBase) return NULL;
-    if (!(cd = FindConfigDev(NULL, DALSIN_MANUFACTURER, LOCAL_PRODUCT)))
-        cd = FindConfigDev(NULL, DALSIN_MANUFACTURER, AAPLUS_PRODUCT);
+    if (!(cd = FindConfigDev(NULL, AMIGACHROME_MANUFACTURER, LOCAL_PRODUCT)))
+        cd = FindConfigDev(NULL, AMIGACHROME_MANUFACTURER, AAPLUS_PRODUCT);
     if (!cd || !cd->cd_BoardAddr) return NULL;
     r = (volatile ULONG *)((UBYTE *)cd->cd_BoardAddr + STK_REGS);
     return r[0] == STK_SIGNATURE ? r : NULL;
