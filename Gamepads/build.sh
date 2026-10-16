@@ -3,7 +3,7 @@
 # openinput.library's headers (include/, copied from openamigainput).
 #   Gamepads/build.sh [OUT_DIR]     (default build/os3)
 #   STOVE=~/AmigaChrome/stoves/os32-gcc16 Gamepads/build.sh build/os3-gcc16
-# MIT, Copyright (c) 2026 Dalsin Limited.
+# MIT, Copyright (c) 2026 AmigaChrome Team.
 set -eu
 HERE=$(cd "$(dirname "$0")" && pwd)
 STOVE=${STOVE:-$HOME/AmigaChrome/stoves/os32}

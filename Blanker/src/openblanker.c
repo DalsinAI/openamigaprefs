@@ -14,7 +14,7 @@
  * startup that lists OpenBlanker twice blanked the screen at boot); started
  * again with NOW, it plays the show at once.
  *
- * MIT, Copyright (c) 2026 Dalsin Limited. */
+ * MIT, Copyright (c) 2026 AmigaChrome Team. */
 #include <exec/types.h>
 #include <exec/memory.h>
 #include <dos/dos.h>
@@ -37,7 +37,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-static const char version[] __attribute__((used)) = "$VER: OpenBlanker 1.1.1 (10.10.2026) MIT, Copyright (c) 2026 Dalsin Limited";
+static const char version[] __attribute__((used)) = "$VER: OpenBlanker 1.1.1 (10.10.2026) MIT, Copyright (c) 2026 AmigaChrome Team";
 
 struct IntuitionBase *IntuitionBase;
 struct GfxBase *GfxBase;
@@ -88,7 +88,7 @@ static const card show[] = {
     { 220, { { GROUP, "THE GAMES WE BROUGHT HOME" }, { LIST, "The Ur-Quan Masters  \xB7  Chocolate Doom  \xB7  SDLPoP" }, { LIST, "NXEngine-evo  \xB7  OpenJazz" } } },
     { 240, { { GROUP, "AND THE COMMUNITY" }, { LIST, "everyone who kept an Amiga running, recapped a board," }, { LIST, "archived a disk, or wrote the README nobody thanked them for" } } },
     { 160, { { THANKS, "Thank you." }, { RULE, "" } } },
-    { 170, { { WORDMARK, "" }, { SMALL, "The AmigaChrome team  \xB7  Dalsin Limited" } } },
+    { 170, { { WORDMARK, "" }, { SMALL, "The AmigaChrome team  \xB7  AmigaChrome Team" } } },
 };
 #define NCARDS (int)(sizeof show / sizeof show[0])
 #define FADE 55      /* frames: about 1.1 s at 50 Hz */

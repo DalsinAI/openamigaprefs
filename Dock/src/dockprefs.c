@@ -29,7 +29,7 @@
  * window to the front; and as its statics outlive a run, each run sets again the ones it counts on. Its
  * settings code, od_dock.c, is the dock's, linked once. The stand-alone Dock builds as before.
  *
- * MIT, Copyright (c) 2026 Dalsin Limited. */
+ * MIT, Copyright (c) 2026 AmigaChrome Team. */
 #include <exec/types.h>
 #include <exec/memory.h>
 #include <exec/ports.h>
@@ -55,7 +55,7 @@
 #include "od_dock.h"
 
 #ifndef IN_OPENBENCH
-const char version[] __attribute__((used)) = "$VER: OpenDock-Prefs 0.5.2 (10.10.2026) OpenPrefs, Dalsin Limited";
+const char version[] __attribute__((used)) = "$VER: OpenDock-Prefs 0.5.2 (10.10.2026) OpenPrefs, AmigaChrome Team";
 #endif
 
 #define PREFS_ENV "ENV:OpenDock/Dock"

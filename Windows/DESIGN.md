@@ -5,8 +5,8 @@ every other screen. OpenPrefs Windows is its editor. OpenWindows watches the
 input stream and moves, sizes and activates windows with the OS's own calls.
 Since 0.7 it patches one pair of Intuition calls, OpenWindowTagList and
 OpenWindow, so that a window with a kept place opens there (below); the
-editor patches nothing. MIT, Copyright (c) 2026 Dalsin
-Limited.
+editor patches nothing. MIT, Copyright (c) 2026 AmigaChrome
+Team.
 
 ![OpenPrefs Windows 0.3](docs/window.png)
 

@@ -3,7 +3,7 @@
  * colour for "pressed": the OpenLook theme's accent where the screen has
  * the colours, else the fill pen. Works on 8-bit and RTG screens alike.
  *
- * MIT, Copyright (c) 2026 Dalsin Limited. */
+ * MIT, Copyright (c) 2026 AmigaChrome Team. */
 #ifndef GP_DRAW_H
 #define GP_DRAW_H
 

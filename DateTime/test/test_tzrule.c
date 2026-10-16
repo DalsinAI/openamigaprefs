@@ -11,7 +11,7 @@
  * - every place in the table against the host's own tz data (glibc's localtime
  *   with TZ set to the place), each hour of 2026 to 2030.
  *
- * MIT, Copyright (c) 2026 Dalsin Limited. */
+ * MIT, Copyright (c) 2026 AmigaChrome Team. */
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>

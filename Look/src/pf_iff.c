@@ -1,7 +1,7 @@
 /* pf_iff: an OS preferences file (IFF FORM PREF) as the list of its chunks (pf_iff.h).
  * Plain C: tested on the host by Look/tests/run.sh.
  *
- * MIT, Copyright (c) 2026 Dalsin Limited. */
+ * MIT, Copyright (c) 2026 AmigaChrome Team. */
 #include "pf_iff.h"
 
 #include <stdlib.h>

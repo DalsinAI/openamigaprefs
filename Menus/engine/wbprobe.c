@@ -1,7 +1,7 @@
 /* WBProbe: sends each argument to Workbench's ARexx port and prints the
  * result (a test tool for the right-click menus; not shipped).
  *   WBProbe "GETATTR WINDOWS.COUNT" "GETATTR WINDOW.ICONS.ALL.COUNT NAME root"
- * MIT, Copyright (c) 2026 Dalsin Limited. */
+ * MIT, Copyright (c) 2026 AmigaChrome Team. */
 #include <exec/types.h>
 #include <rexx/storage.h>
 #include <rexx/rxslib.h>

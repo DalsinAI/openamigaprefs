@@ -1,7 +1,7 @@
 /* Host tests for gp_pad.c: the Test view's controller fits its area, its
  * parts don't overlap, the controls sit on the body, and left and right
  * mirror each other. With an argument, writes a picture of each layout
- * (PPM) there. MIT, Copyright (c) 2026 Dalsin Limited. */
+ * (PPM) there. MIT, Copyright (c) 2026 AmigaChrome Team. */
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>

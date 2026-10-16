@@ -1,7 +1,7 @@
 # OpenPrefs Menus
 
 The editor for OpenMenus, the Open family's own menus (MIT). OpenMenus draws;
-Menus sets what it draws. MIT, Copyright (c) 2026 Dalsin Limited.
+Menus sets what it draws. MIT, Copyright (c) 2026 AmigaChrome Team.
 
 ## 0.1 (6 October 2026)
 

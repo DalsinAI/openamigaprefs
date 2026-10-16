@@ -4,7 +4,7 @@ The date, the time and the region in one OpenPrefs editor (the user, 10
 October 2026: "time, locale should slide under a new Open app"; a double-click
 on the date and time in the Workbench bar opens it). It takes over the OS's
 Time and Locale editors, which OpenUp's RECONCILE moves to SYS:Prefs/Classic.
-MIT, Copyright (c) 2026 Dalsin Limited.
+MIT, Copyright (c) 2026 AmigaChrome Team.
 
 ## 0.1 (10 October 2026)
 

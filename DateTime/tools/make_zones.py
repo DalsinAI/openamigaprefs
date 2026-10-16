@@ -9,7 +9,7 @@ background part (KEEP) runs the rules on a real Amiga.
 ZONEINFO is the host's tz data, /usr/share/zoneinfo by default. The tz
 database is in the public domain. Nothing is fetched.
 
-MIT, Copyright (c) 2026 Dalsin Limited.
+MIT, Copyright (c) 2026 AmigaChrome Team.
 """
 from __future__ import annotations
 
@@ -115,7 +115,7 @@ def main() -> int:
               f" * {version(root)} (public domain): every zone in zone.tab, and UTC, with the POSIX rule\n"
               " * its TZif file ends with, and the changes from 2026 a rule can't say (tzrule.c's\n"
               " * struct tz_change). Don't edit: run the script again.\n"
-              " * MIT, Copyright (c) 2026 Dalsin Limited. */\n")
+              " * MIT, Copyright (c) 2026 AmigaChrome Team. */\n")
     out.write(f'#define ZONES_TZDATA "{version(root)}"\n')
     out.write(f"#define ZONE_RULES {len(rules)}\n#define ZONE_COUNT {len(zones)}\n#define ZONE_CHANGES {max(len(flat), 1)}\n\n")
     out.write("static const char *const zone_rules[ZONE_RULES] = {\n")

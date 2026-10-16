@@ -6,7 +6,7 @@ Dale asked for them on 6 October 2026 ("a single combined sound prefs and a
 menu bar speaker and volume control"), chose that the new editor **replaces**
 the two old ones (they move to `Prefs/Classic`), and approved the mockup:
 (mockup link removed). MIT, Copyright (c) 2026
-Dalsin Limited.
+AmigaChrome Team.
 
 ## 0.1 (6 October 2026)
 

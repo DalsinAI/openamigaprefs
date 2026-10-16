@@ -5,7 +5,7 @@
  * (tests/test_om_prefs.c) and runs on the Amiga, in the Menus editor
  * and in the OpenMenus engine alike.
  *
- * MIT, Copyright (c) 2026 Dalsin Limited. */
+ * MIT, Copyright (c) 2026 AmigaChrome Team. */
 #ifndef OM_PREFS_H
 #define OM_PREFS_H
 

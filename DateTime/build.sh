@@ -2,7 +2,7 @@
 # OpenDateTime, the date, time and region editor, with the os32 stove
 # (m68k-amigaos-gcc, NDK 3.2).
 #   DateTime/build.sh [OUT_DIR]     (default build/os3)
-# MIT, Copyright (c) 2026 Dalsin Limited.
+# MIT, Copyright (c) 2026 AmigaChrome Team.
 set -eu
 HERE=$(cd "$(dirname "$0")" && pwd)
 STOVE=${STOVE:-$HOME/AmigaChrome/stoves/os32}

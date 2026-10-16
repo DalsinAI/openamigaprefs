@@ -2,7 +2,7 @@
 
 The editor for OpenLook, the OpenGadTools look on Workbench and every
 GadTools program. OpenLook draws; Look sets what it draws. MIT, Copyright
-(c) 2026 Dalsin Limited.
+(c) 2026 AmigaChrome Team.
 
 ![Look 0.1, testing the Graphite theme](docs/window.png)
 

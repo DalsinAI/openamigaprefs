@@ -35,7 +35,7 @@
  * taller as it starts) its window is made again for the new height, as
  * OpenTitle 0.6.11's are.
  *
- * MIT, Copyright (c) 2026 Dalsin Limited. */
+ * MIT, Copyright (c) 2026 AmigaChrome Team. */
 #include <exec/types.h>
 #include <exec/memory.h>
 #include <dos/dos.h>
@@ -68,7 +68,7 @@
 #include "popuptheme.h"
 #include "barpaint.h"
 
-const char version[] __attribute__((used)) = "$VER: OpenSpeaker 0.1.4 (12.10.2026) OpenPrefs, Dalsin Limited";
+const char version[] __attribute__((used)) = "$VER: OpenSpeaker 0.1.4 (12.10.2026) OpenPrefs, AmigaChrome Team";
 
 struct IntuitionBase *IntuitionBase;
 struct Library *CyberGfxBase;
