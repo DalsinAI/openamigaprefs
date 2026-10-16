@@ -8,13 +8,13 @@
  * logo by those first spaces, as it did when the room was always 9 spaces). A title that starts at the bar's left
  * edge is another program's, and OpenTitle hides the logo for it.
  *
- * What the cores are. The CPU cores board (Dalsin $DA15, product 7, the ACSV block with CLASS 2) gives its cores
+ * What the cores are. The CPU cores board (AmigaChrome Team $DA15, product 7, the ACSV block with CLASS 2) gives its cores
  * in UNITS ($24) and the instruction sets they run in ISAS ($28): bit 0 m68k (always: every core runs 68k code),
  * bit 1 x86-64, bit 2 ARM64 (docs/architecture/CORES_BOARD.md in AmigaChrome, section 0a). The title reads
  * "CPU = 1 (m68k) + 8 (m68k)", or "+ 8 (m68k, x86-64)" when the host also runs native jobs on them (the Team:
  * "the screen menu should indicate what the cores are, + 8 (m68k) x86 or whatever").
  *
- * MIT, Copyright (c) 2026 Dalsin Limited. */
+ * MIT, Copyright (c) 2026 AmigaChrome Team. */
 #ifndef BARLOGO_H
 #define BARLOGO_H
 

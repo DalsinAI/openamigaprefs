@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# Copyright (c) 2026 Dalsin Limited. OpenPrefs, MIT licence.
+# Copyright (c) 2026 AmigaChrome Team. OpenPrefs, MIT licence.
 # Writes TitleBar/src/logo.h: AmigaChrome's logo as 16 x 16 RGB with a mask,
 # from the web page's logo (web/amigachrome-logo-192.png in amigachrome).
 #   tools/mklogo.py LOGO.png > src/logo.h

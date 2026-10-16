@@ -5,7 +5,7 @@
  *
  *   ob_open(path)   1 opened, 0 OpenBench couldn't, -1 no OpenBench
  *
- * The message's layout is OpenBench's: keep it the same there. MIT, Copyright (c) 2026 Dalsin Limited. */
+ * The message's layout is OpenBench's: keep it the same there. MIT, Copyright (c) 2026 AmigaChrome Team. */
 #ifndef OBMSG_H
 #define OBMSG_H
 

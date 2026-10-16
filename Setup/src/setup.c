@@ -36,7 +36,7 @@
  * editor's button starts that editor in OpenBench when it is built in too.
  * The stand-alone OpenUp-Setup builds as before.
  *
- * MIT, Copyright (c) 2026 Dalsin Limited. */
+ * MIT, Copyright (c) 2026 AmigaChrome Team. */
 #include <exec/types.h>
 #include <exec/memory.h>
 #include <exec/execbase.h>
@@ -56,7 +56,7 @@
 #include <stdio.h>
 
 #ifndef IN_OPENBENCH
-const char version[] __attribute__((used)) = "$VER: OpenUp-Setup 0.1.3 (12.10.2026) OpenPrefs, Dalsin Limited";
+const char version[] __attribute__((used)) = "$VER: OpenUp-Setup 0.1.3 (12.10.2026) OpenPrefs, AmigaChrome Team";
 #endif
 
 #define USER_STARTUP "S:User-Startup"

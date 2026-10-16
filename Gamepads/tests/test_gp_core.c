@@ -1,4 +1,4 @@
-/* Host tests for gp_core.c. MIT, Copyright (c) 2026 Dalsin Limited. */
+/* Host tests for gp_core.c. MIT, Copyright (c) 2026 AmigaChrome Team. */
 #include <stdio.h>
 #include <string.h>
 #include "gp_core.h"

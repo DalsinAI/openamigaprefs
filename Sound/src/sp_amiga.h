@@ -6,7 +6,7 @@
  * real Amiga), the volume is AHI's output volume on every unit, and Paula's
  * level is the speakers' knob.
  *
- * MIT, Copyright (c) 2026 Dalsin Limited. */
+ * MIT, Copyright (c) 2026 AmigaChrome Team. */
 #ifndef SP_AMIGA_H
 #define SP_AMIGA_H
 

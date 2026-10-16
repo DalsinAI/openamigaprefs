@@ -1,5 +1,5 @@
 /* sp_test: the Sound editor's test sounds, and AHI's mode names (sp_test.c).
- * MIT, Copyright (c) 2026 Dalsin Limited. */
+ * MIT, Copyright (c) 2026 AmigaChrome Team. */
 #ifndef SP_TEST_H
 #define SP_TEST_H
 

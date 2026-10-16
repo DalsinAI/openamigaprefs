@@ -4,7 +4,7 @@ OpenTitle fills the Workbench screen's title bar: AmigaChrome's logo at the
 far left, the free chip and fast memory after Workbench's title, and at the
 right end the day, date and time, the network icons, OpenSpeaker's speaker
 and a cog with the settings editors. OpenPrefs Title bar is its editor.
-MIT, Copyright (c) 2026 Dalsin Limited.
+MIT, Copyright (c) 2026 AmigaChrome Team.
 
 ![The cog's list of settings editors, open on the Workbench screen](docs/cog.png)
 

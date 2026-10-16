@@ -10,7 +10,7 @@
  *                          a click lists the settings editors
  *   border.black on|off    the display's border around the screen black
  *
- * MIT, Copyright (c) 2026 Dalsin Limited. */
+ * MIT, Copyright (c) 2026 AmigaChrome Team. */
 #ifndef TB_PREFS_H
 #define TB_PREFS_H
 

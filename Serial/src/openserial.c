@@ -21,7 +21,7 @@
  * run sets again the ones it counts on. The stand-alone OpenSerial builds as
  * before.
  *
- * MIT, Copyright (c) 2026 Dalsin Limited. */
+ * MIT, Copyright (c) 2026 AmigaChrome Team. */
 #include <exec/types.h>
 #include <exec/memory.h>
 #include <dos/dos.h>
@@ -39,7 +39,7 @@
 #include <stdlib.h>
 
 #ifndef IN_OPENBENCH
-static const char version[] __attribute__((used)) = "$VER: OpenSerial 0.1 (10.10.2026) OpenPrefs, MIT, Copyright (c) 2026 Dalsin Limited";
+static const char version[] __attribute__((used)) = "$VER: OpenSerial 0.1 (10.10.2026) OpenPrefs, MIT, Copyright (c) 2026 AmigaChrome Team";
 #endif
 
 /* sp_SerialFlags' bits, as the OS's Serial editor sets them (not in every NDK's prefs/serial.h) */

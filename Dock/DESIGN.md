@@ -2,7 +2,7 @@
 
 OpenDock is a dock on the Workbench screen, and Dock is its prefs editor.
 The design comes from openamigaup DESIGN.md: a Mac-like dock that takes
-over the docks people already have. MIT, Copyright (c) 2026 Dalsin Limited.
+over the docks people already have. MIT, Copyright (c) 2026 AmigaChrome Team.
 
 ![OpenDock 0.3 on a graphics card: the light look, glass at 60 per cent (0.4 starts at 35)](docs/screenshot.png)
 

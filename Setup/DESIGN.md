@@ -2,7 +2,7 @@
 
 The first-start wizard (openamigaup DESIGN.md section 6). It runs once from
 `SYS:WBStartup` the first time Workbench starts after OpenUp is installed,
-and stays in `SYS:Prefs` to run again. MIT, Copyright (c) 2026 Dalsin Limited.
+and stays in `SYS:Prefs` to run again. MIT, Copyright (c) 2026 AmigaChrome Team.
 
 ## 0.1 (6 October 2026)
 

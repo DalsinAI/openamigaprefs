@@ -1,6 +1,6 @@
 Short:        One sound prefs, and a menu bar speaker
 Uploader:     (We fill this in at upload time)
-Author:       Dalsin Limited
+Author:       AmigaChrome Team
 Type:         util/wb
 Version:      0.1
 Architecture: m68k-amigaos >= 3.2.0
@@ -25,9 +25,9 @@ Keeps the OS's own sound.prefs and AHI's ahi.prefs. GadTools, no patches.
 
 Status: built; testing.
 
-Free software under the MIT licence, Copyright (c) 2026 Dalsin Limited. Use
+Free software under the MIT licence, Copyright (c) 2026 AmigaChrome Team. Use
 it, change it, fork it and ship it; keep the copyright notice and the licence
 with every copy. If you build on it, please say it is based on OpenPrefs by
-Dalsin Limited.
+the AmigaChrome Team.
 
 Source: https://github.com/DalsinAI/openamigaprefs

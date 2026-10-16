@@ -26,7 +26,7 @@
  * ob_builtin.c starts it, with no arguments and no tooltypes, and writes nothing to Output(); Ctrl-C quits as
  * Cancel does and Ctrl-F brings the window to the front. The stand-alone Look builds as before.
  *
- * MIT, Copyright (c) 2026 Dalsin Limited. */
+ * MIT, Copyright (c) 2026 AmigaChrome Team. */
 #include <exec/types.h>
 #include <exec/memory.h>
 #include <exec/ports.h>
@@ -60,7 +60,7 @@
 #ifdef IN_OPENBENCH
 static                                     /* built in: OpenBench's globals are its own */
 #endif
-const char version[] __attribute__((used)) = "$VER: Look 0.5.1 (12.10.2026) OpenPrefs, Dalsin Limited";
+const char version[] __attribute__((used)) = "$VER: Look 0.5.1 (12.10.2026) OpenPrefs, AmigaChrome Team";
 
 #define PREFS_ENV "ENV:OpenGadTools/Look"
 #define PREFS_ENVARC "ENVARC:OpenGadTools/Look"

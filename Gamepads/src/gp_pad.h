@@ -7,7 +7,7 @@
  * sticks low and inward), scaled to fit the area and centred in it, so it
  * grows with the window and the font.
  *
- * MIT, Copyright (c) 2026 Dalsin Limited. */
+ * MIT, Copyright (c) 2026 AmigaChrome Team. */
 #ifndef GP_PAD_H
 #define GP_PAD_H
 

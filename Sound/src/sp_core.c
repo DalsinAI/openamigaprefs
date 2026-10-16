@@ -1,4 +1,4 @@
-/* sp_core: see sp_core.h. MIT, Copyright (c) 2026 Dalsin Limited. */
+/* sp_core: see sp_core.h. MIT, Copyright (c) 2026 AmigaChrome Team. */
 #include "sp_core.h"
 
 #include <string.h>

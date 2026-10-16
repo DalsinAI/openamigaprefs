@@ -25,7 +25,7 @@
  * brings the window to the front; each start begins as a new program would, since OpenBench's data
  * stays from one start to the next. OpenSpeaker stays a program of its own.
  *
- * MIT, Copyright (c) 2026 Dalsin Limited. */
+ * MIT, Copyright (c) 2026 AmigaChrome Team. */
 #include <exec/types.h>
 #include <exec/memory.h>
 #include <dos/dos.h>
@@ -48,7 +48,7 @@
 #include "sp_test.h"
 
 #ifndef IN_OPENBENCH                                  /* inside OpenBench, OpenBench's $VER is the one */
-const char version[] __attribute__((used)) = "$VER: OpenSound 0.1.1 (10.10.2026) OpenPrefs, Dalsin Limited";
+const char version[] __attribute__((used)) = "$VER: OpenSound 0.1.1 (10.10.2026) OpenPrefs, AmigaChrome Team";
 #endif
 
 #define VIEW_ENV "ENV:OpenAmiga/PrefsView"           /* shared by every OpenPrefs editor: simple or advanced */

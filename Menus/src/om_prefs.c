@@ -1,5 +1,5 @@
 /* om_prefs: OpenMenus' settings and taking over MagicMenu's (om_prefs.h).
- * MIT, Copyright (c) 2026 Dalsin Limited. */
+ * MIT, Copyright (c) 2026 AmigaChrome Team. */
 #include "om_prefs.h"
 
 #include <stdio.h>
