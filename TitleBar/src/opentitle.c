@@ -57,7 +57,7 @@
  * colours are read from the screen's bar, Common/barpaint.h), and are
  * centred in the bar.
  *
- * MIT, Copyright (c) 2026 Dalsin Limited. */
+ * MIT, Copyright (c) 2026 AmigaChrome Team. */
 #include <exec/types.h>
 #include <exec/memory.h>
 #include <exec/ports.h>
@@ -101,7 +101,7 @@
 #include "barlogo.h"
 #include "obmsg.h"
 
-const char version[] __attribute__((used)) = "$VER: OpenTitle 0.6.15 (12.10.2026) OpenPrefs, Dalsin Limited";
+const char version[] __attribute__((used)) = "$VER: OpenTitle 0.6.15 (12.10.2026) OpenPrefs, AmigaChrome Team";
 
 struct IntuitionBase *IntuitionBase;
 struct GfxBase *GfxBase;
@@ -324,7 +324,7 @@ static void wb_set_title(const char *fmt)
  * call, -30; 0 without a board or without the library). Written into the title once, at the start and on
  * Ctrl-F, as Workbench's title format has no token for it. */
 /* The cores the CPU cores board presents through AutoConfig (the user, 10 October 2026: "the cpu count
- * should read the amount of cores presented via autoconfig"): a Dalsin ($DA15) product 7 board carrying
+ * should read the amount of cores presented via autoconfig"): an AmigaChrome Team ($DA15) product 7 board carrying
  * the ACSV block, CLASS ($20) 2, UNITS ($24) its cores. 0 without the board. */
 struct ExpansionBase *ExpansionBase;   /* opened for the look, closed after (the type proto/expansion.h declares) */
 static ULONG board_isas;                       /* 0.6.12: what the cores run (ISAS, $28; Common/barlogo.h) */
@@ -359,7 +359,7 @@ static ULONG omc_cores(void)
     return n > 1024 ? 0 : n;
 }
 
-/* The GPUs (0.6.9): AmigaChrome's graphics boards, ACRTG (Dalsin $DA15, up to four), counted
+/* The GPUs (0.6.9): AmigaChrome's graphics boards, ACRTG (AmigaChrome Team $DA15, up to four), counted
  * through AutoConfig as the cores are: product 9, the 16 MiB board, and product 15, the 64 MiB one (0.6.15;
  * before, a 64 MiB machine showed GPU = 0). 0 on a machine without one. */
 static ULONG board_gpus(void)

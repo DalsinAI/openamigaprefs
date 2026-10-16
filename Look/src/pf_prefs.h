@@ -6,7 +6,7 @@
  * back unchanged give the file's own bytes. A chunk that isn't there yet is added in the order the OS
  * editors write them, its other bytes zero. Plain C: tested on the host by Look/tests/run.sh.
  *
- * MIT, Copyright (c) 2026 Dalsin Limited. */
+ * MIT, Copyright (c) 2026 AmigaChrome Team. */
 #ifndef PF_PREFS_H
 #define PF_PREFS_H
 

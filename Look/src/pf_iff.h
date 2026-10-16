@@ -6,7 +6,7 @@
  * understand"). The list, parse and write are plain C and tested on the host (Look/tests/run.sh); loading
  * and saving on the Amiga go through iffparse.library (pf_amiga.c, pf_load and pf_save below).
  *
- * MIT, Copyright (c) 2026 Dalsin Limited. */
+ * MIT, Copyright (c) 2026 AmigaChrome Team. */
 #ifndef PF_IFF_H
 #define PF_IFF_H
 

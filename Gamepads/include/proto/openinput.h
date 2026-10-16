@@ -1,4 +1,4 @@
-/* Copyright (c) 2026 Dalsin Limited. OpenInput, MIT licence (LICENSE). */
+/* Copyright (c) 2026 AmigaChrome Team. OpenInput, MIT licence (LICENSE). */
 #ifndef _PROTO_OPENINPUT_H
 #define _PROTO_OPENINPUT_H
 #include <exec/types.h>

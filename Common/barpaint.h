@@ -17,7 +17,7 @@
  * when none ever was, and they can draw a shade of the bar for a pressed
  * look. bp_paint() and bp_text_pen() are as they were.
  *
- * MIT, Copyright (c) 2026 Dalsin Limited. */
+ * MIT, Copyright (c) 2026 AmigaChrome Team. */
 #ifndef BARPAINT_H
 #define BARPAINT_H
 

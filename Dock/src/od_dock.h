@@ -7,7 +7,7 @@
  * OpenDock alike. Each reader is written from its file's layout, with no
  * code from the program that wrote it.
  *
- * MIT, Copyright (c) 2026 Dalsin Limited. */
+ * MIT, Copyright (c) 2026 AmigaChrome Team. */
 #ifndef OD_DOCK_H
 #define OD_DOCK_H
 

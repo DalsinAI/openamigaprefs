@@ -26,7 +26,7 @@
  * brings the window to the front; utility.library is opened under this editor's own name; Gamepads...
  * asks OpenBench to open SYS:Prefs/OpenGamepads (Common/obmsg.h), its built-in too.
  *
- * MIT, Copyright (c) 2026 Dalsin Limited. */
+ * MIT, Copyright (c) 2026 AmigaChrome Team. */
 #include <exec/types.h>
 #include <exec/memory.h>
 #include <dos/dos.h>
@@ -50,7 +50,7 @@
 #include "obmsg.h"
 #endif
 
-static const char version[] __attribute__((used)) = "$VER: OpenInput 0.1.3 (13.10.2026) OpenPrefs, MIT, Copyright (c) 2026 Dalsin Limited";
+static const char version[] __attribute__((used)) = "$VER: OpenInput 0.1.3 (13.10.2026) OpenPrefs, MIT, Copyright (c) 2026 AmigaChrome Team";
 
 #ifdef IN_OPENBENCH
 /* inside OpenBench, a global UtilityBase could be another built-in's: every UtilityBase below, and in

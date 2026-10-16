@@ -14,11 +14,11 @@
  *
  * The settings are a short text file, ENV:OpenAmiga/Stack (Use) and ENVARC:
  * (Save): "CAP <kb>", then "PROGRAM <name> <kb>" lines. On AmigaChrome they go
- * to the runtime through the memory controller's stack registers (Dalsin
+ * to the runtime through the memory controller's stack registers (AmigaChrome Team
  * product 12 or 14, at $900 on the board). A program's name is its command's
  * file part, as the Shell runs it ("StackGrow"), case aside.
  *
- * MIT, Copyright (c) 2026 Dalsin Limited. */
+ * MIT, Copyright (c) 2026 AmigaChrome Team. */
 #include <exec/types.h>
 #include <exec/memory.h>
 #include <dos/dos.h>
@@ -36,7 +36,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-static const char version[] __attribute__((used)) = "$VER: OpenSystem 0.1 (13.10.2026) OpenPrefs, MIT, Copyright (c) 2026 Dalsin Limited";
+static const char version[] __attribute__((used)) = "$VER: OpenSystem 0.1 (13.10.2026) OpenPrefs, MIT, Copyright (c) 2026 AmigaChrome Team";
 
 static struct Library *opensystem_expansion;
 #define ExpansionBase opensystem_expansion

@@ -28,7 +28,7 @@
  * own with no arguments, as Workbench starts a tool, so it is the window; Ctrl-C is Cancel, Ctrl-F
  * brings the window to the front; utility.library is opened under this editor's own name.
  *
- * MIT, Copyright (c) 2026 Dalsin Limited. */
+ * MIT, Copyright (c) 2026 AmigaChrome Team. */
 #include <exec/types.h>
 #include <exec/memory.h>
 #include <exec/ports.h>
@@ -61,7 +61,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-static const char version[] __attribute__((used)) = "$VER: OpenDateTime 0.2.2 (13.10.2026) OpenPrefs, MIT, Copyright (c) 2026 Dalsin Limited";
+static const char version[] __attribute__((used)) = "$VER: OpenDateTime 0.2.2 (13.10.2026) OpenPrefs, MIT, Copyright (c) 2026 AmigaChrome Team";
 
 #ifdef IN_OPENBENCH
 /* inside OpenBench, a global UtilityBase could be another built-in's: every UtilityBase below, and in
@@ -167,7 +167,7 @@ struct host_clock {
     char abbr[12];
 };
 
-/* A machine with AmigaChrome's ACBridge board (Dalsin, or 2011 before Dalsin): its battery clock runs on
+/* A machine with AmigaChrome's ACBridge board (AmigaChrome Team, or 2011 before AmigaChrome Team): its battery clock runs on
  * the host's local time, so it is right at start, and moves with the host's when the offset changes. */
 static int on_amigachrome(void)
 {

@@ -32,14 +32,14 @@ Each editor has an Aminet readme beside its design (`OpenTypes/opentypes.readme`
 ## Licence and credit
 
 OpenPrefs is free software under the MIT licence (`LICENSE`, Copyright (c)
-2026 Dalsin Limited): anyone may use it, change it, fork it and ship it,
+2026 AmigaChrome Team): anyone may use it, change it, fork it and ship it,
 commercially too. The licence's one condition keeps the credit: the
 copyright notice and the licence text stay with every copy and fork. We also
 ask, as a courtesy rather than a condition, that a fork or a port say it is
-based on OpenPrefs by Dalsin Limited.
+based on OpenPrefs by the AmigaChrome Team.
 
-OpenPrefs was created by Dalsin Limited, for AmigaChrome.
+OpenPrefs was created by the AmigaChrome Team, for AmigaChrome.
 
 ## Contributors
 
-OpenPrefs is created and maintained by [SacredTrees](https://github.com/SacredTrees) with the AmigaChrome agent team, copyright Dalsin Limited. Everyone whose work it includes is credited in [`CONTRIBUTORS.md`](CONTRIBUTORS.md).
+OpenPrefs is created and maintained by [SacredTrees](https://github.com/SacredTrees) with the AmigaChrome agent team, copyright AmigaChrome Team. Everyone whose work it includes is credited in [`CONTRIBUTORS.md`](CONTRIBUTORS.md).

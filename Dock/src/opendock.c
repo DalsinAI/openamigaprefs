@@ -17,7 +17,7 @@
  * once when the dock opens and kept, so a redraw is one blit and the icons,
  * and a real 68040 is never slowed. No magnification.
  *
- * MIT, Copyright (c) 2026 Dalsin Limited. */
+ * MIT, Copyright (c) 2026 AmigaChrome Team. */
 #include <exec/types.h>
 #include <exec/memory.h>
 #include <exec/ports.h>
@@ -52,7 +52,7 @@
 #include "wbclose.h"
 #include "obmsg.h"
 
-const char version[] __attribute__((used)) = "$VER: OpenDock 0.6.5 (12.10.2026) OpenPrefs, Dalsin Limited";   /* 0.6.5: one dock after a refused Workbench reset */
+const char version[] __attribute__((used)) = "$VER: OpenDock 0.6.5 (12.10.2026) OpenPrefs, AmigaChrome Team";   /* 0.6.5: one dock after a refused Workbench reset */
 
 #define PREFS_ENV "ENV:OpenDock/Dock"
 #define PREFS_ENVARC "ENVARC:OpenDock/Dock"

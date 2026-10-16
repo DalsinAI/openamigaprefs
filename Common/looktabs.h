@@ -21,7 +21,7 @@
  * An editor calls lt_make() while it makes its gadgets, lt_draw() after GT_RefreshWindow() and between
  * GT_BeginRefresh() and GT_EndRefresh(), lt_place() before it opens its window and lt_go() for a tab.
  *
- * MIT, Copyright (c) 2026 Dalsin Limited. */
+ * MIT, Copyright (c) 2026 AmigaChrome Team. */
 #ifndef LOOKTABS_H
 #define LOOKTABS_H
 

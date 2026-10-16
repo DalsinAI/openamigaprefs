@@ -23,7 +23,7 @@
  *
  * Built into OpenLook only (LT_ONE, Look/build-one.sh): the page runs in OpenLook's one window.
  *
- * MIT, Copyright (c) 2026 Dalsin Limited. */
+ * MIT, Copyright (c) 2026 AmigaChrome Team. */
 #include <exec/types.h>
 #include <exec/memory.h>
 #include <dos/dos.h>

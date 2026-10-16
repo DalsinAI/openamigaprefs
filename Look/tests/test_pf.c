@@ -1,6 +1,6 @@
 /* Host tests for the Appearance tabs' PREF reader and writer (pf_iff.c, pf_prefs.c).
  *   Look/tests/run.sh
- * MIT, Copyright (c) 2026 Dalsin Limited. */
+ * MIT, Copyright (c) 2026 AmigaChrome Team. */
 #include "pf_iff.h"
 #include "pf_prefs.h"
 

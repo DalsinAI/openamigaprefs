@@ -7,7 +7,7 @@
  * Times are seconds since 1 January 1970, UTC (tz_t). A "local" time is the same
  * count read on the place's own clock, as the Amiga's clock keeps it.
  *
- * MIT, Copyright (c) 2026 Dalsin Limited. */
+ * MIT, Copyright (c) 2026 AmigaChrome Team. */
 
 typedef long long tz_t;
 

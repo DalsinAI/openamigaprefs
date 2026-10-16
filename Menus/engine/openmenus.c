@@ -30,7 +30,7 @@
  * copied when the menu opens, and before a choice is given or a check mark
  * changed the item is looked up again in the window's strip as it is then.
  *
- * MIT, Copyright (c) 2026 Dalsin Limited. */
+ * MIT, Copyright (c) 2026 AmigaChrome Team. */
 #include <exec/types.h>
 #include <exec/memory.h>
 #include <dos/dos.h>
@@ -68,7 +68,7 @@
 #include "om_kbd.h"
 #include "ogt_theme.h"
 
-static const char version[] __attribute__((used)) = "$VER: OpenMenus 0.4.4 (12.10.2026) MIT, Copyright (c) 2026 Dalsin Limited";   /* 0.4.4: commands start with both NIL: handles */
+static const char version[] __attribute__((used)) = "$VER: OpenMenus 0.4.4 (12.10.2026) MIT, Copyright (c) 2026 AmigaChrome Team";   /* 0.4.4: commands start with both NIL: handles */
 
 #define PREFS_ENV "ENV:OpenMenus/Menus"
 #define TRAY_DIR "ENV:OpenMenus/Tray"     /* one file per tray program: "width order" (OpenSpeaker, the clock) */

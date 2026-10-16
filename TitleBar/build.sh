@@ -3,7 +3,7 @@
 #   TitleBar/build.sh [OUT_DIR]     (default build/os3)
 # src/logo.h comes from tools/mklogo.py and AmigaChrome's logo; it is kept in
 # the repository, so the build needs no Python.
-# MIT, Copyright (c) 2026 Dalsin Limited.
+# MIT, Copyright (c) 2026 AmigaChrome Team.
 set -eu
 HERE=$(cd "$(dirname "$0")" && pwd)
 STOVE=${STOVE:-$HOME/AmigaChrome/stoves/os32}

@@ -42,7 +42,7 @@
  * Ctrl-F to the task of the public port "OpenWindows" to read it again). Places: ENV:OpenPrefs/WindowPlaces,
  * kept in ENVARC: too. Exchange can disable, enable or quit it.
  *
- * MIT, Copyright (c) 2026 Dalsin Limited. */
+ * MIT, Copyright (c) 2026 AmigaChrome Team. */
 #include <exec/types.h>
 #include <exec/memory.h>
 #include <dos/dos.h>
@@ -73,7 +73,7 @@
 #include <stdlib.h>
 #include "../../Common/cogplace.h"
 
-static const char version[] __attribute__((used)) = "$VER: OpenWindows 0.8.4 (11.10.2026) MIT, Copyright (c) 2026 Dalsin Limited";
+static const char version[] __attribute__((used)) = "$VER: OpenWindows 0.8.4 (11.10.2026) MIT, Copyright (c) 2026 AmigaChrome Team";
 
 #define PREFS_ENV "ENV:OpenPrefs/Windows"
 #define PLACES_ENV "ENV:OpenPrefs/WindowPlaces"

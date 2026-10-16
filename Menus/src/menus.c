@@ -36,7 +36,7 @@
  * holds with LT_ONE, as a page of OpenLook. OpenMenus' settings code, om_prefs.c, is linked once into
  * OpenBench for every built-in that reads it. The stand-alone Menus builds as before.
  *
- * MIT, Copyright (c) 2026 Dalsin Limited. */
+ * MIT, Copyright (c) 2026 AmigaChrome Team. */
 #include <exec/types.h>
 #include <exec/memory.h>
 #include <exec/ports.h>
@@ -63,7 +63,7 @@
 #include "../../Common/looktabs.h"
 
 #ifndef IN_OPENBENCH
-const char version[] __attribute__((used)) = "$VER: Menus 0.2.5 (12.10.2026) OpenPrefs, Dalsin Limited";
+const char version[] __attribute__((used)) = "$VER: Menus 0.2.5 (12.10.2026) OpenPrefs, AmigaChrome Team";
 #endif
 
 #define PREFS_ENV "ENV:OpenMenus/Menus"

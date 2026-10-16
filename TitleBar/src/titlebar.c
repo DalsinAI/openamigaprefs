@@ -15,7 +15,7 @@
  * starts it, with no arguments and no tooltypes, and writes nothing to Output(); Ctrl-C quits as Cancel does
  * and Ctrl-F brings the window to the front. The stand-alone TitleBar builds as before.
  *
- * MIT, Copyright (c) 2026 Dalsin Limited. */
+ * MIT, Copyright (c) 2026 AmigaChrome Team. */
 #include <exec/types.h>
 #include <exec/memory.h>
 #include <dos/dos.h>
@@ -34,7 +34,7 @@
 #include "tb_prefs.h"
 #include "../../Common/looktabs.h"
 
-static const char version[] __attribute__((used)) = "$VER: TitleBar 0.3.3 (12.10.2026) OpenPrefs, MIT, Copyright (c) 2026 Dalsin Limited";
+static const char version[] __attribute__((used)) = "$VER: TitleBar 0.3.3 (12.10.2026) OpenPrefs, MIT, Copyright (c) 2026 AmigaChrome Team";
 
 static tb_prefs cur;
 

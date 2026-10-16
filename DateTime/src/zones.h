@@ -2,7 +2,7 @@
  * 2026c (public domain): every zone in zone.tab, and UTC, with the POSIX rule
  * its TZif file ends with, and the changes from 2026 a rule can't say (tzrule.c's
  * struct tz_change). Don't edit: run the script again.
- * MIT, Copyright (c) 2026 Dalsin Limited. */
+ * MIT, Copyright (c) 2026 AmigaChrome Team. */
 #define ZONES_TZDATA "2026c"
 #define ZONE_RULES 89
 #define ZONE_COUNT 419

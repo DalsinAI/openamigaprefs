@@ -1,5 +1,5 @@
 /* gp_pad: the Test view's controller layout (gp_pad.h).
- * MIT, Copyright (c) 2026 Dalsin Limited. */
+ * MIT, Copyright (c) 2026 AmigaChrome Team. */
 #include "gp_pad.h"
 
 /* The body's grid: 1000 units wide, 500 high (the rectangle 0..340, the

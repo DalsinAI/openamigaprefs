@@ -2,7 +2,7 @@
 
 The Team's System preferences. Its first page is **Stack**: the adaptive
 stack's default cap, and the programs with a cap of their own. MIT, Copyright
-(c) 2026 Dalsin Limited.
+(c) 2026 AmigaChrome Team.
 
 Decided 13 October 2026: a new Stack page in the Team's System prefs owns the
 cap and the per-program overrides (one voice). The `STACKCAP` tooltype is
@@ -33,7 +33,7 @@ amigachrome `docs/design/Design-Adaptive-Stack.md`.
 - **The file** is short text: `CAP 1024`, then a `PROGRAM <name> <kb>` line for
   each program.
 - **To the runtime.** On AmigaChrome the editor writes the memory controller's
-  stack registers (Dalsin product 12, or 14 on the AA+ board, at `$900` on the
+  stack registers (AmigaChrome Team product 12, or 14 on the AA+ board, at `$900` on the
   board: amigachrome `stackwatch.c`). Where there is no such board, the
   settings are kept for when there is.
 - **At boot**, `OpenSystem APPLY` in User-startup hands `ENV:OpenAmiga/Stack`
