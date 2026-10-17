@@ -6,13 +6,16 @@
 # MIT, Copyright (c) 2026 AmigaChrome Team.
 set -eu
 HERE=$(cd "$(dirname "$0")" && pwd)
+# The 68040, soft float: the specs file links libnix's soft libm (maths through
+# the mathieee libraries), not its FPU libm881, so one program runs on any 68040.
+SPECS="-specs=$HERE/../specs/m68k-soft-m68040.specs"
 P=$HERE/..
 STOVE=${STOVE:-$HOME/AmigaChrome/stoves/os32}
 CC="$STOVE/prefix/bin/m68k-amigaos-gcc"
 OGT=${OGT:-$P/../opengadtools}
 OUT=${1:-$HERE/build/os3}
 mkdir -p "$OUT/one"
-CF="-noixemul -m68040 -std=gnu99 -Wall -Werror -O2 -fno-delete-null-pointer-checks -fno-common -DLT_ONE -I$OGT/lib -I$P/Common"
+CF="-noixemul -m68040 $SPECS -std=gnu99 -Wall -Werror -O2 -fno-delete-null-pointer-checks -fno-common -DLT_ONE -I$OGT/lib -I$P/Common"
 "$CC" $CF -Dmain=look_main -Dversion=look_version -c -o "$OUT/one/look.o" "$HERE/src/look.c"
 "$CC" $CF -Dmain=windows_main -Dversion=windows_version -c -o "$OUT/one/windows.o" "$P/Windows/src/windows.c"
 "$CC" $CF -Dmain=titlebar_main -Dversion=titlebar_version -I"$P/TitleBar/src" -I"$P/TitleBar/include" -c -o "$OUT/one/titlebar.o" "$P/TitleBar/src/titlebar.c"
