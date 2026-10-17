@@ -51,7 +51,7 @@ int main(int argc, char **argv)
     BPTR seg;
     LONG rc;
     (void)argv;
-    (void)version;
+    __asm__ volatile ("" : : "r" (version));   /* a reference, so --gc-sections keeps $VER (without it Version found none) */
     if (argc > 0 && args && is_apply(args)) return op_apply();
     if (!(seg = load_app())) {
         PutStr((STRPTR)"OpenPrefs: no SYS:Prefs/OpenPrefs or ROM:Prefs/OpenPrefs\n");

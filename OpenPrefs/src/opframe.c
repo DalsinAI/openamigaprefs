@@ -438,6 +438,8 @@ static int lt_envarc(void)
     return 1;
 }
 
+int lt_envpath(const char *path) { return lt_prefix(path, "ENVARC:") || lt_prefix(path, "ENV:"); }
+
 int lt_ready(const char *path, int isdir)
 {
     (void)isdir;

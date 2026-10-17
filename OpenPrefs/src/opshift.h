@@ -36,6 +36,7 @@ extern int lt_dx;
 extern const char *lt_args;                /* the arguments a page's ReadArgs reads, ending in "\n"; NULL: its own */
 extern const char *lt_pubname;             /* PUBSCREEN, or NULL */
 int lt_ready(const char *path, int isdir); /* 1: write it to NIL: (ENVARC: was refused), else 0 */
+int lt_envpath(const char *path);          /* 1: a name on ENV: or ENVARC: */
 void lt_seen(struct IntuiMessage *m);
 struct RDArgs *lt_readargs(CONST_STRPTR tmpl, LONG *array);   /* lt_args through ReadArgs */
 void lt_freeargs(struct RDArgs *rd);
@@ -122,13 +123,39 @@ static inline __attribute__((unused)) struct Screen *lt_lps(CONST_STRPTR name)
 #define LockPubScreen(n) lt_lps((CONST_STRPTR)(n))
 
 /* ---- ENV: and ENVARC: folders ---- */
+/* On ENV: and ENVARC: with no system requester: with no ENVARC: assign (a disk without SYS:Prefs/Env-Archive)
+ * a page's read of ENVARC: put up "Please insert volume ENVARC:" before the Save that would make it */
 static inline __attribute__((unused)) BPTR lt_open_file(CONST_STRPTR name, LONG mode)
 {
+    struct Process *me;
+    APTR was;
+    BPTR f;
     if (mode != MODE_OLDFILE && name && lt_ready((const char *)name, 0)) name = (CONST_STRPTR)"NIL:";
-    return __Open_base(DOS_BASE_NAME, name, mode);
+    if (!name || !lt_envpath((const char *)name)) return __Open_base(DOS_BASE_NAME, name, mode);
+    me = (struct Process *)FindTask(NULL);
+    was = me->pr_WindowPtr;
+    me->pr_WindowPtr = (APTR)-1;
+    f = __Open_base(DOS_BASE_NAME, name, mode);
+    me->pr_WindowPtr = was;
+    return f;
 }
 #undef Open
 #define Open(n, m) lt_open_file((CONST_STRPTR)(n), (m))
+static inline __attribute__((unused)) BPTR lt_lock_file(CONST_STRPTR name, LONG mode)
+{
+    struct Process *me;
+    APTR was;
+    BPTR l;
+    if (!name || !lt_envpath((const char *)name)) return __Lock_base(DOS_BASE_NAME, name, mode);
+    me = (struct Process *)FindTask(NULL);
+    was = me->pr_WindowPtr;
+    me->pr_WindowPtr = (APTR)-1;
+    l = __Lock_base(DOS_BASE_NAME, name, mode);
+    me->pr_WindowPtr = was;
+    return l;
+}
+#undef Lock
+#define Lock(n, m) lt_lock_file((CONST_STRPTR)(n), (m))
 static inline __attribute__((unused)) BPTR lt_mkdir(CONST_STRPTR name)
 {
     if (name && lt_ready((const char *)name, 1)) return 0;
