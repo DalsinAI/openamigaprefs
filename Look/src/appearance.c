@@ -1401,7 +1401,7 @@ static int gui_once(void)
     ng.ng_TextAttr = scr->Font;
     ng.ng_VisualInfo = vi;
     last = lt_make(last, &ng, L, top, W - 20, lh, LT_POINTER + ap);
-    row = top + lt_rows * lh + 12;                       /* below the tabs, one row or two */
+    row = top + lt_space(scr->Font, W - 20, lh) + 12;    /* below the tabs, one row or two (OpenPrefs: its sections) */
     row = page_make(row) + 6;
     /* the status line and the buttons at the window's foot, when another page made it taller */
     inner = scr->WBorTop + fh + 1;
@@ -1427,6 +1427,7 @@ static int gui_once(void)
     GT_RefreshWindow(win, NULL);
     lt_draw(win, gad[G_STATUS] ? gad[G_STATUS]->TopEdge - 6 : -1);
     page_show();
+    lt_note_to(status);
     if ((tport = CreateMsgPort()) && (tr = (struct timerequest *)CreateIORequest(tport, sizeof *tr)))
         timer = !OpenDevice((STRPTR)TIMERNAME, UNIT_VBLANK, (struct IORequest *)tr, 0);
 
@@ -1456,7 +1457,7 @@ static int gui_once(void)
             ULONG cls = m->Class;
             UWORD code = m->Code;
             struct Gadget *gg = (struct Gadget *)m->IAddress;
-            WORD mx = m->MouseX, my = m->MouseY;
+            WORD mx = m->MouseX - LT_DX, my = m->MouseY;   /* the page's own place (OpenPrefs: right of the list) */
             int id;
             GT_ReplyIMsg(m);
             /* drawing the pointer (Advanced): the button down on the grid or a colour, moves while it is held */
@@ -1498,10 +1499,10 @@ static int gui_once(void)
                 else if (id == G_TEST) test();
                 else if (id == G_CANCEL) { if (test_until) put_back(); quit = 1; }
                 else if (LT_IS(id)) {
-                    if (id != LT_ID + LT_POINTER + ap) {     /* another tab: keep, as Use, and hand over */
-                        if (!damaged) keep(0);
+                    if (lt_hit(gg, 0) >= 0) {     /* another tab: keep, as Use, and hand over (OpenPrefs: when changed) */
+                        if (!damaged && LT_DIRTY) keep(0);
                         kept = 1;
-                        lt_go(win, id - LT_ID);
+                        lt_go(win, lt_hit(gg, 0));
                         quit = 1;
                     }
                 } else {

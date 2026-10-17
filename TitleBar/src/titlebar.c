@@ -118,6 +118,12 @@ static char status_text[120];
 
 #define SET(id, ...) do { if (gad[id]) GT_SetGadgetAttrs(gad[id], win, NULL, __VA_ARGS__, TAG_DONE); } while (0)
 
+static __attribute__((unused)) void status(const char *s)
+{
+    strncpy(status_text, s, sizeof status_text - 1);
+    SET(G_STATUS, GTTX_Text, (ULONG)status_text);
+}
+
 static struct NewMenu menus[] = {
     { NM_TITLE, (STRPTR)"Project", NULL, 0, 0, NULL },
     { NM_ITEM, (STRPTR)"Save", (STRPTR)"S", 0, 0, (APTR)1 },
@@ -168,7 +174,8 @@ static int gui(void)
     G(CHECKBOX_KIND, G_CLOCK, X, row, 26, lh, "Clock at the right", PLACETEXT_LEFT, GTCB_Scaled, TRUE); row += lh + 4;
     G(CHECKBOX_KIND, G_DATE, X, row, 26, lh, "Day and date with the clock", PLACETEXT_LEFT, GTCB_Scaled, TRUE); row += lh + 4;
     G(CHECKBOX_KIND, G_NET, X, row, 26, lh, "Network icons (LAN, Wi-Fi)", PLACETEXT_LEFT, GTCB_Scaled, TRUE); row += lh + 4;
-    G(CHECKBOX_KIND, G_COG, X, row, 26, lh, "Settings cog at the right end", PLACETEXT_LEFT, GTCB_Scaled, TRUE); row += lh + 10;
+    /* the cog: always on the bar (Dale, 17 October 2026, 08:26), so no switch; the file keeps its "cog" line */
+    row += 6;
     G(CHECKBOX_KIND, G_BORDER, X, row, 26, lh, "Black border around the screen", PLACETEXT_LEFT, GTCB_Scaled, TRUE); row += lh + 10;
     G(TEXT_KIND, G_STATUS, 10, row, W - 20, lh, NULL, 0, GTTX_Text, (ULONG)status_text, GTTX_Border, TRUE); row += lh + 6;
     {
@@ -187,6 +194,7 @@ static int gui(void)
     GT_RefreshWindow(win, NULL);
     lt_draw(win, gad[G_STATUS] ? gad[G_STATUS]->TopEdge - 6 : -1);
     show();
+    lt_note_to(status);
 
     while (!quit) {
         struct IntuiMessage *m;
@@ -231,8 +239,9 @@ static int gui(void)
                 case G_SAVE: put_in_place(1); quit = 1; break;
                 case G_CANCEL: quit = 1; break;
                 default:
-                    if (LT_IS(gg->GadgetID) && gg->GadgetID != LT_ID + LT_TITLEBAR) {   /* another tab: keep, as Use, and hand over */
-                        put_in_place(0); lt_go(win, gg->GadgetID - LT_ID); quit = 1;
+                    if (lt_hit(gg, 0) >= 0) {   /* another tab: keep, as Use, and hand over (OpenPrefs: when changed) */
+                        if (LT_DIRTY) put_in_place(0);
+                        lt_go(win, lt_hit(gg, 0)); quit = 1;
                     }
                     break;
                 }
