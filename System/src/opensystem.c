@@ -35,6 +35,15 @@
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
+#ifdef LT_ONE
+#include "looktabs.h"                       /* a page of OpenPrefs (LT_OP): its frame and sections */
+#define LT_REFRESH(w) lt_draw((w), -1)
+#else
+#define LT_REFRESH(w) ((void)0)
+#define LT_DIRTY 1
+#define LT_DX 0
+#define lt_note_to(f) ((void)0)
+#endif
 
 static const char version[] __attribute__((used)) = "$VER: OpenSystem 0.1 (13.10.2026) OpenPrefs, MIT, Copyright (c) 2026 AmigaChrome Team";
 
@@ -322,6 +331,10 @@ static int gui(void)
 #define G(kind, id, x, y, w, h, text, flags, ...) \
     (ng.ng_LeftEdge = (x), ng.ng_TopEdge = (y), ng.ng_Width = (w), ng.ng_Height = (h), ng.ng_GadgetText = (STRPTR)(text), \
      ng.ng_Flags = (flags), ng.ng_GadgetID = (id), g = gad[id] = CreateGadget(kind, g, &ng, __VA_ARGS__, TAG_DONE))
+#ifdef LT_ONE
+    lt_make(NULL, NULL, 10, top, W - 24, lh, LT_SYSTEM);     /* the frame's sections (OpenPrefs) */
+    top += lt_space(scr->Font, W - 24, lh);
+#endif
     row = top;
     G(TEXT_KIND, G_RUNTIME, 12, row, W - 24, lh, NULL, 0, GTTX_Text, (ULONG)runtime_text, GTTX_Border, TRUE, GTTX_Clipped, TRUE);
     row += lh + 8;
@@ -349,6 +362,9 @@ static int gui(void)
         row += lh + 8;
     }
     if (!g) { rc = RETURN_FAIL; goto out; }
+#ifdef LT_ONE
+    win = lt_open(scr, (scr->Width - W) / 2 > 0 ? (scr->Width - W) / 2 : 0, scr->BarHeight + 20, W, row - scr->WBorTop - fh - 1, glist, IDCMP_CLOSEWINDOW | IDCMP_REFRESHWINDOW | BUTTONIDCMP | INTEGERIDCMP | STRINGIDCMP | LISTVIEWIDCMP | TEXTIDCMP, "OpenSystem 0.1");
+#else
     win = OpenWindowTags(NULL, WA_Title, (ULONG)"System: Stack", WA_ScreenTitle, (ULONG)"OpenSystem 0.1", WA_PubScreen, (ULONG)scr,
                          WA_Left, (scr->Width - W) / 2 > 0 ? (scr->Width - W) / 2 : 0, WA_Top, scr->BarHeight + 20,
                          WA_InnerWidth, W, WA_InnerHeight, row - scr->WBorTop - fh - 1,
@@ -357,8 +373,10 @@ static int gui(void)
                          WA_IDCMP, IDCMP_CLOSEWINDOW | IDCMP_REFRESHWINDOW | BUTTONIDCMP | INTEGERIDCMP | STRINGIDCMP |
                                    LISTVIEWIDCMP | TEXTIDCMP,
                          TAG_DONE);
+#endif
     if (!win) { rc = RETURN_FAIL; goto out; }
     GT_RefreshWindow(win, NULL);
+    lt_note_to(show_status);
 
     while (!quit) {
         struct IntuiMessage *m;
@@ -369,7 +387,7 @@ static int gui(void)
             struct Gadget *gg = (struct Gadget *)m->IAddress;
             GT_ReplyIMsg(m);
             if (cls == IDCMP_CLOSEWINDOW) quit = 1;
-            else if (cls == IDCMP_REFRESHWINDOW) { GT_BeginRefresh(win); GT_EndRefresh(win, TRUE); }
+            else if (cls == IDCMP_REFRESHWINDOW) { GT_BeginRefresh(win); LT_REFRESH(win); GT_EndRefresh(win, TRUE); }
             else if (cls == IDCMP_GADGETUP) {
                 switch (gg->GadgetID) {
                 case G_CAP: take_cap(); break;
@@ -383,6 +401,13 @@ static int gui(void)
                 case G_PCAP:
                 case G_SET: set_from_fields(); break;
                 case G_REMOVE: remove_selected(); break;
+#ifdef LT_ONE
+                default: {                          /* another section: the page's changes kept, as Use, when it has any */
+                    int to = lt_hit(gg, 0);
+                    if (to >= 0) { if (LT_DIRTY) put_in_place(0); lt_go(win, to); quit = 1; }
+                    break;
+                }
+#endif
                 case G_SAVE: if (put_in_place(1)) quit = 1; break;
                 case G_USE: if (put_in_place(0)) quit = 1; break;
                 case G_CANCEL: quit = 1; break;
@@ -391,7 +416,11 @@ static int gui(void)
         }
     }
 out:
+#ifdef LT_ONE
+    if (win) { lt_close(win, glist); win = NULL; }
+#else
     if (win) { CloseWindow(win); win = NULL; }
+#endif
     FreeGadgets(glist);
     FreeVisualInfo(vi);
     UnlockPubScreen(NULL, scr);
@@ -422,7 +451,10 @@ int main(int argc, char **argv)
             PutStr((STRPTR)"OpenSystem: could not write the settings file\n");
             rc = RETURN_ERROR;
         } else apply_settings();
-    } else rc = gui();
+    }
+#ifndef OP_APPLY
+    else rc = gui();                         /* OpenPrefs's C:OpenPrefs (OP_APPLY): APPLY only, no window */
+#endif
     if (rd) FreeArgs(rd);
     if (opensystem_expansion) CloseLibrary(opensystem_expansion);
     return rc;

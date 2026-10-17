@@ -820,6 +820,7 @@ static int gui_once(void)
     SET(G_LABELS, GTCY_Active, label_now);
     SET(G_CTF, GTCB_Checked, ctf_on);
     SET(G_AP, GTCB_Checked, ap_on);
+    lt_note_to(status);
     if ((tport = CreateMsgPort()) && (tr = (struct timerequest *)CreateIORequest(tport, sizeof *tr)))
         timer = !OpenDevice((STRPTR)TIMERNAME, UNIT_VBLANK, (struct IORequest *)tr, 0);
 
@@ -927,8 +928,9 @@ static int gui_once(void)
                 case G_SAVE: put_in_place(1); focus_now(); test_until = 0; quit = 1; break;
                 case G_CANCEL: if (test_until) go_back(); quit = 1; break;
                 default:
-                    if (LT_IS(gg->GadgetID) && gg->GadgetID != LT_ID + LT_LOOK) {   /* another tab: keep, as Use, and hand over */
-                        put_in_place(0); focus_now(); test_until = 0; lt_go(win, gg->GadgetID - LT_ID); quit = 1;
+                    if (lt_hit(gg, 0) >= 0) {   /* another tab: keep, as Use, and hand over (OpenPrefs: when changed) */
+                        if (LT_DIRTY) { put_in_place(0); focus_now(); }
+                        test_until = 0; lt_go(win, lt_hit(gg, 0)); quit = 1;
                     }
                     break;
                 }

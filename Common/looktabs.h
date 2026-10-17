@@ -38,6 +38,44 @@
 #include <stdio.h>
 #include <string.h>
 
+#ifdef LT_OP
+/* OpenPrefs (Dale, 17 October 2026, 08:18: "We should just combine them into a single app, prefs editors that
+ * is"): every editor is a section of one window, the sections down the left and the page on the right; on a
+ * screen too narrow for both (640 x 256), the sections in a cycle gadget above the page. The frame is
+ * OpenPrefs/src/opframe.c, linked once into SYS:Prefs/OpenPrefs; each page is the editor it was, built with
+ * LT_OP (and so LT_ONE) and OpenPrefs/src/opshift.h, which moves its gadgets and drawing right of the list.
+ * The tabs below stay for the editors built alone and for OpenLook. */
+#ifndef LT_ONE
+#define LT_ONE
+#endif
+#include <exec/types.h>
+enum { LT_LOOK, LT_WINDOWS, LT_TITLEBAR, LT_MENUS, LT_POINTER, LT_FONTS, LT_COLOURS, LT_BACKDROPS, LT_WORKBENCH,
+       LT_ASL, LT_DOCK, LT_SOUND, LT_INPUT, LT_GAMEPADS, LT_DATETIME, LT_SERIAL, LT_TYPES, LT_SYSTEM, LT_BLANKER, LT_N };
+#define LT_ID 900
+#define LT_CYCLE (LT_ID + 64)              /* the sections as a cycle gadget (a narrow screen) */
+#define LT_IS(id) (((id) >= LT_ID && (id) < LT_ID + LT_N) || (id) == LT_CYCLE)
+extern struct Window *lt_win;              /* the one window, open across pages */
+extern int lt_next;                        /* the section picked: the page to open next, or -1 */
+extern int lt_win_w, lt_win_h;
+extern int lt_dx;                          /* how far right of the list a page stands (0 with the cycle gadget) */
+extern struct RastPort *lt_rp;             /* the window's RastPort while a page is in it, else NULL */
+extern int lt_dirty;                       /* the page's own gadgets or keys were used since it opened */
+struct Gadget *lt_make(struct Gadget *g, struct NewGadget *ng, int x, int y, int w, int lh, int me);
+int lt_space(struct TextAttr *ta, int w, int lh);
+void lt_draw(struct Window *win, int page_bottom);
+int lt_place(int *left, int *top);
+void lt_go(struct Window *win, int to);
+struct Window *lt_open(struct Screen *scr, int left, int top, int W, int H, struct Gadget *glist, ULONG idcmp,
+                       const char *screen_title);
+void lt_detach(struct Window *win, struct Gadget *glist);
+void lt_close(struct Window *win, struct Gadget *glist);
+int lt_hit(struct Gadget *g, UWORD code);  /* the section a click picked, or -1 */
+void lt_note_to(void (*status)(const char *));   /* a note the frame keeps for the page's status line */
+const char *lt_note_take(void);           /* the same note, or NULL, for a page with no status function */
+#define LT_DIRTY lt_dirty                  /* a section change keeps the page's changes (as Use) only when it has some */
+#define LT_DX lt_dx
+#else
+
 /* One program, one window (LT_ONE, the user, 10 October 2026: "openlook shouldn't open new windows for the
  * tabs", "the overall window should remain the same size"): the four editors are built into SYS:Prefs/OpenLook
  * (Look/src/openlookprefs.c), each page's gadgets swapped into the one window, which only ever grows. Without
@@ -348,4 +386,17 @@ static BP_UNUSED_LT void lt_close(struct Window *win, struct Gadget *glist)
     CloseWindow(win);
 }
 
+/* The tab a click picked (another than this editor's own), or -1 */
+static BP_UNUSED_LT int lt_hit(struct Gadget *g, UWORD code)
+{
+    (void)code;
+    if (g && LT_IS(g->GadgetID) && g->GadgetID != LT_ID + lt_me) return g->GadgetID - LT_ID;
+    return -1;
+}
+#define lt_note_to(f) ((void)0)
+#define lt_note_take() ((const char *)0)
+#define LT_DIRTY 1                         /* a tab hands over as Use */
+#define LT_DX 0
+
+#endif /* LT_OP */
 #endif /* LOOKTABS_H */

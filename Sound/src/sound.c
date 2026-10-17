@@ -46,6 +46,15 @@
 #include "sp_core.h"
 #include "sp_amiga.h"
 #include "sp_test.h"
+#ifdef LT_ONE
+#include "looktabs.h"                       /* a page of OpenPrefs (LT_OP): its frame and sections */
+#define LT_REFRESH(w) lt_draw((w), -1)
+#else
+#define LT_REFRESH(w) ((void)0)
+#define LT_DIRTY 1
+#define LT_DX 0
+#define lt_note_to(f) ((void)0)
+#endif
 
 #ifndef IN_OPENBENCH                                  /* inside OpenBench, OpenBench's $VER is the one */
 const char version[] __attribute__((used)) = "$VER: OpenSound 0.1.1 (10.10.2026) OpenPrefs, AmigaChrome Team";
@@ -254,6 +263,10 @@ static int gui_once(void)
     G(SLIDER_KIND, id, X, y, W - X - 160, lh - 2, text, PLACETEXT_LEFT, GTSL_Min, 0, GTSL_Max, max, GTSL_Level, 0, \
       GTSL_LevelFormat, (ULONG)"%ld%%", GTSL_MaxLevelLen, LEVEL_CHARS, GTSL_LevelPlace, PLACETEXT_RIGHT, GA_RelVerify, TRUE, GA_Immediate, TRUE)
 
+#ifdef LT_ONE
+    lt_make(NULL, NULL, 10, top, W - 20, lh, LT_SOUND);     /* the frame's sections (OpenPrefs) */
+    top += lt_space(scr->Font, W - 20, lh);
+#endif
     /* the levels */
     row = top;
     SLIDER(G_VOL, row, board ? "Volume" : "Volume (AHI)", 100);
@@ -310,6 +323,9 @@ static int gui_once(void)
     }
     if (!g) { rc = RETURN_FAIL; goto out; }
     menus[6].nm_Flags = CHECKIT | MENUTOGGLE | (advanced ? CHECKED : 0);
+#ifdef LT_ONE
+    win = lt_open(scr, 40, scr->BarHeight + 4, W, row - scr->WBorTop - fh - 1, glist, IDCMP_CLOSEWINDOW | IDCMP_REFRESHWINDOW | IDCMP_MENUPICK | IDCMP_INTUITICKS | SLIDERIDCMP | BUTTONIDCMP | CYCLEIDCMP | MXIDCMP | STRINGIDCMP | CHECKBOXIDCMP | INTEGERIDCMP, "OpenPrefs Sound 0.1");
+#else
     win = OpenWindowTags(NULL, WA_Title, (ULONG)"Sound", WA_ScreenTitle, (ULONG)"OpenPrefs Sound 0.1", WA_PubScreen, (ULONG)scr,
                          WA_Left, 40, WA_Top, scr->BarHeight + 4, WA_InnerWidth, W, WA_InnerHeight, row - scr->WBorTop - fh - 1,
                          WA_Gadgets, (ULONG)glist, WA_DragBar, TRUE, WA_DepthGadget, TRUE, WA_CloseGadget, TRUE, WA_Activate, TRUE,
@@ -317,10 +333,12 @@ static int gui_once(void)
                          WA_IDCMP, IDCMP_CLOSEWINDOW | IDCMP_REFRESHWINDOW | IDCMP_MENUPICK | IDCMP_INTUITICKS | SLIDERIDCMP | BUTTONIDCMP | CYCLEIDCMP |
                                    MXIDCMP | STRINGIDCMP | CHECKBOXIDCMP | INTEGERIDCMP,
                          TAG_DONE);
+#endif
     if (!win) { rc = RETURN_FAIL; goto out; }
     if ((menu = CreateMenus(menus, TAG_DONE)) && LayoutMenus(menu, vi, GTMN_NewLookMenus, TRUE, TAG_DONE)) SetMenuStrip(win, menu);
     GT_RefreshWindow(win, NULL);
     show();
+    lt_note_to(status);
 
     while (!quit) {
         struct IntuiMessage *m;
@@ -352,10 +370,17 @@ static int gui_once(void)
                     mc = it->NextSelect;
                 }
             }
-            else if (cls == IDCMP_REFRESHWINDOW) { GT_BeginRefresh(win); GT_EndRefresh(win, TRUE); }
+            else if (cls == IDCMP_REFRESHWINDOW) { GT_BeginRefresh(win); LT_REFRESH(win); GT_EndRefresh(win, TRUE); }
             else if (cls == IDCMP_INTUITICKS) { if (levels_follow()) show(); }   /* the PC's mixer moved them */
             else if ((cls == IDCMP_MOUSEMOVE || cls == IDCMP_GADGETUP || cls == IDCMP_GADGETDOWN) && gg) {
                 int id = gg->GadgetID, again = 0;
+#ifdef LT_ONE
+                if (LT_IS(id)) {                     /* another section: the changes kept, as Use, when there are any */
+                    int to = lt_hit(gg, 0);
+                    if (to >= 0) { if (LT_DIRTY) put_in_place(0); lt_go(win, to); quit = 1; }
+                    continue;
+                }
+#endif
                 switch (id) {
                 case G_VOL: cur.volume = slider_value(gg, code); touched = 1; levels_now(); break;
                 case G_PAULA: cur.paula = slider_value(gg, code); touched = 1; levels_now(); break;
@@ -412,7 +437,11 @@ static int gui_once(void)
         }
     }
 out:
+#ifdef LT_ONE
+    if (win) { ClearMenuStrip(win); if (rc == 99) lt_detach(win, glist); else lt_close(win, glist); win = NULL; }
+#else
     if (win) { ClearMenuStrip(win); CloseWindow(win); win = NULL; }
+#endif
     if (menu) FreeMenus(menu);
     FreeGadgets(glist);
     FreeVisualInfo(vi);
@@ -435,7 +464,7 @@ int main(int argc, char **argv)
     struct RDArgs *rd = argc > 0 ? ReadArgs((STRPTR)"FROM,USE/S,SAVE/S,ADVANCED/S", args, NULL) : NULL;
     int rc;
     if (!rd && argc > 0) { PrintFault(IoErr(), (STRPTR)"Sound"); return RETURN_FAIL; }
-#ifdef IN_OPENBENCH
+#if defined(IN_OPENBENCH) || defined(LT_ONE)
     /* OpenBench started it (argc 0, as from Workbench): what a new start finds, not the last one's */
     touched = 0;
     status_text[0] = 0;
@@ -453,6 +482,10 @@ int main(int argc, char **argv)
         if (rd) FreeArgs(rd);
         return RETURN_OK;
     }
+#ifdef OP_APPLY
+    if (rd) FreeArgs(rd);                    /* OpenPrefs's C:OpenPrefs: USE and SAVE only, no window */
+    return RETURN_FAIL;
+#endif
     orig = cur;
     advanced = args[3] ? 1 : read_view();
     if (rd) FreeArgs(rd);
