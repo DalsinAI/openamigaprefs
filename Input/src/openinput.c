@@ -45,6 +45,15 @@
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
+#ifdef LT_ONE
+#include "looktabs.h"                       /* a page of OpenPrefs (LT_OP): its frame and sections */
+#define LT_REFRESH(w) lt_draw((w), -1)
+#else
+#define LT_REFRESH(w) ((void)0)
+#define LT_DIRTY 1
+#define LT_DX 0
+#define lt_note_to(f) ((void)0)
+#endif
 
 #ifdef IN_OPENBENCH
 #include "obmsg.h"
@@ -322,7 +331,7 @@ static int put_in_place(int save)
 }
 
 /* The Gamepads editor, started on its own; this window stays. */
-static void gamepads(void)
+static __attribute__((unused)) void gamepads(void)
 {
 #ifdef IN_OPENBENCH
     /* inside OpenBench: OpenBench opens it, as its built-in (or to the front when it runs already) */
@@ -347,6 +356,13 @@ static struct NewMenu menus[] = {
     { NM_ITEM, (STRPTR)"Gamepads...", (STRPTR)"G", 0, 0, (APTR)4 },
     { NM_END, 0, 0, 0, 0, 0 }
 };
+
+/* Gamepads...: in OpenPrefs its section, the page's changes kept as Use when it has any; alone, the editor */
+#ifdef LT_ONE
+#define GAMEPADS_GO() do { if (LT_DIRTY) put_in_place(0); lt_go(win, LT_GAMEPADS); quit = 1; } while (0)
+#else
+#define GAMEPADS_GO() gamepads()
+#endif
 
 static int gui(void)
 {
@@ -386,6 +402,10 @@ static int gui(void)
 #define G(kind, id, x, y, w, h, text, flags, ...) \
     (ng.ng_LeftEdge = (x), ng.ng_TopEdge = (y), ng.ng_Width = (w), ng.ng_Height = (h), ng.ng_GadgetText = (STRPTR)(text), \
      ng.ng_Flags = (flags), ng.ng_GadgetID = (id), g = gad[id] = CreateGadget(kind, g, &ng, __VA_ARGS__, TAG_DONE))
+#ifdef LT_ONE
+    lt_make(NULL, NULL, 10, top, W - 24, lh, LT_INPUT);     /* the frame's sections (OpenPrefs) */
+    top += lt_space(scr->Font, W - 24, lh);
+#endif
     row = top + fh + 4;
     G(LISTVIEW_KIND, G_KEYMAP, keymap_x, row, keymap_w, lvh, "Keymap", PLACETEXT_ABOVE,
       GTLV_Labels, (ULONG)&list, GTLV_Selected, (ULONG)sel_keymap, GTLV_Top, (ULONG)(sel_keymap > 3 ? sel_keymap - 3 : 0));
@@ -414,6 +434,9 @@ static int gui(void)
         row += lh + 8;
     }
     if (!g) { rc = RETURN_FAIL; goto out; }
+#ifdef LT_ONE
+    win = lt_open(scr, (scr->Width - W) / 2 > 0 ? (scr->Width - W) / 2 : 0, scr->BarHeight + 20, W, row - scr->WBorTop - fh - 1, glist, IDCMP_CLOSEWINDOW | IDCMP_REFRESHWINDOW | IDCMP_MENUPICK | IDCMP_VANILLAKEY | BUTTONIDCMP | INTEGERIDCMP | CYCLEIDCMP | CHECKBOXIDCMP | LISTVIEWIDCMP | TEXTIDCMP, "OpenInput 0.1");
+#else
     win = OpenWindowTags(NULL, WA_Title, (ULONG)"Input", WA_ScreenTitle, (ULONG)"OpenInput 0.1", WA_PubScreen, (ULONG)scr,
                          WA_Left, (scr->Width - W) / 2 > 0 ? (scr->Width - W) / 2 : 0, WA_Top, scr->BarHeight + 20,
                          WA_InnerWidth, W, WA_InnerHeight, row - scr->WBorTop - fh - 1,
@@ -422,9 +445,11 @@ static int gui(void)
                          WA_IDCMP, IDCMP_CLOSEWINDOW | IDCMP_REFRESHWINDOW | IDCMP_MENUPICK | IDCMP_VANILLAKEY | BUTTONIDCMP |
                                    INTEGERIDCMP | CYCLEIDCMP | CHECKBOXIDCMP | LISTVIEWIDCMP | TEXTIDCMP,
                          TAG_DONE);
+#endif
     if (!win) { rc = RETURN_FAIL; goto out; }
     if ((menu = CreateMenus(menus, TAG_DONE)) && LayoutMenus(menu, vi, GTMN_NewLookMenus, TRUE, TAG_DONE)) SetMenuStrip(win, menu);
     GT_RefreshWindow(win, NULL);
+    lt_note_to(status);
 
     while (!quit) {
         struct IntuiMessage *m;
@@ -442,8 +467,8 @@ static int gui(void)
             struct Gadget *gg = (struct Gadget *)m->IAddress;
             GT_ReplyIMsg(m);
             if (cls == IDCMP_CLOSEWINDOW) quit = 1;
-            else if (cls == IDCMP_REFRESHWINDOW) { GT_BeginRefresh(win); GT_EndRefresh(win, TRUE); }
-            else if (cls == IDCMP_VANILLAKEY && (code | 0x20) == 'g') gamepads();
+            else if (cls == IDCMP_REFRESHWINDOW) { GT_BeginRefresh(win); LT_REFRESH(win); GT_EndRefresh(win, TRUE); }
+            else if (cls == IDCMP_VANILLAKEY && (code | 0x20) == 'g') GAMEPADS_GO();
             else if (cls == IDCMP_MENUPICK) {
                 while (code != MENUNULL && !quit) {
                     struct MenuItem *it = ItemAddress(menu, code);
@@ -452,7 +477,7 @@ static int gui(void)
                     case 1: if (put_in_place(1)) quit = 1; break;
                     case 2: if (put_in_place(0)) quit = 1; break;
                     case 3: quit = 1; break;
-                    case 4: gamepads(); break;
+                    case 4: GAMEPADS_GO(); break;
                     }
                     code = it->NextSelect;
                 }
@@ -463,7 +488,14 @@ static int gui(void)
                 case G_ACCEL: accel = (gg->Flags & GFLG_SELECTED) != 0; break;
                 case G_SWAP: swap = (gg->Flags & GFLG_SELECTED) != 0; break;
                 case G_KEYMAP: sel_keymap = code; break;
-                case G_PADS: gamepads(); break;
+#ifdef LT_ONE
+                default: {                          /* another section: the page's changes kept, as Use, when it has any */
+                    int to = lt_hit(gg, 0);
+                    if (to >= 0) { if (LT_DIRTY) put_in_place(0); lt_go(win, to); quit = 1; }
+                    break;
+                }
+#endif
+                case G_PADS: GAMEPADS_GO(); break;
                 case G_SAVE: if (put_in_place(1)) quit = 1; break;
                 case G_USE: if (put_in_place(0)) quit = 1; break;
                 case G_CANCEL: quit = 1; break;
@@ -472,7 +504,11 @@ static int gui(void)
         }
     }
 out:
+#ifdef LT_ONE
+    if (win) { ClearMenuStrip(win); lt_close(win, glist); win = NULL; }
+#else
     if (win) { ClearMenuStrip(win); CloseWindow(win); win = NULL; }
+#endif
     if (menu) FreeMenus(menu);
     FreeGadgets(glist);
     FreeVisualInfo(vi);
@@ -495,7 +531,7 @@ int main(int argc, char **argv)
     } else rc = gui();
     if (rd) FreeArgs(rd);
     if (file_data) FreeVec(file_data);
-#ifdef IN_OPENBENCH
+#if defined(IN_OPENBENCH) || defined(LT_ONE)
     file_data = NULL;                            /* OpenBench's data stays: the next start must not free it again */
     file_len = 0;
 #endif

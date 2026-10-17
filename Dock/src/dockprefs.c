@@ -54,6 +54,15 @@
 #include <stdio.h>
 
 #include "od_dock.h"
+#ifdef LT_ONE
+#include "looktabs.h"                       /* a page of OpenPrefs (LT_OP): its frame and sections */
+#define LT_REFRESH(w) lt_draw((w), -1)
+#else
+#define LT_REFRESH(w) ((void)0)
+#define LT_DIRTY 1
+#define LT_DX 0
+#define lt_note_to(f) ((void)0)
+#endif
 
 #ifndef IN_OPENBENCH
 const char version[] __attribute__((used)) = "$VER: OpenDock-Prefs 0.5.3 (17.10.2026) OpenPrefs, AmigaChrome Team";   /* 0.5.3: Use and Save start the dock if it isn't running */
@@ -416,6 +425,10 @@ static int make_gadgets(struct Screen *scr, APTR vi, struct Gadget **glist, int 
     (ng.ng_LeftEdge = (x), ng.ng_TopEdge = (y), ng.ng_Width = (w), ng.ng_Height = (h), ng.ng_GadgetText = (STRPTR)(text), \
      ng.ng_Flags = (flags), ng.ng_GadgetID = (id), g = gad[id] = CreateGadget(kind, g, &ng, __VA_ARGS__, TAG_DONE))
 
+#ifdef LT_ONE
+    lt_make(NULL, NULL, L, top, W - 20, lh, LT_DOCK);     /* the frame's sections (OpenPrefs) */
+    top += lt_space(scr->Font, W - 20, lh);
+#endif
     build_list();
     /* the left column: the buttons */
     row = top + fh + 4;
@@ -538,6 +551,9 @@ static int gui(void)
         int tall = inner + scr->WBorTop + scr->Font->ta_YSize + 1 + scr->WBorBottom;
         if (wy + tall > scr->Height) wy = scr->Height - tall > 0 ? scr->Height - tall : 0;
     }
+#ifdef LT_ONE
+    win = lt_open(scr, wx, wy, W, inner, glist, IDCMP_CLOSEWINDOW | IDCMP_REFRESHWINDOW | IDCMP_VANILLAKEY | IDCMP_MENUPICK | BUTTONIDCMP | CYCLEIDCMP | STRINGIDCMP | INTEGERIDCMP | CHECKBOXIDCMP | LISTVIEWIDCMP | SLIDERIDCMP, "OpenPrefs Dock 0.2");
+#else
     win = OpenWindowTags(NULL, WA_Title, (ULONG)"Dock", WA_ScreenTitle, (ULONG)"OpenPrefs Dock 0.2", WA_PubScreen, (ULONG)scr,
                          WA_Left, wx, WA_Top, wy, WA_InnerWidth, W, WA_InnerHeight, inner,
                          WA_Gadgets, (ULONG)glist, WA_DragBar, TRUE, WA_DepthGadget, TRUE, WA_CloseGadget, TRUE, WA_Activate, TRUE,
@@ -545,10 +561,12 @@ static int gui(void)
                          WA_IDCMP, IDCMP_CLOSEWINDOW | IDCMP_REFRESHWINDOW | IDCMP_VANILLAKEY | IDCMP_MENUPICK | BUTTONIDCMP | CYCLEIDCMP |
                                    STRINGIDCMP | INTEGERIDCMP | CHECKBOXIDCMP | LISTVIEWIDCMP | SLIDERIDCMP,
                          TAG_DONE);
+#endif
     if (!win) { rc = RETURN_FAIL; goto out; }
     SetMenuStrip(win, menus);
     GT_RefreshWindow(win, NULL);
     show();
+    lt_note_to(status);
 
     while (!quit) {
         struct IntuiMessage *m;
@@ -598,7 +616,7 @@ static int gui(void)
             od_button *b = sel >= 0 && sel < cur.n ? &cur.b[sel] : NULL;
             GT_ReplyIMsg(m);
             if (cls == IDCMP_CLOSEWINDOW) id = G_CANCEL;
-            else if (cls == IDCMP_REFRESHWINDOW) { GT_BeginRefresh(win); GT_EndRefresh(win, TRUE); }
+            else if (cls == IDCMP_REFRESHWINDOW) { GT_BeginRefresh(win); LT_REFRESH(win); GT_EndRefresh(win, TRUE); }
             else if (cls == IDCMP_VANILLAKEY) id = handle_key(code);
             else if (cls == IDCMP_GADGETUP || cls == IDCMP_GADGETDOWN) id = gg->GadgetID;
             else if (cls == IDCMP_MENUPICK) {
@@ -615,6 +633,13 @@ static int gui(void)
                 }
             }
             if (id < 0) continue;
+#ifdef LT_ONE
+            if (LT_IS(id)) {                         /* another section: the changes kept, as Use, when there are any */
+                int to = lt_hit(gg, 0);
+                if (to >= 0 && (!LT_DIRTY || put_in_place(0, 1))) { test_until = 0; lt_go(win, to); quit = 1; }
+                continue;
+            }
+#endif
             switch (id) {
             case G_PLACE: cur.place = code; break;
             case G_SIZE: cur.size = code; break;
@@ -672,7 +697,11 @@ static int gui(void)
         if (switch_view && !quit) {
             wx = win->LeftEdge; wy = win->TopEdge;
             ClearMenuStrip(win);
+#ifdef LT_ONE
+            lt_detach(win, glist); win = NULL;   /* the window stays for the other view */
+#else
             CloseWindow(win); win = NULL;
+#endif
             FreeGadgets(glist); glist = NULL;
             FreeMenus(menus); menus = NULL;
             goto reopen;
@@ -682,7 +711,11 @@ out:
     if (timer) CloseDevice((struct IORequest *)tr);
     if (tr) DeleteIORequest((struct IORequest *)tr);
     if (tport) DeleteMsgPort(tport);
+#ifdef LT_ONE
+    if (win) { ClearMenuStrip(win); lt_close(win, glist); win = NULL; }
+#else
     if (win) { ClearMenuStrip(win); CloseWindow(win); }
+#endif
     FreeMenus(menus);
     FreeGadgets(glist);
     FreeVisualInfo(vi);
@@ -698,7 +731,7 @@ int main(int argc, char **argv)
     struct RDArgs *rd = argc > 0 ? ReadArgs((STRPTR)"FROM/K,TOOLMANAGER/K,AMIDOCK/K,AMISTART/K,USE/S,SAVE/S,ADVANCED/S,ADD/M", args, NULL) : NULL;
     char *text, err[120];
     int rc = RETURN_OK, first;
-#ifdef IN_OPENBENCH
+#if defined(IN_OPENBENCH) || defined(LT_ONE)
     /* Built in, it starts as ob_builtin.c starts it: argc 0, argv NULL and no WBStartup message, so no
      * arguments and no tooltypes; the window opens, as from Workbench, and nothing below reads the Shell or
      * writes to Output(). Its statics outlive a run inside OpenBench: what a run counts on starts again here. */

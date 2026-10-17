@@ -740,6 +740,7 @@ static int gui(void)
     lt_draw(win, gad[G_STATUS] ? gad[G_STATUS]->TopEdge - 6 : -1);
     show(&cur);
     opening_hint();
+    lt_note_to(status);
 
     while (!quit) {
         struct IntuiMessage *m;
@@ -805,8 +806,9 @@ static int gui(void)
                 }
             }
             if (id < 0) continue;
-            if (LT_IS(id)) {                                  /* another tab: keep, as Use, and hand over */
-                if (id != LT_ID + LT_MENUS && put_in_place(0)) { test_until = 0; lt_go(win, id - LT_ID); quit = 1; }
+            if (LT_IS(id)) {                                  /* another tab: keep, as Use, and hand over (OpenPrefs: when changed) */
+                int to = lt_hit(gg, 0);
+                if (to >= 0 && (!LT_DIRTY || put_in_place(0))) { test_until = 0; lt_go(win, to); quit = 1; }
                 continue;
             }
             /* settings kept for a later engine: OpenMenus 0.3 doesn't use them yet (DESIGN.md) */

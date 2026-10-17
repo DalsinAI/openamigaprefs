@@ -55,6 +55,15 @@
 #include "gp_core.h"
 #include "gp_pad.h"
 #include "gp_draw.h"
+#ifdef LT_ONE
+#include "looktabs.h"                       /* a page of OpenPrefs (LT_OP): its frame and sections */
+#define LT_REFRESH(w) lt_draw((w), -1)
+#else
+#define LT_REFRESH(w) ((void)0)
+#define LT_DIRTY 1
+#define LT_DX 0
+#define lt_note_to(f) ((void)0)
+#endif
 
 #ifdef IN_OPENBENCH
 /* inside OpenBench, OpenBench's $VER is the one; a global OpenInputBase could be another built-in's:
@@ -395,7 +404,10 @@ static void show_skip(int on)
     struct Gadget *k = gad[G_SKIP];
     if (!win || !k || on == skip_shown) return;
     if (on) { AddGList(win, k, ~0, 1, NULL); RefreshGList(k, win, NULL, 1); }
-    else { RemoveGList(win, k, 1); EraseRect(win->RPort, k->LeftEdge, k->TopEdge, k->LeftEdge + k->Width - 1, k->TopEdge + k->Height - 1); }
+    else {                                   /* k stands where it was made (OpenPrefs: right of the list): drawn there again */
+        RemoveGList(win, k, 1);
+        EraseRect(win->RPort, k->LeftEdge - LT_DX, k->TopEdge, k->LeftEdge - LT_DX + k->Width - 1, k->TopEdge + k->Height - 1);
+    }
     skip_shown = on;
 }
 
@@ -752,6 +764,10 @@ static int gui_once(void)
     boxh = 12 * fh + 70;
     list_pads();
 
+#ifdef LT_ONE
+    lt_make(NULL, NULL, L, top, W - 20, lh, LT_GAMEPADS);     /* the frame's sections (OpenPrefs) */
+    top += lt_space(scr->Font, W - 20, lh);
+#endif
     /* twice, if need be: the test view as big as the font asks, but the window no taller than the screen */
     for (pass = 0; pass < 2; pass++) {
     glist = NULL;
@@ -830,6 +846,9 @@ static int gui_once(void)
     }
     if (!g) { rc = RETURN_FAIL; goto out; }
     menus[6].nm_Flags = CHECKIT | MENUTOGGLE | (advanced ? CHECKED : 0);
+#ifdef LT_ONE
+    win = lt_open(scr, 40, scr->BarHeight + 4, W, row - scr->WBorTop - fh - 1, glist, IDCMP_CLOSEWINDOW | IDCMP_REFRESHWINDOW | IDCMP_MENUPICK | IDCMP_INTUITICKS | LISTVIEWIDCMP | BUTTONIDCMP | CYCLEIDCMP | STRINGIDCMP | CHECKBOXIDCMP, "OpenPrefs Gamepads 0.2");
+#else
     win = OpenWindowTags(NULL, WA_Title, (ULONG)"Gamepads", WA_ScreenTitle, (ULONG)"OpenPrefs Gamepads 0.2", WA_PubScreen, (ULONG)scr,
                          WA_Left, 40, WA_Top, scr->BarHeight + 4, WA_InnerWidth, W, WA_InnerHeight, row - scr->WBorTop - fh - 1,
                          WA_Gadgets, (ULONG)glist, WA_DragBar, TRUE, WA_DepthGadget, TRUE, WA_CloseGadget, TRUE, WA_Activate, TRUE,
@@ -837,6 +856,7 @@ static int gui_once(void)
                          WA_IDCMP, IDCMP_CLOSEWINDOW | IDCMP_REFRESHWINDOW | IDCMP_MENUPICK | IDCMP_INTUITICKS | LISTVIEWIDCMP | BUTTONIDCMP |
                                    CYCLEIDCMP | STRINGIDCMP | CHECKBOXIDCMP,
                          TAG_DONE);
+#endif
     if (!win) { rc = RETURN_FAIL; goto out; }
     skip_shown = 1;
     show_skip(map_step >= 0);
@@ -858,6 +878,7 @@ static int gui_once(void)
     draw_test(1);
     show_raw();
     if (map_step >= 0) map_ask(); else status(status_text);
+    lt_note_to(status);
 
     sigs = 1UL << win->UserPort->mp_SigBit | (oiport ? 1UL << oiport->mp_SigBit : 0);
     while (!quit) {
@@ -891,7 +912,7 @@ static int gui_once(void)
                     mc = it->NextSelect;
                 }
             }
-            else if (cls == IDCMP_REFRESHWINDOW) { GT_BeginRefresh(win); GT_EndRefresh(win, TRUE); draw_test(1); }
+            else if (cls == IDCMP_REFRESHWINDOW) { GT_BeginRefresh(win); LT_REFRESH(win); GT_EndRefresh(win, TRUE); draw_test(1); }
             else if (cls == IDCMP_INTUITICKS) {
                 static int ticks;
                 read_pad(0);                                    /* in case a notification was missed */
@@ -963,6 +984,13 @@ static int gui_once(void)
                     }
                     show_list();
                     break;
+#ifdef LT_ONE
+                default: {                          /* another section: the page's changes kept, as Use, when it has any */
+                    int to = lt_hit(gg, 0);
+                    if (to >= 0) { if (LT_DIRTY) put_in_place(0); lt_go(win, to); quit = 1; }
+                    break;
+                }
+#endif
                 case G_USE: put_in_place(0); quit = 1; break;
                 case G_SAVE: put_in_place(1); quit = 1; break;
                 case G_CANCEL: put_back(); quit = 1; break;
@@ -971,7 +999,11 @@ static int gui_once(void)
         }
     }
 out:
+#ifdef LT_ONE
+    if (win) { ClearMenuStrip(win); if (rc == 99) lt_detach(win, glist); else lt_close(win, glist); win = NULL; }
+#else
     if (win) { ClearMenuStrip(win); CloseWindow(win); win = NULL; }
+#endif
     if (menu) FreeMenus(menu);
     if (!skip_shown && gad[G_SKIP]) FreeGadgets(gad[G_SKIP]);   /* out of the list: freed on its own */
     skip_shown = 1;
@@ -983,7 +1015,7 @@ out:
     return rc;
 }
 
-#ifdef IN_OPENBENCH
+#if defined(IN_OPENBENCH) || defined(LT_ONE)
 /* OpenBench's data stays from one start to the next: what a new start finds, not the last one's (the
  * port, the notifications and the pad were let go as the last one quit; a missing library this time
  * must not leave have_lib set) */
@@ -1023,7 +1055,7 @@ int main(int argc, char **argv)
     int rc = RETURN_OK;
     (void)argv;
     if (!rd && argc > 0) { PrintFault(IoErr(), (STRPTR)"Gamepads"); return RETURN_FAIL; }
-#ifdef IN_OPENBENCH
+#if defined(IN_OPENBENCH) || defined(LT_ONE)
     fresh_start();
 #endif
     if ((OpenInputBase = OpenLibrary((STRPTR)OPENINPUT_NAME, OPENINPUT_VERSION)))
@@ -1033,7 +1065,9 @@ int main(int argc, char **argv)
     if (args[0] || args[1]) {                    /* from the Shell or at boot: no window */
         put_in_place(args[1] != 0);
         if (have_lib && cur.patch && !wait_for_patch(1)) PutStr((STRPTR)"Gamepads: OpenInput didn't put its ReadJoyPort patch in.\n");
-    } else {
+    }
+#ifndef OP_APPLY
+    else {                                   /* OpenPrefs's C:OpenPrefs (OP_APPLY): USE and SAVE only */
         advanced = args[2] ? 1 : read_view();
         if (have_lib && (oiport = CreateMsgPort())) {
             struct TagItem t[2] = { { OIT_Events, OIMC_ADDED | OIMC_REMOVED | OIMC_MAPPING }, { TAG_DONE, 0 } };
@@ -1053,6 +1087,7 @@ int main(int argc, char **argv)
         if (notify_all) OIN_RemNotify(notify_all);
         if (oiport) DeleteMsgPort(oiport);
     }
+#endif
     if (OpenInputBase) CloseLibrary(OpenInputBase);
     if (rd) FreeArgs(rd);
     return rc;
