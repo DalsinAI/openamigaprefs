@@ -317,8 +317,9 @@ int od_sniff(const unsigned char *data, long len)
 
 #define TM_MAX 96
 
-static struct { char name[48], command[256], dir[128]; int type; long stack; } tm_exec[TM_MAX];
-static struct { char name[48], file[160]; } tm_image[TM_MAX];
+/* TM_MAX of each (62 KB), made at the first ToolManager file read: OpenPrefs holds every editor at once (W49) */
+static struct tm_exec_s { char name[48], command[256], dir[128]; int type; long stack; } *tm_exec;
+static struct tm_image_s { char name[48], file[160]; } *tm_image;
 static int tm_nexec, tm_nimage;
 
 static unsigned long be32(const unsigned char *p) { return (unsigned long)p[0] << 24 | (unsigned long)p[1] << 16 | (unsigned long)p[2] << 8 | p[3]; }
@@ -371,6 +372,12 @@ int od_from_toolmanager(od_dock *d, const unsigned char *data, long len, od_repo
     }
     if (be32(data + 4) + 8 < (unsigned long)len) len = (long)be32(data + 4) + 8;
     end = data + len;
+    if (!tm_exec) tm_exec = calloc(TM_MAX, sizeof *tm_exec);
+    if (!tm_image) tm_image = calloc(TM_MAX, sizeof *tm_image);
+    if (!tm_exec || !tm_image) {
+        snprintf(err, errlen, "there isn't enough memory to read it");
+        return 0;
+    }
     tm_nexec = tm_nimage = 0;
     /* two passes: the programs and images first, then the docks that name them */
     for (pass = 0; pass < 2; pass++)

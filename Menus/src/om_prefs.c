@@ -291,11 +291,12 @@ static int mm_use(long mode)
 
 int om_from_magicmenu(om_prefs *p, const char *text, char *err, int errlen)
 {
-    static mm_file f;
+    static mm_file *fm;                      /* 27 KB, made at the first MagicMenu file read: OpenPrefs holds every editor at once (W49) */
     const char *line, *s;
     char head[32];
     long v;
     if (!text) { snprintf(err, errlen, "there is no MagicMenu settings file"); return 0; }
+    if (!fm && !(fm = calloc(1, sizeof *fm))) { snprintf(err, errlen, "there isn't enough memory to read it"); return 0; }
     if ((unsigned char)text[0] == 0x01 && (unsigned char)text[1] == 0x31) {
         /* MMPREFS_MAGIC (20041970) as the first long: a 1.x file, the raw structure */
         snprintf(err, errlen, "it is from MagicMenu 1, which kept its settings in another form");
@@ -306,9 +307,9 @@ int om_from_magicmenu(om_prefs *p, const char *text, char *err, int errlen)
         snprintf(err, errlen, "it doesn't start the way MagicMenu's settings do");
         return 0;
     }
-    f.n = 0;
+    fm->n = 0;
     line = strchr(text, '\n');
-    while (line && *++line && *line != '#' && f.n < MM_MAX) {
+    while (line && *++line && *line != '#' && fm->n < MM_MAX) {
         const char *eq, *end = strchr(line, '\n'), *nm = line;
         int ln, vn;
         while (*nm == ' ' || *nm == '\t') nm++;
@@ -318,62 +319,62 @@ int om_from_magicmenu(om_prefs *p, const char *text, char *err, int errlen)
             vn = end ? (int)(end - eq - 1) : (int)strlen(eq + 1);
             while (vn > 0 && (eq[vn] == '\r' || eq[vn] == ' ')) vn--;
             if (ln > 0 && ln < 24) {
-                memcpy(f.name[f.n], nm, ln); f.name[f.n][ln] = 0;
+                memcpy(fm->name[fm->n], nm, ln); fm->name[fm->n][ln] = 0;
                 if (vn > 259) vn = 259;
-                memcpy(f.value[f.n], eq + 1, vn); f.value[f.n][vn] = 0;
-                f.n++;
+                memcpy(fm->value[fm->n], eq + 1, vn); fm->value[fm->n][vn] = 0;
+                fm->n++;
             }
         }
         line = end;
     }
-    if (!f.n) { snprintf(err, errlen, "it holds no settings"); return 0; }
+    if (!fm->n) { snprintf(err, errlen, "it holds no settings"); return 0; }
 
-    p->enabled = (int)mm_num(&f, "Enabled", 1);
-    v = mm_num(&f, "MenuType", 2);
+    p->enabled = (int)mm_num(fm, "Enabled", 1);
+    v = mm_num(fm, "MenuType", 2);
     p->open = v == 0 ? OM_OPEN_PULLDOWN : v == 1 ? OM_OPEN_POPUP : OM_OPEN_POINTER;
-    p->use[OM_PD] = mm_use(mm_num(&f, "PDMode", 0));
-    p->use[OM_PU] = mm_use(mm_num(&f, "PUMode", 0));
-    p->delay[OM_PD] = mm_delay(&f, "PDOpenDelay");
-    p->delay[OM_PU] = mm_delay(&f, "PUOpenDelay");
+    p->use[OM_PD] = mm_use(mm_num(fm, "PDMode", 0));
+    p->use[OM_PU] = mm_use(mm_num(fm, "PUMode", 0));
+    p->delay[OM_PD] = mm_delay(fm, "PDOpenDelay");
+    p->delay[OM_PU] = mm_delay(fm, "PUOpenDelay");
     /* KCPUCenter (3.0: PUCenterBox) centres a pop-up on the item last chosen.
      * MagicMenu has no setting for centred submenus: ours stays as it is. */
-    p->popup_last = mm_split(&f, "PUCenterBox", "KCPUCenter", p->popup_last);
-    p->sub_mark = mm_split(&f, "PDMarkSub", "MarkSub", 1);
-    p->border_double = mm_split(&f, "PDDblBorder", "DblBorder", 0);
-    p->shadow = mm_split(&f, "PDCastShadows", "CastShadows", 1);
-    v = mm_num(&f, "PDShadowDist", 0);
-    if (v < 1 || v > OM_SHADOW_SIZE_MAX) v = mm_num(&f, "ShadowDistance", 2);
+    p->popup_last = mm_split(fm, "PUCenterBox", "KCPUCenter", p->popup_last);
+    p->sub_mark = mm_split(fm, "PDMarkSub", "MarkSub", 1);
+    p->border_double = mm_split(fm, "PDDblBorder", "DblBorder", 0);
+    p->shadow = mm_split(fm, "PDCastShadows", "CastShadows", 1);
+    v = mm_num(fm, "PDShadowDist", 0);
+    if (v < 1 || v > OM_SHADOW_SIZE_MAX) v = mm_num(fm, "ShadowDistance", 2);
     p->shadow_size = clamp((int)v, 1, OM_SHADOW_SIZE_MAX);
-    v = mm_num(&f, "PDShadowInt", 0);
-    if (v < 1 || v > OM_SHADOW_STRENGTH_MAX) v = mm_num(&f, "ShadowIntensity", 25);
+    v = mm_num(fm, "PDShadowInt", 0);
+    if (v < 1 || v > OM_SHADOW_STRENGTH_MAX) v = mm_num(fm, "ShadowIntensity", 25);
     p->shadow_strength = clamp((int)v, 1, OM_SHADOW_STRENGTH_MAX);
 
-    mm_text(&f, "Backfill", p->image, sizeof p->image);
-    v = mm_num(&f, "PDBackground", 0);
+    mm_text(fm, "Backfill", p->image, sizeof p->image);
+    v = mm_num(fm, "PDBackground", 0);
     if (v >= 1 && v <= 4) p->background = (int)v - 1;     /* MagicMenu: 1 colour, 2 see, 3 image, 4 see + image */
-    else if (mm_num(&f, "TransBackfill", 0) && p->image[0]) p->background = OM_BG_SEEIMAGE;
-    else if (mm_num(&f, "PDTransparent", 0) || mm_num(&f, "Transparency", 0)) p->background = OM_BG_SEE;
+    else if (mm_num(fm, "TransBackfill", 0) && p->image[0]) p->background = OM_BG_SEEIMAGE;
+    else if (mm_num(fm, "PDTransparent", 0) || mm_num(fm, "Transparency", 0)) p->background = OM_BG_SEE;
     else p->background = OM_BG_SOLID;
     if ((p->background == OM_BG_IMAGE || p->background == OM_BG_SEEIMAGE) && !p->image[0]) p->background = OM_BG_SOLID;
 
-    v = mm_num(&f, "PDSeparatorStyle", 0);
-    p->separators_bold = v == 2 ? 1 : v == 1 ? 0 : mm_num(&f, "SeparatorBarStyle", 0) != 0;
+    v = mm_num(fm, "PDSeparatorStyle", 0);
+    p->separators_bold = v == 2 ? 1 : v == 1 ? 0 : mm_num(fm, "SeparatorBarStyle", 0) != 0;
 
     /* MagicMenu's Multicolor look used its own pens; Standard and Old 3D, the screen's */
-    if (mm_num(&f, "PDLook", 2) == 2 && !mm_num(&f, "PreferScreenColours", 0)) {
+    if (mm_num(fm, "PDLook", 2) == 2 && !mm_num(fm, "PreferScreenColours", 0)) {
         static const char *const mm_names[OM_C_COUNT] = { "Background", "Text", "Fill", "HighText", "LightEdge", "DarkEdge", "ShadowCol" };
         p->colours = OM_COL_OWN;
-        for (int i = 0; i < OM_C_COUNT; i++) mm_colour(&f, mm_names[i], p->colour[i]);
+        for (int i = 0; i < OM_C_COUNT; i++) mm_colour(fm, mm_names[i], p->colour[i]);
     } else p->colours = OM_COL_SCREEN;
 
-    p->keyboard = (int)mm_num(&f, "KCEnabled", p->keyboard);
+    p->keyboard = (int)mm_num(fm, "KCEnabled", p->keyboard);
     {
         char k[64];
-        mm_text(&f, "KCKeyStr", k, sizeof k);
+        mm_text(fm, "KCKeyStr", k, sizeof k);
         if (k[0]) strcpy(p->key, k);
     }
-    p->keyboard_ralt = (int)mm_num(&f, "KCAltRCommand", p->keyboard_ralt);
-    p->keyboard_top = (int)mm_num(&f, "KCGoTop", p->keyboard_top);
-    p->keep_running = (int)mm_num(&f, "NonBlocking", p->keep_running);
+    p->keyboard_ralt = (int)mm_num(fm, "KCAltRCommand", p->keyboard_ralt);
+    p->keyboard_top = (int)mm_num(fm, "KCGoTop", p->keyboard_top);
+    p->keep_running = (int)mm_num(fm, "NonBlocking", p->keep_running);
     return 1;
 }
