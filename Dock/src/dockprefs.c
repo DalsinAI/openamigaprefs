@@ -82,7 +82,10 @@ static struct Library *AslBase;
 struct Library *AslBase, *IconBase;
 #endif
 
-static od_dock cur, orig;                /* orig: what is in ENV: now, which Test and Cancel put back */
+/* cur and orig (29 KB each) are made at the start of main(), not when the program loads: OpenPrefs holds every editor at once (W49) */
+static od_dock *cur_made, *orig_made;
+#define cur (*cur_made)
+#define orig (*orig_made)                 /* orig: what is in ENV: now, which Test and Cancel put back */
 static int advanced;
 
 /* ---- files -------------------------------------------------------------------------------- */
@@ -163,8 +166,10 @@ static int start_opendock(void)
 
 static int write_prefs(const od_dock *d, int save)
 {
-    static char text[32768];
-    int n = od_write(d, text, sizeof text);
+    static char *text;                       /* 32 KB, made at the first write */
+    int n;
+    if (!text && !(text = calloc(1, 32768))) return 0;
+    n = od_write(d, text, 32768);
     if (n < 0) return 0;
     if (!write_file(PREFS_ENV, text, n)) return 0;
     if (save && !write_file(PREFS_ENVARC, text, n)) return 0;
@@ -743,6 +748,9 @@ int main(int argc, char **argv)
     win = NULL;
 #endif
     if (!rd && argc > 0) { PrintFault(IoErr(), (STRPTR)"Dock"); return RETURN_FAIL; }
+    if (!cur_made) cur_made = calloc(1, sizeof *cur_made);
+    if (!orig_made) orig_made = calloc(1, sizeof *orig_made);
+    if (!cur_made || !orig_made) { if (rd) FreeArgs(rd); PrintFault(ERROR_NO_FREE_STORE, (STRPTR)"Dock"); return RETURN_FAIL; }
 #ifndef IN_OPENBENCH
     IconBase = OpenLibrary((STRPTR)"icon.library", 37);
 #endif
@@ -781,11 +789,15 @@ int main(int argc, char **argv)
         od_report r;
         for (int s = 0; s < SRC_COUNT; s++)
             if (find_source(s, file, sizeof file, base, sizeof base)) {
-                static od_dock t;                /* 30 KB: not on a Shell's 4 KB stack */
-                od_defaults(&t);
-                t.place = cur.place; t.size = cur.size;
-                if (take_over(&t, file, base, &r, err, sizeof err)) {
-                    cur = t;
+                od_dock *t = calloc(1, sizeof *t);  /* 30 KB: not on a Shell's 4 KB stack, and only while it is used */
+                int took;
+                if (!t) break;
+                od_defaults(t);
+                t->place = cur.place; t->size = cur.size;
+                took = take_over(t, file, base, &r, err, sizeof err);
+                if (took) cur = *t;
+                free(t);
+                if (took) {
                     source = s;
                     snprintf(status_text, sizeof status_text, "Took over %d button%s from %s. Save keeps them.",
                              r.added, r.added == 1 ? "" : "s", src_labels[s]);

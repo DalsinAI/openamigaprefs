@@ -254,6 +254,12 @@ struct Window *lt_open(struct Screen *scr, int left, int top, int W, int H, stru
             if (l + ow > lt_win->WScreen->Width) l = lt_win->WScreen->Width - ow > 0 ? lt_win->WScreen->Width - ow : 0;
             if (t + oh > lt_win->WScreen->Height) t = lt_win->WScreen->Height - oh > 0 ? lt_win->WScreen->Height - oh : 0;
             ChangeWindowBox(lt_win, l, t, ow, oh);
+            /* ChangeWindowBox is deferred until the next input comes along (its autodoc): the old page is
+             * erased and the new one drawn once the window has its new size, all of it. Two seconds at most. */
+            {
+                int i;
+                for (i = 0; i < 100 && (lt_win->Width != ow || lt_win->Height != oh); i++) Delay(1);
+            }
             lt_win_w = w; lt_win_h = h;
         }
         while ((m = GT_GetIMsg(lt_win->UserPort))) GT_ReplyIMsg(m);
