@@ -19,7 +19,7 @@ OUT=${1:-$HERE/build/os3}
 O=$OUT/obj
 mkdir -p "$O/app" "$O/small" "$OUT/stubs"
 BASE="-noixemul ${CPU:--m68020} -std=gnu99 -Wall -Werror ${OPT:--O2} -fno-delete-null-pointer-checks -fno-common"
-FRAME="$BASE -DLT_OP -I$P/Common -I$HERE/src -I$OGT/lib"
+FRAME="$BASE -DLT_OP -DLT_ONE -I$P/Common -I$HERE/src -I$OGT/lib"
 # GCC 16 warns of truncation in the editors' bounded copies (snprintf, strncpy): warnings, not errors, here
 PAGE="$FRAME -Wno-error=format-truncation -Wno-error=stringop-truncation -include $HERE/src/opshift.h"
 
