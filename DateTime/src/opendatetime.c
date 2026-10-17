@@ -398,8 +398,10 @@ static int load_country(const char *name)
 
 /* ---- names of countries and languages -------------------------------------- */
 
-static char names_c[MAX_NAMES][32], names_l[MAX_NAMES][30];
-static struct Node nodes_c[MAX_NAMES], nodes_l[MAX_NAMES];
+/* MAX_NAMES of each, and ZONE_COUNT of city_text and city_nodes below (25 KB together), made at the start of
+ * main(): OpenPrefs holds every editor at once (W49) */
+static char (*names_c)[32], (*names_l)[30];
+static struct Node *nodes_c, *nodes_l;
 static struct List list_c, list_l;
 static int count_c, count_l;
 
@@ -823,8 +825,8 @@ static struct Hook row_hook;
 static char region_text[MAX_REGIONS][12];
 static const char *region_labels[MAX_REGIONS + 1];
 static int region_first[MAX_REGIONS], region_count[MAX_REGIONS], regions;
-static char city_text[ZONE_COUNT][32];         /* each place without its region, '_' as a space */
-static struct Node city_nodes[ZONE_COUNT];
+static char (*city_text)[32];                  /* each place without its region, '_' as a space */
+static struct Node *city_nodes;
 static struct List city_list;
 
 /* The table is in order of name, so each region's places are together. */
@@ -1220,6 +1222,18 @@ int main(int argc, char **argv)
     (void)version;
     if (!rd && argc > 0) { PrintFault(IoErr(), (STRPTR)"OpenDateTime"); return RETURN_FAIL; }
     if (!(UtilityBase = OpenLibrary((STRPTR)"utility.library", 39))) { if (rd) FreeArgs(rd); return RETURN_FAIL; }
+    if (!names_c) names_c = calloc(MAX_NAMES, sizeof *names_c);
+    if (!names_l) names_l = calloc(MAX_NAMES, sizeof *names_l);
+    if (!nodes_c) nodes_c = calloc(MAX_NAMES, sizeof *nodes_c);
+    if (!nodes_l) nodes_l = calloc(MAX_NAMES, sizeof *nodes_l);
+    if (!city_text) city_text = calloc(ZONE_COUNT, sizeof *city_text);
+    if (!city_nodes) city_nodes = calloc(ZONE_COUNT, sizeof *city_nodes);
+    if (!names_c || !names_l || !nodes_c || !nodes_l || !city_text || !city_nodes) {
+        if (rd) FreeArgs(rd);
+        CloseLibrary(UtilityBase);
+        PrintFault(ERROR_NO_FREE_STORE, (STRPTR)"OpenDateTime");
+        return RETURN_FAIL;
+    }
     load_locale(args[0] ? (const char *)args[0] : LOCALE_ENV);
     if (args[4]) rc = keeper();
     else if (args[5]) rc = info();
