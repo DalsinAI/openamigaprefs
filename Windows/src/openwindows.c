@@ -73,7 +73,7 @@
 #include <stdlib.h>
 #include "../../Common/cogplace.h"
 
-static const char version[] __attribute__((used)) = "$VER: OpenWindows 0.8.5 (17.10.2026) MIT, Copyright (c) 2026 AmigaChrome Team";
+static const char version[] __attribute__((used)) = "$VER: OpenWindows 0.8.6 (17.10.2026) MIT, Copyright (c) 2026 AmigaChrome Team";
 
 #define PREFS_ENV "ENV:OpenPrefs/Windows"
 #define PLACES_ENV "ENV:OpenPrefs/WindowPlaces"
@@ -398,8 +398,12 @@ static void custom(CxMsg *msg, CxObj *co)
                 ev_up = 1; up_x = s ? s->MouseX : 0; up_y = s ? s->MouseY : 0;
                 Signal(me, sig_button);
             }
-        } else if (grab_on && ie->ie_Class == IECLASS_POINTERPOS) {
-            grab_last = ie->ie_TimeStamp.tv_secs;     /* a pointer put somewhere (not a mouse): it moves the outline too */
+        } else if (grab_on && (ie->ie_Class == IECLASS_POINTERPOS || ie->ie_Class == IECLASS_NEWPOINTERPOS)) {
+            /* a pointer put somewhere (not a mouse counting): it moves the window or the outline too. 0.8.6:
+             * AmigaChrome's absolute pointer comes through the open input.device as IECLASS_NEWPOINTERPOS
+             * (IESUBCLASS_PIXEL), one a move; tablets send the same class; a drag that only woke on IECLASS_POINTERPOS stood still until the button came up (lab
+             * t5-events, W53: DragTest ABS, LeftEdge changed once in 40 moves; RAWMOUSE moves, 39 times) */
+            grab_last = ie->ie_TimeStamp.tv_secs;
             Signal(me, sig_grab);
         } else if (cfg.wheel && (ie->ie_Class == IECLASS_RAWKEY || ie->ie_Class == IECLASS_NEWMOUSE_) &&
                    (ie->ie_Code & 0x7F) >= RAWKEY_WHEEL_UP && (ie->ie_Code & 0x7F) <= RAWKEY_WHEEL_RIGHT) {
