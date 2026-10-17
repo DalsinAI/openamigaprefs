@@ -55,6 +55,7 @@
 #include <proto/icon.h>
 #include <proto/datatypes.h>
 #include <proto/graphics.h>
+#include <stdlib.h>
 #include <proto/utility.h>
 
 #include <string.h>
@@ -101,7 +102,7 @@ typedef struct {
     char label[260];
     int switched;                /* SWITCH changed it */
 } ftype;
-static ftype types[MAXTYPES];
+static ftype *types;                     /* MAXTYPES (45 KB), made at the start of main(): OpenPrefs holds every editor at once (W49) */
 static int ntypes;
 
 static ftype *find_type(const char *name)
@@ -929,6 +930,7 @@ int main(int argc, char **argv)
     (void)argv;
     found = NULL;
     nfound = 0;
+    if (!types && !(types = calloc(MAXTYPES, sizeof *types))) return rc;
     DataTypesBase = OpenLibrary((STRPTR)"datatypes.library", 39);
     AslBase = OpenLibrary((STRPTR)"asl.library", 39);
     if (DataTypesBase && AslBase) {
@@ -954,6 +956,10 @@ int main(int argc, char **argv)
     GadToolsBase = OpenLibrary((STRPTR)"gadtools.library", 39);
     if (!IconBase || !DataTypesBase || !AslBase || !GadToolsBase) {
         PutStr((STRPTR)"OpenTypes needs AmigaOS 3.5 or later (icon.library 44)\n");
+        goto out;
+    }
+    if (!types && !(types = calloc(MAXTYPES, sizeof *types))) {
+        PrintFault(ERROR_NO_FREE_STORE, (STRPTR)"OpenTypes");
         goto out;
     }
     load_types();

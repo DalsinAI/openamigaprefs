@@ -116,7 +116,7 @@ static APTR notify_all, notify_state;
 
 /* mappings changed here: put back on Cancel, kept on Save */
 struct Change { UBYTE guid[16]; char was[MAPLEN]; char now[MAPLEN]; int own_was, own_now; };
-static struct Change changes[MAXCHANGES];
+static struct Change *changes;            /* MAXCHANGES (8 KB), made at the start of main(): OpenPrefs holds every editor at once (W49) */
 static int nchanges;
 
 /* the Map... wizard */
@@ -217,11 +217,12 @@ static void store_settings(const gp_settings *s, int save)
 /* Is there a line of the user's own for this GUID in mappings.txt? */
 static int own_mapping(const UBYTE *guid)
 {
-    static char t[8192];
+    static char *t;                          /* 8 KB, made at the first look */
     char hex[33];
     const char *l;
     gp_guid_to_hex(guid, hex);
-    if (read_file(MAPS_ENV, t, sizeof t) <= 0) return 0;
+    if (!t && !(t = calloc(1, 8192))) return 0;
+    if (read_file(MAPS_ENV, t, 8192) <= 0) return 0;
     for (l = t; *l; ) {
         if (!strncasecmp(l, hex, 32)) return 1;
         while (*l && *l != '\n') l++;
@@ -233,12 +234,14 @@ static int own_mapping(const UBYTE *guid)
 /* mappings.txt without this GUID's line (the built-in mapping again, at the library's next start) */
 static void drop_own_mapping(const UBYTE *guid, const char *path, const char *dir)
 {
-    static char t[8192], out[8192];
+    static char *t, *out;                    /* 8 KB each, made at the first change */
     char hex[33];
     const char *l;
     LONG n = 0;
     gp_guid_to_hex(guid, hex);
-    if (read_file(path, t, sizeof t) <= 0) return;
+    if (!t) t = calloc(1, 8192);
+    if (!out) out = calloc(1, 8192);
+    if (!t || !out || read_file(path, t, 8192) <= 0) return;
     for (l = t; *l; ) {
         const char *e = l;
         while (*e && *e != '\n') e++;
@@ -1055,6 +1058,11 @@ int main(int argc, char **argv)
     int rc = RETURN_OK;
     (void)argv;
     if (!rd && argc > 0) { PrintFault(IoErr(), (STRPTR)"Gamepads"); return RETURN_FAIL; }
+    if (!changes && !(changes = calloc(MAXCHANGES, sizeof *changes))) {
+        if (rd) FreeArgs(rd);
+        PrintFault(ERROR_NO_FREE_STORE, (STRPTR)"Gamepads");
+        return RETURN_FAIL;
+    }
 #if defined(IN_OPENBENCH) || defined(LT_ONE)
     fresh_start();
 #endif
