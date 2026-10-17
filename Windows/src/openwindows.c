@@ -73,7 +73,7 @@
 #include <stdlib.h>
 #include "../../Common/cogplace.h"
 
-static const char version[] __attribute__((used)) = "$VER: OpenWindows 0.8.4 (11.10.2026) MIT, Copyright (c) 2026 AmigaChrome Team";
+static const char version[] __attribute__((used)) = "$VER: OpenWindows 0.8.5 (17.10.2026) MIT, Copyright (c) 2026 AmigaChrome Team";
 
 #define PREFS_ENV "ENV:OpenPrefs/Windows"
 #define PLACES_ENV "ENV:OpenPrefs/WindowPlaces"
@@ -733,9 +733,31 @@ static void ol_show(struct Screen *sc, WORD l, WORD t, WORD w, WORD h)
     ol_scr = sc; ol_l = l; ol_t = t; ol_w = w; ol_h = h; ol_on = 1;
 }
 
+/* A window this drags (drag.solid) is drawn at the look's drag opacity while it moves, as Intuition's own solid drag,
+ * on a screen layers.library composites (OpenLayers 47.101 and up: SetLayerLook, -258, LAYERLOOK_DRAGGED;
+ * openamigagfx include/graphics/openlayers.h). Nothing on a classic screen, or with an older layers.library. */
+static void drag_look(struct Window *w, ULONG on)
+{
+    struct Layer *ly[2];
+    int i;
+    if (LayersBase->lib_Version != 47 || LayersBase->lib_Revision < 101) return;
+    ly[0] = w->WLayer;
+    ly[1] = w->BorderRPort && w->BorderRPort->Layer != w->WLayer ? w->BorderRPort->Layer : NULL;    /* GZZ */
+    for (i = 0; i < 2; i++)
+        if (ly[i]) {
+            /* the base through a1, A6 saved by hand (A6 is the frame pointer at -O0) */
+            register struct Library *a1 __asm("a1") = LayersBase;
+            register struct Layer *a0 __asm("a0") = ly[i];
+            register ULONG d0 __asm("d0") = 2, d1 __asm("d1") = on;
+            __asm__ volatile("move.l %%a6,-(%%sp)\n\tmove.l %%a1,%%a6\n\tjsr -258(%%a6)\n\tmove.l (%%sp)+,%%a6"
+                             : "+r"(d0), "+r"(d1), "+r"(a0), "+r"(a1) : : "cc", "memory");
+        }
+}
+
 static void resize_end(void)
 {
     ol_clear();
+    if (rs_win && (rs_edges & EDGE_MOVE) && is_window(rs_win)) drag_look(rs_win, 0);
     if (rs_win && rs_ptr && is_window(rs_win)) SetWindowPointer(rs_win, WA_Pointer, (ULONG)NULL, TAG_DONE);
     rs_win = NULL;
     rs_ptr = 0;
@@ -794,6 +816,7 @@ static void resize(void)
         rs_l = w->LeftEdge; rs_t = w->TopEdge; rs_w = w->Width; rs_h = w->Height;
         { ULONG micro; CurrentTime(&rs_start, &micro); }
         if (w != IntuitionBase->ActiveWindow) ActivateWindow(w);
+        if (rs_edges & EDGE_MOVE) drag_look(w, 1);
         if (!(rs_edges & EDGE_MOVE)) {          /* a solid move keeps the window's own pointer */
             int k = !(rs_edges & EDGE_B) ? PTR_H : (rs_edges & EDGE_R) ? PTR_D1 : (rs_edges & EDGE_L) ? PTR_D2 : PTR_V;
             /* only when asked for: the window's own pointer can't be read, so
