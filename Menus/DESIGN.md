@@ -107,8 +107,8 @@ for it on its first page.
 ### Building
 
 `Menus/build.sh [OUT_DIR]` uses the os32 stove (or `CC=`). The theme reader
-comes from an opengadtools checkout beside this one (or `OGT=`). It needs a
-68020 or better, an FPU is not needed, and it never uses OpenGPU.
+comes from an opengadtools checkout beside this one (or `OGT=`). It is built
+for the 68040 (-m68040), an FPU is not needed, and it never uses OpenGPU.
 
 ### The engine, OpenMenus 0.1
 

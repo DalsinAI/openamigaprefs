@@ -269,7 +269,7 @@ Cancel, and Ctrl-F to the `OpenDock` port. Save and Use (and `SAVE` or
 ### Building
 
 `Dock/build.sh [OUT_DIR]` uses the os32 stove (or `CC=`) and builds
-`OpenDock` and `Dock` for a 68020 or better, with no FPU needed.
+`OpenDock` and `Dock` for a 68040 (built with -m68040), with no FPU needed.
 
 ### For the OpenUp part (to add in openamigaup)
 
