@@ -25,6 +25,9 @@ Team.
 | Solid dragging (0.8) | A window is dragged by its title bar with its contents, not as an outline. Off unless asked for (the editor's "Drag windows with their contents, not an outline") | `drag.solid on` |
 | Drive windows (0.6) | A drive's window is titled with the drive's name only: Workbench's "Work  70% full, 453MB free, 62.0MB in use" loses its usage part. On by default | `drive.title on` |
 | Drawers | Workbench drawer windows open at least this big | `drawer 400 250` (0 0 leaves them) |
+| Transparency and shadows (Windows 0.6.6, 17 October 2026) | layers.library's composited mode on RTG Workbench and public screens of 16 or 32 bits with OpenGPU: shadows under windows and menus, a window dragged at 75%, `WA_Opacity` (openamigagfx `docs/design/compositing.md`). On by default; read when a screen opens, so it takes effect at the Workbench's next reset | `composite on` |
+
+The composited mode's look has lines of its own, which the editor keeps as written and has no gadgets for: `shadows on`, `shadow.size 8` (pixels), `shadow.strength 40`, `drag.opacity 75` and `inactive.opacity 100` (percent). A missing line is that default. OpenWindows 0.8.5 marks a window it drags itself (`drag.solid on`) as dragged for layers.library, so it is drawn at `drag.opacity` as Intuition's own drag is.
 
 The settings are in `ENV:OpenPrefs/Windows`. Save writes `ENV:` and
 `ENVARC:`; Use writes `ENV:` only; Cancel writes nothing. Either way the
