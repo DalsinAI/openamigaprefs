@@ -58,7 +58,9 @@ page "$HERE/src/blankerprefs.c" -Dmain=blanker_main
   "$OGT/lib/ogt_theme.c"
 
 # the small body: APPLY's three pages without their windows (OP_APPLY), the rest dropped by the linker
-SM="-DOP_APPLY -ffunction-sections -fdata-sections -Wno-unused-function -Wno-unused-variable"   # the windows' code is unused here
+# -resident (libnix's: each run its own data): in ROM:C it is a resident command, its seglist shared by every run
+# (measured, lab t5-prefs-one: built without it, a second OpenPrefs APPLY from ROM:C hung)
+SM="-resident -DOP_APPLY -ffunction-sections -fdata-sections -Wno-unused-function -Wno-unused-variable"   # the windows' code is unused here
 small() { f=$1; shift; "$CC" $PAGE $SM "$@" -c -o "$O/small/$(basename "$f" .c).o" "$f"; }
 small "$P/Sound/src/sound.c" -Dmain=sound_main -Dversion=sound_version
 small "$P/Sound/src/sp_core.c"
