@@ -24,8 +24,8 @@
  * leaves the active window active.
  *
  *   OpenTitle        (started at boot; Ctrl-C quits, Ctrl-F reads
- *                     ENV:OpenPrefs/TitleBar again and quits when nothing
- *                     is left to show)
+ *                     ENV:OpenPrefs/TitleBar again; since 0.7 the cog
+ *                     stays, so it no longer quits when nothing else is on)
  *
  * 0.6 (8 October 2026): the taskspace. Other programs put icons in the row
  * beside the cog, the speaker and the network icons through OpenTitle's
@@ -56,6 +56,15 @@
  * others), are painted over the bar's own gradient, not a white box (the
  * colours are read from the screen's bar, Common/barpaint.h), and are
  * centred in the bar.
+ *
+ * 0.7 (17 October 2026, Dale, 08:26: "The cog should be present on all standard screens so Workbench screen
+ *   has it all the time"): the cog is always on the Workbench screen's bar (the "cog on|off" line of
+ *   ENV:OpenPrefs/TitleBar is kept but read no more), and its list is OpenPrefs's sections, each running
+ *   OpenPrefs SECTION (SYS:Prefs/OpenPrefs, else ROM:Prefs/OpenPrefs), then Printers, Network, OpenUp Setup
+ *   and Tata when they are there, and All Prefs.... The cog alone is also on every other public screen that
+ *   shows its title bar (in the public screen list, not private, SHOWTITLE), as a visitor window while the
+ *   screen has a window of its own, so its owner can close it; its list opens OpenPrefs on that screen
+ *   (PUBSCREEN=). Never on a custom screen that isn't public (a game's), nor on one with no title bar.
  *
  * MIT, Copyright (c) 2026 AmigaChrome Team. */
 #include <exec/types.h>
@@ -101,7 +110,7 @@
 #include "barlogo.h"
 #include "obmsg.h"
 
-const char version[] __attribute__((used)) = "$VER: OpenTitle 0.6.15 (12.10.2026) OpenPrefs, AmigaChrome Team";
+const char version[] __attribute__((used)) = "$VER: OpenTitle 0.7 (17.10.2026) OpenPrefs, AmigaChrome Team";
 
 struct IntuitionBase *IntuitionBase;
 struct GfxBase *GfxBase;
@@ -860,23 +869,32 @@ static const char *const cog13[13] = {
     "####.....####", "..###...###..", "..#########..", ".###########.", ".##..###..##.", ".....###.....",
 };
 
-/* The settings editors, as in OpenUpMenu's Tools > Preferences (openamigaup src/openupmenu.c):
- * each shows when its program is there (needs, or path when NULL). */
-static const struct { const char *label, *path, *needs; } cog_items[] = {
-    { "Look",         "SYS:Prefs/OpenLook",     NULL },                   /* 0.6.7: one editor: Look, Windows, Title bar, Menus as pages */
-    { "Dock",         "SYS:Prefs/OpenDock",     NULL },                   /* 0.6.8: every editor of ours is Open...: the user, 10 Oct 2026 */
-    { "Sound",        "SYS:Prefs/OpenSound",    NULL },                   /* 0.6.8: OpenPrefs Sound (the OS's Sound is in Classic) */
-    { "Date and time", "SYS:Prefs/OpenDateTime", NULL },                 /* 0.6.5: OpenDateTime (date, time, zone, country, language) */
-    { "Input",        "SYS:Prefs/OpenInput",    NULL },                   /* 0.6.7: OpenInput (mouse, keyboard, keymap; Gamepads under it) */
-    { "Serial",       "SYS:Prefs/OpenSerial",   NULL },                   /* 0.6.7: OpenSerial */
-    { "Printers",     "SYS:Utilities/OpenPrint/Printers and Queue", NULL },  /* 0.6.5: OpenPrint's printers, the user, 10 Oct 2026 */
-    { "Network",      "SYS:Tools/Commodities/OpenSocketControl", NULL },     /* 0.6.6: OpenSocket's settings and status */
-    { "OpenTypes",    "SYS:Prefs/OpenTypes",    NULL },
-    { "OpenUp Setup", "SYS:Prefs/OpenUp-Setup", NULL },
-    { "Tata",         "SYS:Prefs/OpenTata",     NULL },                   /* 0.6: Tata's window, when Tata is installed */
-    { NULL,           NULL,                     NULL },                   /* a line */
-    { "All Prefs...", "SYS:Prefs",              NULL },
+/* The cog's list (0.7): OpenPrefs's sections (section: OpenPrefs SECTION), then the other settings programs
+ * that are there (needs, or path when NULL), as in OpenUpMenu's Tools > Preferences (openamigaup
+ * src/openupmenu.c). */
+static const struct { const char *label, *path, *section, *needs; } cog_items[] = {
+    { "Look",          NULL, "THEME",    NULL },
+    { "Windows",       NULL, "WINDOWS",  NULL },
+    { "Title bar",     NULL, "TITLEBAR", NULL },
+    { "Menus",         NULL, "MENUS",    NULL },
+    { "Dock",          NULL, "DOCK",     NULL },
+    { "Sound",         NULL, "SOUND",    NULL },
+    { "Input",         NULL, "INPUT",    NULL },
+    { "Gamepads",      NULL, "GAMEPADS", NULL },
+    { "Date and time", NULL, "DATETIME", NULL },
+    { "Serial",        NULL, "SERIAL",   NULL },
+    { "File types",    NULL, "TYPES",    NULL },
+    { "System",        NULL, "SYSTEM",   NULL },
+    { "Blanker",       NULL, "BLANKER",  NULL },
+    { NULL,            NULL, NULL,       NULL },                          /* a line */
+    { "Printers",      "SYS:Utilities/OpenPrint/Printers and Queue", NULL, NULL },  /* 0.6.5: OpenPrint's printers */
+    { "Network",       "SYS:Tools/Commodities/OpenSocketControl", NULL, NULL },     /* 0.6.6: OpenSocket's settings and status */
+    { "OpenUp Setup",  "SYS:Prefs/OpenUp-Setup", NULL, NULL },
+    { "Tata",          "SYS:Prefs/OpenTata",     NULL, NULL },            /* 0.6: Tata's window, when Tata is installed */
+    { NULL,            NULL, NULL,       NULL },                          /* a line */
+    { "All Prefs...",  "SYS:Prefs",              NULL, NULL },
 };
+#define COG_SECTIONS 13                        /* the first ones: OpenPrefs's */
 #define COG_ITEMS (int)(sizeof cog_items / sizeof cog_items[0])
 #define COG_PAD 10
 static int menu_idx[COG_ITEMS], menu_n;        /* what the list shows: indexes into cog_items */
@@ -885,9 +903,40 @@ static const char *menu_title;
 
 static int exists(const char *path)
 {
-    BPTR l = Lock((STRPTR)path, ACCESS_READ);
+    struct Process *me = (struct Process *)FindTask(NULL);
+    APTR was = me->pr_WindowPtr;
+    BPTR l;
+    me->pr_WindowPtr = (APTR)-1;               /* no "please insert" for ROM: on the OS's own ROM */
+    l = Lock((STRPTR)path, ACCESS_READ);
+    me->pr_WindowPtr = was;
     if (l) UnLock(l);
     return l != 0;
+}
+
+/* OpenPrefs: the disk's, else the ROM's (NULL when neither is there) */
+static const char *prefs_app(void)
+{
+    if (exists("SYS:Prefs/OpenPrefs")) return "SYS:Prefs/OpenPrefs";
+    if (exists("ROM:Prefs/OpenPrefs")) return "ROM:Prefs/OpenPrefs";
+    return NULL;
+}
+
+/* OpenPrefs at a section, on the public screen pub (NULL: the default), as a process of its own */
+static void prefs_start(const char *pub, const char *section)
+{
+    const char *app = prefs_app();
+    char cmd[240];
+    BPTR in, out;
+    if (!app) return;
+    if (pub) snprintf(cmd, sizeof cmd, "\"%s\" PUBSCREEN=\"%s\" %s", app, pub, section);
+    else snprintf(cmd, sizeof cmd, "\"%s\" %s", app, section);
+    in = Open((STRPTR)"NIL:", MODE_OLDFILE);
+    out = Open((STRPTR)"NIL:", MODE_NEWFILE);
+    if (!in || !out || SystemTags((STRPTR)cmd, SYS_Input, in, SYS_Output, out, SYS_Asynch, TRUE, SYS_UserShell, TRUE,
+                                  NP_StackSize, 32768, TAG_DONE) == -1) {
+        if (in) Close(in);
+        if (out) Close(out);
+    }
 }
 
 static int cog_size(void)
@@ -1027,14 +1076,17 @@ static void menu_open(void)
     menu_rh = dri->dri_Font->tf_YSize + 4;
     menu_n = 0;
     H = 3;
+    {
+        const char *app = prefs_app();
     for (i = 0; i < COG_ITEMS; i++) {
         const char *t = cog_items[i].label;
-        if (t && !exists(cog_items[i].needs ? cog_items[i].needs : cog_items[i].path)) continue;
+        if (t && (cog_items[i].section ? !app : !exists(cog_items[i].needs ? cog_items[i].needs : cog_items[i].path))) continue;
         if (!t && !menu_n) continue;                   /* no line at the top */
         menu_y[menu_n] = H;
         menu_idx[menu_n++] = i;
         if (t) { WORD tw = TextLength(&trp, (STRPTR)t, strlen(t)); if (tw > W) W = tw; }
         H += t ? menu_rh : 6;
+    }
     }
     menu_y[menu_n] = H;
     H += 3;
@@ -1105,7 +1157,15 @@ static void cog_start(const char *path)
 static void menu_pick(int row)
 {
     const char *path;
-    if (row < 0 || row >= menu_n || !(path = cog_items[menu_idx[row]].path)) return;
+    if (row < 0 || row >= menu_n) return;
+    if (cog_items[menu_idx[row]].section) {   /* 0.7: OpenPrefs at its section, by the cog */
+        const char *section = cog_items[menu_idx[row]].section;
+        menu_close(1);
+        cog_arm();
+        prefs_start(NULL, section);
+        return;
+    }
+    if (!(path = cog_items[menu_idx[row]].path)) return;
     menu_close(1);
     cog_start(path);
 }
@@ -1451,13 +1511,200 @@ static int open_all(void)
         }
     }
     if (prefs.network) net_open();
-    if (prefs.cog) cog_open();
+    cog_open();                                /* 0.7: always (Dale, 17 Oct 2026); prefs.cog is read no more */
     {
         int i;
         for (i = 0; i < TS_ICONS; i++) if (ts[i]) ts_open_one(ts[i]);
     }
     apply_border();
     return 1;
+}
+
+/* ---- 0.7: the cog on the other public screens -------------------------------------------------- */
+
+#define OS_MAX 4
+static struct { struct Screen *s; struct Window *w; WORD bh, gw; char name[MAXPUBSCREENNAME + 1]; } os_cog[OS_MAX];
+
+/* another window than ours on s: the screen is in use, our cog may stay */
+static int os_used(struct Screen *s, struct Window *ours)
+{
+    struct Window *w;
+    int n = 0;
+    ULONG lock = LockIBase(0);
+    for (w = s->FirstWindow; w; w = w->NextWindow) if (w != ours) n++;
+    UnlockIBase(lock);
+    return n > 0;
+}
+
+static void os_draw(int i)
+{
+    struct DrawInfo *d = GetScreenDrawInfo(os_cog[i].s);
+    struct RastPort *rp = os_cog[i].w->RPort;
+    WORD size = os_cog[i].bh - 2 >= 13 ? 13 : os_cog[i].bh - 2 >= 11 ? 11 : 9, ox, oy, x, y;
+    const char *const *rows = size == 13 ? cog13 : size == 11 ? cog11 : cog9;
+    if (!d) return;
+    SetAPen(rp, d->dri_Pens[BARBLOCKPEN]);
+    RectFill(rp, 0, 0, os_cog[i].gw - 1, os_cog[i].bh - 1);
+    SetAPen(rp, d->dri_Pens[BARDETAILPEN]);
+    ox = (os_cog[i].gw - size) / 2;
+    oy = (os_cog[i].bh - size) / 2 > 0 ? (os_cog[i].bh - size) / 2 : 0;
+    for (y = 0; y < size && oy + y < os_cog[i].bh; y++)
+        for (x = 0; x < size; ) {
+            WORD run;
+            if (rows[y][x] != '#') { x++; continue; }
+            for (run = x; run < size && rows[y][run] == '#'; run++) ;
+            RectFill(rp, ox + x, oy + y, ox + run - 1, oy + y);
+            x = run;
+        }
+    FreeScreenDrawInfo(os_cog[i].s, d);
+}
+
+static void os_close(int i)
+{
+    if (os_cog[i].w) CloseWindow(os_cog[i].w);
+    os_cog[i].w = NULL;
+    os_cog[i].s = NULL;
+    os_cog[i].name[0] = 0;
+}
+
+/* the public screens that show a title bar, but the Workbench's: a cog on each while it has a window of its own */
+static void os_poll(int on)
+{
+    struct List *l;
+    struct PubScreenNode *n;
+    struct Screen *seen[OS_MAX];
+    char names[OS_MAX][MAXPUBSCREENNAME + 1];
+    int k = 0, i, j;
+    if (on && (l = LockPubScreenList())) {
+        for (n = (struct PubScreenNode *)l->lh_Head; n->psn_Node.ln_Succ && k < OS_MAX;
+             n = (struct PubScreenNode *)n->psn_Node.ln_Succ) {
+            struct Screen *s = n->psn_Screen;
+            if (!s || s == scr || (s->Flags & SCREENTYPE) == WBENCHSCREEN || !(s->Flags & SHOWTITLE) || s->BarHeight < 7 ||
+                (n->psn_Flags & PSNF_PRIVATE) || !n->psn_Node.ln_Name)
+                continue;
+            seen[k] = s;
+            strncpy(names[k], n->psn_Node.ln_Name, MAXPUBSCREENNAME);
+            names[k][MAXPUBSCREENNAME] = 0;
+            k++;
+        }
+        UnlockPubScreenList();
+    }
+    for (i = 0; i < OS_MAX; i++) {
+        int there = 0;
+        if (!os_cog[i].s) continue;
+        for (j = 0; j < k; j++) if (seen[j] == os_cog[i].s && !strcmp(names[j], os_cog[i].name)) there = 1;
+        if (!there || !os_used(os_cog[i].s, os_cog[i].w) || os_cog[i].s->BarHeight != os_cog[i].bh) os_close(i);
+    }
+    for (j = 0; j < k; j++) {
+        struct Screen *s;
+        int f = -1;
+        for (i = 0; i < OS_MAX; i++) { if (os_cog[i].s == seen[j]) break; if (!os_cog[i].s && f < 0) f = i; }
+        if (i < OS_MAX || f < 0 || !(s = LockPubScreen((STRPTR)names[j]))) continue;
+        if (s == seen[j] && os_used(s, NULL)) {
+            WORD bh = s->BarHeight, gw = (bh - 2 >= 13 ? 13 : bh - 2 >= 11 ? 11 : 9) + 10;
+            os_cog[f].w = OpenWindowTags(NULL, WA_PubScreen, (ULONG)s, WA_Left, s->Width - 2 * bh - gw, WA_Top, 0,
+                                         WA_Width, gw, WA_Height, bh, WA_Borderless, TRUE, WA_Activate, FALSE,
+                                         WA_RMBTrap, TRUE, WA_SmartRefresh, TRUE, WA_IDCMP, IDCMP_MOUSEBUTTONS | IDCMP_REFRESHWINDOW,
+                                         TAG_DONE);
+            if (os_cog[f].w) {
+                os_cog[f].s = s; os_cog[f].bh = bh; os_cog[f].gw = gw;
+                strcpy(os_cog[f].name, names[j]);
+                WindowToBack(os_cog[f].w);
+                os_draw(f);
+            }
+        }
+        UnlockPubScreen(NULL, s);
+    }
+}
+
+/* the list under a cog on another screen, until a pick or a click elsewhere: the section picked, or -1 */
+static int os_menu(struct Screen *s, WORD right, WORD top)
+{
+    struct DrawInfo *d = GetScreenDrawInfo(s);
+    struct Window *w;
+    struct RastPort trp;
+    WORD rh, W = 0, H, i, hot = -1, pick = -1, done = 0;
+    if (!d) return -1;
+    InitRastPort(&trp);
+    SetFont(&trp, d->dri_Font);
+    rh = d->dri_Font->tf_YSize + 4;
+    for (i = 0; i < COG_SECTIONS; i++) {
+        WORD tw = TextLength(&trp, (STRPTR)cog_items[i].label, strlen(cog_items[i].label));
+        if (tw > W) W = tw;
+    }
+    W += 2 * COG_PAD;
+    H = COG_SECTIONS * rh + 6;
+    if (right < W) right = W;
+    if (top + H > s->Height) top = s->Height - H > 0 ? s->Height - H : 0;
+    w = OpenWindowTags(NULL, WA_CustomScreen, (ULONG)s, WA_Left, right - W, WA_Top, top, WA_Width, W, WA_Height, H,
+                       WA_Borderless, TRUE, WA_Activate, TRUE, WA_RMBTrap, TRUE, WA_ReportMouse, TRUE, WA_SmartRefresh, TRUE,
+                       WA_IDCMP, IDCMP_MOUSEBUTTONS | IDCMP_MOUSEMOVE | IDCMP_INACTIVEWINDOW | IDCMP_RAWKEY, TAG_DONE);
+    if (!w) { FreeScreenDrawInfo(s, d); return -1; }
+    SetFont(w->RPort, d->dri_Font);
+    SetDrMd(w->RPort, JAM1);
+    for (;;) {
+        struct IntuiMessage *m;
+        struct RastPort *rp = w->RPort;
+        SetAPen(rp, d->dri_Pens[BARBLOCKPEN]);
+        RectFill(rp, 1, 1, W - 2, H - 2);
+        SetAPen(rp, d->dri_Pens[SHADOWPEN]);
+        Move(rp, 0, 0); Draw(rp, W - 1, 0); Draw(rp, W - 1, H - 1); Draw(rp, 0, H - 1); Draw(rp, 0, 0);
+        for (i = 0; i < COG_SECTIONS; i++) {
+            WORD y = 3 + i * rh;
+            if (i == hot) { SetAPen(rp, d->dri_Pens[FILLPEN]); RectFill(rp, 2, y, W - 3, y + rh - 1); }
+            SetAPen(rp, d->dri_Pens[i == hot ? FILLTEXTPEN : BARDETAILPEN]);
+            Move(rp, COG_PAD, y + (rh - rp->TxHeight) / 2 + rp->TxBaseline);
+            Text(rp, (STRPTR)cog_items[i].label, strlen(cog_items[i].label));
+        }
+        if (done) break;
+        WaitPort(w->UserPort);
+        while ((m = (struct IntuiMessage *)GetMsg(w->UserPort))) {
+            ULONG cls = m->Class;
+            UWORD code = m->Code;
+            WORD mx = m->MouseX, my = m->MouseY, row = -1;
+            ReplyMsg((struct Message *)m);
+            if (mx >= 0 && mx < W && my >= 3 && my < H - 3 && (my - 3) / rh < COG_SECTIONS) row = (my - 3) / rh;
+            if (cls == IDCMP_MOUSEMOVE) hot = row;
+            else if (cls == IDCMP_MOUSEBUTTONS && code == SELECTUP && row >= 0) { pick = row; done = 1; }
+            else if (cls == IDCMP_MOUSEBUTTONS && code == SELECTDOWN && row < 0) done = 1;
+            else if (cls == IDCMP_INACTIVEWINDOW) done = 1;
+            else if (cls == IDCMP_RAWKEY) {
+                if (code == 0x45) done = 1;
+                else if ((code == 0x44 || code == 0x43) && hot >= 0) { pick = hot; done = 1; }
+                else if (code == 0x4D) hot = hot + 1 >= COG_SECTIONS ? 0 : hot + 1;
+                else if (code == 0x4C) hot = hot <= 0 ? COG_SECTIONS - 1 : hot - 1;
+            }
+        }
+    }
+    CloseWindow(w);
+    FreeScreenDrawInfo(s, d);
+    return pick;
+}
+
+static void os_events(void)
+{
+    int i;
+    for (i = 0; i < OS_MAX; i++) {
+        struct IntuiMessage *m;
+        while (os_cog[i].w && (m = (struct IntuiMessage *)GetMsg(os_cog[i].w->UserPort))) {
+            ULONG cls = m->Class;
+            UWORD code = m->Code;
+            ReplyMsg((struct Message *)m);
+            if (cls == IDCMP_REFRESHWINDOW) { BeginRefresh(os_cog[i].w); EndRefresh(os_cog[i].w, TRUE); os_draw(i); }
+            else if (cls == IDCMP_MOUSEBUTTONS && code == SELECTDOWN && prefs_app()) {
+                int pick = os_menu(os_cog[i].s, os_cog[i].w->LeftEdge + os_cog[i].gw, os_cog[i].bh);
+                if (pick >= 0) prefs_start(os_cog[i].name, cog_items[pick].section);
+            }
+        }
+    }
+}
+
+static ULONG os_sigs(void)
+{
+    ULONG m = 0;
+    int i;
+    for (i = 0; i < OS_MAX; i++) if (os_cog[i].w) m |= 1UL << os_cog[i].w->UserPort->mp_SigBit;
+    return m;
 }
 
 static void events(struct Window *w)
@@ -1557,7 +1804,7 @@ static ULONG window_sigs(void)
     int i;
     for (i = 0; i < 6; i++) if (ws[i]) m |= 1UL << ws[i]->UserPort->mp_SigBit;
     for (i = 0; i < TS_ICONS; i++) if (ts[i] && ts[i]->win) m |= 1UL << ts[i]->win->UserPort->mp_SigBit;
-    return m;
+    return m | os_sigs();
 }
 
 int main(void)
@@ -1632,7 +1879,6 @@ int main(void)
             close_all();
             read_prefs();
             apply_title();
-            if (!prefs.logo && !prefs.memory && !prefs.clock && !prefs.network && !prefs.cog && !prefs.border_black && !ts_count()) break;
             if (!open_all()) break;
         }
         port_events(port);
@@ -1642,6 +1888,7 @@ int main(void)
         events(clock_w);
         events(net_w);
         events(cog_w);
+        os_events();                           /* 0.7: the cogs on the other public screens */
         if (pop_w) events(pop_w);
         {
             int i;
@@ -1660,6 +1907,7 @@ int main(void)
         if (scr && scr->BarHeight != made_bh) { close_all(); if (!open_all()) break; apply_title(); }   /* 0.6.12: the room for the logo too */
         logo_follow();
         draw_clock(0);
+        if (tick % 2 == 0) os_poll(1);        /* every second: the other public screens' cogs (0.7) */
         if (++tick % 4 == 0) {                 /* every 2 s: the tray and OpenMenus' bar may have moved */
             int edge = read_bar_edge();
             WORD ox = cx, oy = cy, ow = cw, oh = ch;
@@ -1716,6 +1964,7 @@ int main(void)
             }
         }
     }
+    os_poll(0);                                /* the other screens' cogs closed */
     RemPort(port);                             /* no new icons from here on */
     port_events(port);
     ts_end();

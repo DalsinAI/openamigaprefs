@@ -58,6 +58,15 @@
 #include <proto/utility.h>
 
 #include <string.h>
+#ifdef LT_ONE
+#include "looktabs.h"                       /* a page of OpenPrefs (LT_OP): its frame and sections */
+#define LT_REFRESH(w) lt_draw((w), -1)
+#else
+#define LT_REFRESH(w) ((void)0)
+#define LT_DIRTY 1
+#define LT_DX 0
+#define lt_note_to(f) ((void)0)
+#endif
 
 #ifndef IN_OPENBENCH
 static const char version[] __attribute__((used)) = "$VER: OpenTypes 0.2.3 (11.10.2026) MIT, Copyright (c) 2026 AmigaChrome Team";
@@ -709,6 +718,10 @@ static int gui(void)
     memset(gad, 0, sizeof gad);
     fh = scr->Font->ta_YSize;
     top = scr->WBorTop + fh + 1 + 6;
+#ifdef LT_ONE
+    lt_make(NULL, NULL, 10, top, W - 20, fh + 6, LT_TYPES);     /* the frame's sections (OpenPrefs) */
+    top += lt_space(scr->Font, W - 20, fh + 6);
+#endif
     label_types();
     nfound = 0;
     if (!found) found = AllocVec(sizeof *found * MAXFOUND, MEMF_CLEAR);
@@ -749,16 +762,26 @@ static int gui(void)
         }
     }
     if (!g) { rc = RETURN_FAIL; goto out; }
+#ifdef LT_ONE
+    win = lt_open(scr, 30, scr->BarHeight + 10, W - scr->WBorLeft - scr->WBorRight, ng.ng_TopEdge + ng.ng_Height + 8 - (scr->WBorTop + fh + 1) - scr->WBorBottom, glist, IDCMP_CLOSEWINDOW | IDCMP_REFRESHWINDOW | LISTVIEWIDCMP | BUTTONIDCMP | CYCLEIDCMP | STRINGIDCMP, "OpenTypes 0.2.3");
+#else
     win = OpenWindowTags(NULL, WA_Title, (ULONG)"OpenTypes: which program opens each kind of file", WA_PubScreen, (ULONG)scr,
                          WA_Left, 30, WA_Top, scr->BarHeight + 10, WA_Width, W, WA_Height, ng.ng_TopEdge + ng.ng_Height + 8,
                          WA_Gadgets, (ULONG)glist, WA_DragBar, TRUE, WA_DepthGadget, TRUE, WA_CloseGadget, TRUE, WA_Activate, TRUE,
                          WA_SmartRefresh, TRUE,
                          WA_IDCMP, IDCMP_CLOSEWINDOW | IDCMP_REFRESHWINDOW | LISTVIEWIDCMP | BUTTONIDCMP | CYCLEIDCMP | STRINGIDCMP,
                          TAG_DONE);
+#endif
     if (!win) { rc = RETURN_FAIL; goto out; }
     GT_RefreshWindow(win, NULL);
 
 #define SET(id, ...) GT_SetGadgetAttrs(gad[id], win, NULL, __VA_ARGS__, TAG_DONE)
+#ifdef LT_ONE
+    {   /* the frame's note for the status line (a save that went to ENV: only) */
+        const char *n = lt_note_take();
+        if (n) { strncpy(status_text, n, sizeof status_text - 1); SET(G_STATUS, GTTX_Text, (ULONG)status_text); }
+    }
+#endif
     while (!quit) {
         struct IntuiMessage *m;
 #ifdef IN_OPENBENCH
@@ -775,7 +798,7 @@ static int gui(void)
             struct Gadget *gg = (struct Gadget *)m->IAddress;
             GT_ReplyIMsg(m);
             if (cls == IDCMP_CLOSEWINDOW) quit = 1;
-            else if (cls == IDCMP_REFRESHWINDOW) { GT_BeginRefresh(win); GT_EndRefresh(win, TRUE); }
+            else if (cls == IDCMP_REFRESHWINDOW) { GT_BeginRefresh(win); LT_REFRESH(win); GT_EndRefresh(win, TRUE); }
             else if (cls == IDCMP_GADGETUP) switch (gg->GadgetID) {
             case G_TYPES: {
                 ftype *t = &types[code];
@@ -866,11 +889,30 @@ static int gui(void)
                 break;
             }
             case G_CANCEL: quit = 1; break;
+#ifdef LT_ONE
+            default: {                               /* another section: the kinds changed kept, as Use, when there are any */
+                int to = lt_hit(gg, 0), k;
+                if (to < 0) break;
+                if (LT_DIRTY)
+                    for (k = 0; k < ntypes; k++)
+                        if (Stricmp((STRPTR)types[k].pick, (STRPTR)types[k].tool) && types[k].pick[0]) {
+                            if (sel == k && nfound) apply_found(types[k].pick);
+                            set_type(&types[k], types[k].pick, 0);
+                        }
+                lt_go(win, to);
+                quit = 1;
+                break;
+            }
+#endif
             }
         }
     }
 out:
+#ifdef LT_ONE
+    if (win) lt_close(win, glist);
+#else
     if (win) CloseWindow(win);
+#endif
     FreeGadgets(glist);
     FreeVisualInfo(vi);
     UnlockPubScreen(NULL, scr);
@@ -930,6 +972,8 @@ int main(int argc, char **argv)
     if (rda) FreeArgs(rda);
 out:
     if (found) FreeVec(found);
+    found = NULL;                            /* OpenPrefs opens this page again in the same run */
+    nfound = 0;
     if (GadToolsBase) CloseLibrary(GadToolsBase);
     if (AslBase) CloseLibrary(AslBase);
     if (DataTypesBase) CloseLibrary(DataTypesBase);

@@ -1,6 +1,6 @@
 # Combined preferences (design)
 
-Nine OpenPrefs editors in place of twenty-three. Design taken 6 October 2026; P1 (the shared frame and Appearance) approved to build. Branded PDF: `Combined-prefs-design.pdf`; interactive mockup: `mockup.html` (also (mockup link removed)). MIT, Copyright (c) 2026 AmigaChrome Team.
+**Since 17 October 2026: one app, OpenPrefs (the first revision below).** The rest of this design records the plan it replaces: nine OpenPrefs editors in place of twenty-three. Design taken 6 October 2026; P1 (the shared frame and Appearance) approved to build. Branded PDF: `Combined-prefs-design.pdf`; interactive mockup: `mockup.html` (also (mockup link removed)). MIT, Copyright (c) 2026 AmigaChrome Team.
 
 The team was asked to design new preferences editors that combine similar settings and replace the old ones. Today a Workbench user meets twenty-three separate editors for settings that belong together: Font, Palette, Pointer, WBPattern and Look all change how the screen looks. We propose nine editors, each about one subject, built on one shared frame, and we keep every old editor working in a Classic drawer.
 
@@ -12,6 +12,23 @@ The team was asked to design new preferences editors that combine similar settin
 - The old OS editors move to `Prefs/Classic`, the pattern Dale chose for Sound today. Our own five become pages, and their Shell names keep working.
 - Everything runs on a real 68040 with FPU and no OpenGPU. Rows a machine can't use are left out, not greyed.
 - Dale took the five decisions on 6 October 2026, listed at the end.
+
+## Revision, 17 October 2026: one app, OpenPrefs
+
+**Status:** Dale's decisions of 17 October 2026, built (W48). Where this section and the older ones disagree, this one wins. It replaces the nine (and then ten) editors of the 6 and 10 October plan with **one program with one icon, OpenPrefs**; everything else stands: the shared frame, Simple and Advanced (`ENV:OpenAmiga/PrefsView`), each page writing the same files its old editor wrote, and OS 3.2.3's own editors staying on disk in `Prefs/Classic`.
+
+- **08:18:** "We should just combine them into a single app, prefs editors that is."
+- **08:24:** the boot's `SYS:Prefs/OpenSound USE` and `SYS:Prefs/OpenGamepads USE` (and System's `OpenSystem APPLY`) become one `OpenPrefs APPLY`, served by a small separate body so the boot doesn't unpack the app.
+- **08:26:** "The cog should be present on all standard screens so Workbench screen has it all the time": on the Workbench screen's bar always, with no condition, in the ROM's bar (openbar) and the disk's (OpenTitle), and on every other public screen that shows a title bar; never on a custom (game) screen or one with no title bar. The cog's list opens OpenPrefs at its sections.
+- **09:42:** a Save makes the folders it needs: ENV:'s and Env-Archive's subfolders without asking; when SYS:Prefs/Env-Archive (or SYS:Prefs) is missing, a Save from the window asks "The preferences folders are missing on SYS:. Create them?" (Create makes them, and `ENVARC:` when there is no assign; Cancel saves as Use does and says so on the status line); from the Shell it makes them and says what in one line.
+
+**The window.** One window: the sections down the left, the page on the right, each page with its own status line and Save, Use, (Test,) Cancel along its foot, as the editor had. On a screen too narrow for the list beside the widest page (under 760 pixels wide, such as 640 x 256 with Topaz 8), the sections are a cycle gadget above the page, where OpenLook's tabs were. A click on another section keeps the page's changes as Use does, when the page has any (as OpenLook's tabs did, without the writes when nothing changed). The window keeps its place and only grows. Built on Look's tab frame (`Common/looktabs.h`, `LT_OP`), each page is its editor's own source with its main renamed; `OpenPrefs/src/opshift.h` moves its gadgets and drawing beside the list, so no page's layout code changed.
+
+**The sections (19).** The look: Theme (Look), Pointer, Fonts, Colours, Backdrops, Workbench, File requesters. The desktop: Windows, Title bar, Menus, Dock. Sound and input: Sound, Input, Gamepads. The rest: Date and time, Serial, File types (OpenTypes), System, Blanker (new: OpenBlanker's one setting, `ENV:OpenPrefs/Blanker`). OpenUp Setup stays a wizard of its own; its buttons open OpenPrefs at a section through the old names. Room is left on the Windows page for W50's "Transparency and shadows" switch (`composite on|off` in `ENV:OpenPrefs/Windows`).
+
+**The old names.** `Look`, `OpenLook`, `Windows`, `TitleBar`, `Menus`, `OpenDock`, `OpenSound`, `OpenInput`, `OpenGamepads`, `OpenDateTime`, `OpenSerial`, `OpenTypes` and `OpenSystem` each open their section, from the Shell with the editor's own arguments (`OpenSound USE` applies with no window, as before) and from Workbench. OpenPrefs reads the name it runs as. In ROM: they are aliases of `Prefs/OpenPrefs` in ROM:'s index, with no bytes and no icons of their own; on a disk, OpenUp puts a 500-byte stub of each name in SYS:Prefs, with no icon. `OpenPrefs [PUBSCREEN=name] [SECTION [arguments]]` and `OpenPrefs APPLY` are its own. Its version, 2.0, is higher than every editor's it replaces.
+
+**APPLY.** `C:OpenPrefs` is the small body (in ROM:C a resident command, on a disk OpenUp's C:OpenPrefs): `OpenPrefs APPLY` runs Sound's `USE`, Gamepads' `USE` (when openinput.library is there) and System's `APPLY`, the editors' own code built without their windows; anything else it hands to the app.
 
 ## Revision, 10 October 2026: OpenLook as the home of the look, and what folds where
 

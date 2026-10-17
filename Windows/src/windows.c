@@ -406,6 +406,7 @@ static int gui_once(void)
     GT_RefreshWindow(win, NULL);
     lt_draw(win, gad[G_STATUS] ? gad[G_STATUS]->TopEdge - 6 : -1);
     show();
+    lt_note_to(status);
 
     while (!quit) {
         struct IntuiMessage *m;
@@ -466,8 +467,9 @@ static int gui_once(void)
                 case G_SAVE: put_in_place(1); quit = 1; break;
                 case G_CANCEL: quit = 1; break;
                 default:
-                    if (LT_IS(gg->GadgetID) && gg->GadgetID != LT_ID + LT_WINDOWS) {   /* another tab: keep, as Use, and hand over */
-                        put_in_place(0); lt_go(win, gg->GadgetID - LT_ID); quit = 1;
+                    if (lt_hit(gg, 0) >= 0) {   /* another tab: keep, as Use, and hand over (OpenPrefs: when changed) */
+                        if (LT_DIRTY) put_in_place(0);
+                        lt_go(win, lt_hit(gg, 0)); quit = 1;
                     }
                     break;
                 }

@@ -37,6 +37,15 @@
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
+#ifdef LT_ONE
+#include "looktabs.h"                       /* a page of OpenPrefs (LT_OP): its frame and sections */
+#define LT_REFRESH(w) lt_draw((w), -1)
+#else
+#define LT_REFRESH(w) ((void)0)
+#define LT_DIRTY 1
+#define LT_DX 0
+#define lt_note_to(f) ((void)0)
+#endif
 
 #ifndef IN_OPENBENCH
 static const char version[] __attribute__((used)) = "$VER: OpenSerial 0.1 (10.10.2026) OpenPrefs, MIT, Copyright (c) 2026 AmigaChrome Team";
@@ -290,6 +299,10 @@ static int gui(void)
 #define G(kind, id, x, y, w, h, text, flags, ...) \
     (ng.ng_LeftEdge = (x), ng.ng_TopEdge = (y), ng.ng_Width = (w), ng.ng_Height = (h), ng.ng_GadgetText = (STRPTR)(text), \
      ng.ng_Flags = (flags), ng.ng_GadgetID = (id), g = gad[id] = CreateGadget(kind, g, &ng, __VA_ARGS__, TAG_DONE))
+#ifdef LT_ONE
+    lt_make(NULL, NULL, 10, top, W - 24, lh, LT_SERIAL);     /* the frame's sections (OpenPrefs) */
+    top += lt_space(scr->Font, W - 24, lh);
+#endif
     row = top;
     G(CYCLE_KIND, G_BAUD, X, row, cw, lh, "Baud rate", PLACETEXT_LEFT, GTCY_Labels, (ULONG)baud_labels, GTCY_Active, sel_baud);
     row += lh + 4;
@@ -317,6 +330,9 @@ static int gui(void)
         row += lh + 8;
     }
     if (!g) { rc = RETURN_FAIL; goto out; }
+#ifdef LT_ONE
+    win = lt_open(scr, (scr->Width - W) / 2 > 0 ? (scr->Width - W) / 2 : 0, scr->BarHeight + 20, W, row - scr->WBorTop - fh - 1, glist, IDCMP_CLOSEWINDOW | IDCMP_REFRESHWINDOW | IDCMP_MENUPICK | BUTTONIDCMP | INTEGERIDCMP | CYCLEIDCMP | CHECKBOXIDCMP | TEXTIDCMP, "OpenSerial 0.1");
+#else
     win = OpenWindowTags(NULL, WA_Title, (ULONG)"Serial", WA_ScreenTitle, (ULONG)"OpenSerial 0.1", WA_PubScreen, (ULONG)scr,
                          WA_Left, (scr->Width - W) / 2 > 0 ? (scr->Width - W) / 2 : 0, WA_Top, scr->BarHeight + 20,
                          WA_InnerWidth, W, WA_InnerHeight, row - scr->WBorTop - fh - 1,
@@ -325,9 +341,11 @@ static int gui(void)
                          WA_IDCMP, IDCMP_CLOSEWINDOW | IDCMP_REFRESHWINDOW | IDCMP_MENUPICK | BUTTONIDCMP | INTEGERIDCMP |
                                    CYCLEIDCMP | CHECKBOXIDCMP | TEXTIDCMP,
                          TAG_DONE);
+#endif
     if (!win) { rc = RETURN_FAIL; goto out; }
     if ((menu = CreateMenus(menus, TAG_DONE)) && LayoutMenus(menu, vi, GTMN_NewLookMenus, TRUE, TAG_DONE)) SetMenuStrip(win, menu);
     GT_RefreshWindow(win, NULL);
+    lt_note_to(status);
 
     while (!quit) {
         struct IntuiMessage *m;
@@ -345,7 +363,7 @@ static int gui(void)
             struct Gadget *gg = (struct Gadget *)m->IAddress;
             GT_ReplyIMsg(m);
             if (cls == IDCMP_CLOSEWINDOW) quit = 1;
-            else if (cls == IDCMP_REFRESHWINDOW) { GT_BeginRefresh(win); GT_EndRefresh(win, TRUE); }
+            else if (cls == IDCMP_REFRESHWINDOW) { GT_BeginRefresh(win); LT_REFRESH(win); GT_EndRefresh(win, TRUE); }
             else if (cls == IDCMP_MENUPICK) {
                 while (code != MENUNULL && !quit) {
                     struct MenuItem *it = ItemAddress(menu, code);
@@ -366,6 +384,13 @@ static int gui(void)
                 case G_BITS: sel_bits = code; break;
                 case G_STOP: sel_stop = code; break;
                 case G_SHARED: shared = (gg->Flags & GFLG_SELECTED) != 0; break;
+#ifdef LT_ONE
+                default: {                          /* another section: the page's changes kept, as Use, when it has any */
+                    int to = lt_hit(gg, 0);
+                    if (to >= 0) { if (LT_DIRTY) put_in_place(0); lt_go(win, to); quit = 1; }
+                    break;
+                }
+#endif
                 case G_SAVE: if (put_in_place(1)) quit = 1; break;
                 case G_USE: if (put_in_place(0)) quit = 1; break;
                 case G_CANCEL: quit = 1; break;
@@ -374,7 +399,11 @@ static int gui(void)
         }
     }
 out:
+#ifdef LT_ONE
+    if (win) { ClearMenuStrip(win); lt_close(win, glist); win = NULL; }
+#else
     if (win) { ClearMenuStrip(win); CloseWindow(win); win = NULL; }
+#endif
     if (menu) FreeMenus(menu);
     FreeGadgets(glist);
     FreeVisualInfo(vi);
@@ -388,7 +417,7 @@ int main(int argc, char **argv)
     struct RDArgs *rd = argc > 0 ? ReadArgs((STRPTR)"FROM,USE/S,SAVE/S", args, NULL) : NULL;
     int rc;
     (void)argv;
-#ifdef IN_OPENBENCH
+#if defined(IN_OPENBENCH) || defined(LT_ONE)
     /* Built in, it starts as ob_builtin.c starts it: argc 0, argv NULL and no WBStartup message, so the
      * window, as from Workbench, with nothing read from the Shell or written to Output(). Its statics outlive
      * a run inside OpenBench: the file the run before read and freed is not freed again. */

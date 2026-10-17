@@ -56,7 +56,7 @@
 #include <stdio.h>
 
 #ifndef IN_OPENBENCH
-const char version[] __attribute__((used)) = "$VER: OpenUp-Setup 0.1.3 (12.10.2026) OpenPrefs, AmigaChrome Team";
+const char version[] __attribute__((used)) = "$VER: OpenUp-Setup 0.1.4 (17.10.2026) OpenPrefs, AmigaChrome Team";
 #endif
 
 #define USER_STARTUP "S:User-Startup"
@@ -395,11 +395,12 @@ static const char *const page_titles[P_COUNT] = {
 };
 
 static const struct { int id; const char *label, *path, *args; } editors[] = {     /* 0.1.2: OpenLook's pages; every editor of ours is Open... */
-    { G_ED_LOOK, "Look...", "SYS:Prefs/OpenLook", "LOOK" },
-    { G_ED_MENUS, "Menus...", "SYS:Prefs/OpenLook", "MENUS" },
-    { G_ED_WINDOWS, "Windows...", "SYS:Prefs/OpenLook", "WINDOWS" },
-    { G_ED_DOCK, "Dock...", "SYS:Prefs/OpenDock", NULL },
-    { G_ED_TYPES, "File types...", "SYS:Prefs/OpenTypes" },
+    /* 0.1.4 (W48): OpenPrefs at its section, through C:OpenPrefs (the disk's, or ROM:C's) */
+    { G_ED_LOOK, "Look...", "C:OpenPrefs", "LOOK" },
+    { G_ED_MENUS, "Menus...", "C:OpenPrefs", "MENUS" },
+    { G_ED_WINDOWS, "Windows...", "C:OpenPrefs", "WINDOWS" },
+    { G_ED_DOCK, "Dock...", "C:OpenPrefs", "DOCK" },
+    { G_ED_TYPES, "File types...", "C:OpenPrefs", "TYPES" },
     { G_SCREENMODE, "Screen mode...", "SYS:Prefs/ScreenMode" },
     { G_PRINTER, "Printer...", "SYS:Prefs/Printer" },
     { G_ED_OPENPRINT, "OpenPrint...", "SYS:Utilities/OpenPrint/Printers and Queue" },  /* 0.1.3: OpenPrint's printers, as the cog's */
