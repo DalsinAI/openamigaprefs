@@ -40,6 +40,16 @@ void lt_seen(struct IntuiMessage *m);
 struct RDArgs *lt_readargs(CONST_STRPTR tmpl, LONG *array);   /* lt_args through ReadArgs */
 void lt_freeargs(struct RDArgs *rd);
 
+/* The varargs wrappers below read their tags from the stack after the first: as the NDK's own (inline/LIB.h,
+ * AMIGA_VA_WRAPPER_ATTR), not inlined and kept out of GCC's interprocedural changes, which may move or drop them */
+#ifndef AMIGA_VA_WRAPPER_ATTR
+#if defined(__GNUC__) && __GNUC__ >= 8
+#define AMIGA_VA_WRAPPER_ATTR __attribute__((noipa, noinline, optimize("omit-frame-pointer"), optimize("O1")))
+#else
+#define AMIGA_VA_WRAPPER_ATTR __attribute__((noinline, optimize("omit-frame-pointer"), optimize("O1")))
+#endif
+#endif
+
 #define LT_X(rp, x) ((x) + ((struct RastPort *)(rp) == lt_rp && lt_rp ? lt_dx : 0))
 
 /* ---- the page's gadgets: right of the list ---- */
@@ -53,6 +63,7 @@ static inline __attribute__((unused)) struct Gadget *lt_cga(ULONG kind, struct G
     ng->ng_LeftEdge -= dx;
     return g;
 }
+AMIGA_VA_WRAPPER_ATTR
 static __stdargs __attribute__((unused)) struct Gadget *lt_cgv(ULONG kind, struct Gadget *prev, struct NewGadget *ng,
                                                                Tag tag1, ...)
 {
@@ -80,6 +91,7 @@ static __stdargs __attribute__((unused)) struct Gadget *lt_cgv(ULONG kind, struc
 #define PrintIText(rp, it, x, y) __PrintIText_base((INTUITION_BASE_NAME), (rp), (it), LT_X(rp, x), (y))
 #undef DrawImage
 #define DrawImage(rp, im, x, y) __DrawImage_base((INTUITION_BASE_NAME), (rp), (im), LT_X(rp, x), (y))
+AMIGA_VA_WRAPPER_ATTR
 static __stdargs __attribute__((unused)) void lt_bbv(struct RastPort *rp, LONG x, LONG y, LONG w, LONG h, Tag tag1, ...)
 {
     __DrawBevelBoxA_base(GADTOOLS_BASE_NAME, rp, LT_X(rp, x), y, w, h, (CONST struct TagItem *)&tag1);
