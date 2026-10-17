@@ -208,7 +208,9 @@ static void load_theme(void)
         FreeVec(look);
     }
     theme_dark = !strcmp(mode, "dark");
-    snprintf(theme_line, sizeof theme_line, "Theme: %s, %s%s", name, mode, lite_on ? ", Lite" : "");
+    /* only shown: a long theme name is cut at the line's end */
+    if (snprintf(theme_line, sizeof theme_line, "Theme: %s, %s%s", name, mode, lite_on ? ", Lite" : "") >= (int)sizeof theme_line)
+        theme_line[sizeof theme_line - 1] = 0;
     if (!strcmp(mode, "auto")) {
         struct DateStamp ds;
         int hour;

@@ -52,7 +52,7 @@
 #include "wbclose.h"
 #include "obmsg.h"
 
-const char version[] __attribute__((used)) = "$VER: OpenDock 0.6.5 (12.10.2026) OpenPrefs, AmigaChrome Team";   /* 0.6.5: one dock after a refused Workbench reset */
+const char version[] __attribute__((used)) = "$VER: OpenDock 0.6.6 (17.10.2026) OpenPrefs, AmigaChrome Team";   /* 0.6.6: one dock, its port found and added under one Forbid */
 
 #define PREFS_ENV "ENV:OpenDock/Dock"
 #define PREFS_ENVARC "ENVARC:OpenDock/Dock"
@@ -1404,22 +1404,25 @@ int main(void)
     int quit = 0, timer = 0, ticks = 0, rc = RETURN_OK;
     ULONG sigs;
 
-    Forbid();
-    if ((port = FindPort((STRPTR)PORT_NAME))) {
-        /* one dock: the first reads its settings again */
-        Signal(port->mp_SigTask, SIGBREAKF_CTRL_F);
+    /* 0.6.6: one dock. The port is looked for and added under one Forbid, so two starts at once
+     * (the ROM's start at Workbench's start and an old "Run >NIL: C:OpenDock" in User-Startup)
+     * can't both pass; the second ends quietly and the first reads its settings again. */
+    {
+        struct MsgPort *mine = CreateMsgPort(), *other;
+        if (!mine) return RETURN_FAIL;
+        mine->mp_Node.ln_Name = (char *)PORT_NAME;
+        mine->mp_Node.ln_Pri = 0;
+        Forbid();
+        if ((other = FindPort((STRPTR)PORT_NAME))) Signal(other->mp_SigTask, SIGBREAKF_CTRL_F);
+        else AddPort(mine);
         Permit();
-        return RETURN_OK;
+        if (other) { DeleteMsgPort(mine); return RETURN_OK; }
+        port = mine;
     }
-    Permit();
-    if (!(IconBase = OpenLibrary((STRPTR)"icon.library", 44))) { PutStr((STRPTR)"OpenDock needs icon.library 44 (AmigaOS 3.5 or later).\n"); return RETURN_FAIL; }
+    if (!(IconBase = OpenLibrary((STRPTR)"icon.library", 44))) { PutStr((STRPTR)"OpenDock needs icon.library 44 (AmigaOS 3.5 or later).\n"); rc = RETURN_FAIL; goto out; }
     WorkbenchBase = OpenLibrary((STRPTR)"workbench.library", 44);
     CyberGfxBase = OpenLibrary((STRPTR)"cybergraphics.library", 41);   /* small icons on a graphics card */
     wbc_start();
-    if (!(port = CreateMsgPort())) { rc = RETURN_FAIL; goto out; }
-    port->mp_Node.ln_Name = (char *)PORT_NAME;
-    port->mp_Node.ln_Pri = 0;
-    AddPort(port);
 
     load();
     if (!(scr = LockPubScreen((STRPTR)"Workbench"))) { rc = RETURN_FAIL; goto out; }
@@ -1507,7 +1510,9 @@ int main(void)
                     if (!it) break;
                     switch ((ULONG)GTMENUITEM_USERDATA(it)) {
                     case M_PREFS:                   /* through OpenBench first: its editor is built in there */
-                        if (ob_open(DOCK_PREFS) <= 0) SystemTags((STRPTR)"Run >NIL: " DOCK_PREFS, TAG_DONE);
+                        /* 0.6.6: with no SYS:Prefs/OpenDock, the ROM's (ROM:Prefs/OpenDock) */
+                        if (ob_open(DOCK_PREFS) <= 0)
+                            SystemTags((STRPTR)(exists(DOCK_PREFS) ? "Run >NIL: " DOCK_PREFS : "Run >NIL: ROM:Prefs/OpenDock"), TAG_DONE);
                         break;
                     case M_REMOVE: removing = 1; break;
                     case M_QUIT: quit = 1; break;
@@ -1531,6 +1536,6 @@ out:
     if (port) { RemPort(port); DeleteMsgPort(port); }
     if (WorkbenchBase) CloseLibrary(WorkbenchBase);
     if (CyberGfxBase) CloseLibrary(CyberGfxBase);
-    CloseLibrary(IconBase);
+    if (IconBase) CloseLibrary(IconBase);
     return rc;
 }
