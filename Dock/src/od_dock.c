@@ -663,7 +663,10 @@ static void as_item(const char *s, const char *base, od_dock *d, od_report *r)
         if (icon[0] && strcmp(icon, file)) {
             if (!strchr(icon, ':') && base && base[0]) {
                 size_t bl = strlen(base);
-                snprintf(b->icon, sizeof b->icon, "%s%s%s", base, base[bl - 1] == ':' || base[bl - 1] == '/' ? "" : "/", icon);
+                /* a path too long for the field: no icon rather than a cut one */
+                if (snprintf(b->icon, sizeof b->icon, "%s%s%s", base, base[bl - 1] == ':' || base[bl - 1] == '/' ? "" : "/", icon)
+                    >= (int)sizeof b->icon)
+                    b->icon[0] = 0;
             } else copy(b->icon, icon, sizeof b->icon);
         }
     }

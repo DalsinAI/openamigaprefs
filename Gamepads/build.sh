@@ -4,6 +4,7 @@
 #   Gamepads/build.sh [OUT_DIR]     (default build/os3)
 #   STOVE=~/AmigaChrome/stoves/os32-gcc16 Gamepads/build.sh build/os3-gcc16
 # MIT, Copyright (c) 2026 AmigaChrome Team.
+# CPU= and OPT= change -m68020 and -O2 (the ROM's build: CPU=-m68040 OPT=-Os).
 set -eu
 HERE=$(cd "$(dirname "$0")" && pwd)
 STOVE=${STOVE:-$HOME/AmigaChrome/stoves/os32}
@@ -11,7 +12,7 @@ CC="$STOVE/prefix/bin/m68k-amigaos-gcc"
 OUT=${1:-$HERE/build/os3}
 # -fno-delete-null-pointer-checks: address 0 is real memory on the Amiga.
 # No -lamiga: its 16-bit sprintf would replace C's.
-CFLAGS="-noixemul -m68020 -std=gnu99 -Wall -Werror -O2 -fno-delete-null-pointer-checks -fno-common -I$HERE/src -I$HERE/include"
+CFLAGS="-noixemul ${CPU:--m68020} -std=gnu99 -Wall -Werror ${OPT:--O2} -fno-delete-null-pointer-checks -fno-common -I$HERE/src -I$HERE/include"
 mkdir -p "$OUT"
 S="$HERE/src"
 "$CC" $CFLAGS -o "$OUT/Gamepads" "$S/gamepads.c" "$S/gp_core.c" "$S/gp_pad.c" "$S/gp_draw.c"
