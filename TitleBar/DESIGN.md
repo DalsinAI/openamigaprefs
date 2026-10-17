@@ -49,6 +49,25 @@ installed. OpenMenus' own bar (at an edge) keeps room for the sum.
 With the menu bar in the screen's title bar (the default), the first item
 sits two bar heights in from the right edge, clear of the depth gadget.
 
+## The cog always, and on other screens (OpenTitle 0.7, 17 October 2026)
+
+Dale, 17 October 2026, 08:26: "The cog should be present on all standard screens so Workbench screen has it all
+the time."
+
+- **Always on the Workbench screen's bar.** The `cog on|off` line is kept in the file as it was (OpenPrefs's
+  Title bar page writes it back unchanged) but is read no more, and the page has no switch for it. With every
+  other item off, OpenTitle no longer quits on Ctrl-F: the cog stays.
+- **The list is OpenPrefs's sections:** Look, Windows, Title bar, Menus, Dock, Sound, Input, Gamepads, Date
+  and time, Serial, File types, System and Blanker, each running `OpenPrefs SECTION` (SYS:Prefs/OpenPrefs,
+  else ROM:Prefs/OpenPrefs; hidden when neither is there); then Printers, Network, OpenUp Setup and Tata when
+  they are there, and All Prefs....
+- **Every other public screen that shows its title bar** (in the public screen list, not private, SHOWTITLE)
+  gets the cog alone at its bar's right end: a borderless visitor window, opened while the screen has a window
+  of its own and closed when it has none, so the screen's owner can close the screen. Its list opens OpenPrefs
+  on that screen (`PUBSCREEN=`). Checked every second. Never on a custom screen that isn't public (a game's),
+  nor on one without a title bar.
+- The ROM's bar (amigachrome-guest common/openbar) does the same while OpenTitle isn't running.
+
 ## The cog (OpenTitle 0.5, 8 October 2026)
 
 The user asked on 8 October 2026 for "a cog wheel in the workbench screen
