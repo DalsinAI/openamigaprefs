@@ -37,7 +37,7 @@
 #include <stdlib.h>
 #include "../../Common/looktabs.h"
 
-static const char version[] __attribute__((used)) = "$VER: Windows 0.6.6 (17.10.2026) OpenPrefs, MIT, Copyright (c) 2026 AmigaChrome Team";
+static const char version[] __attribute__((used)) = "$VER: Windows 0.6.7 (17.10.2026) OpenPrefs, MIT, Copyright (c) 2026 AmigaChrome Team";
 
 #define PREFS_ENV "ENV:OpenPrefs/Windows"
 #define PREFS_ENVARC "ENVARC:OpenPrefs/Windows"
@@ -52,6 +52,9 @@ struct wprefs {
     /* layers' composited mode (openamigagfx docs/design/compositing.md): the switch, and the look's lines,
      * which have no gadget and are kept as written */
     int composite, shadows, shadow_size, shadow_strength, drag_opacity, inactive_opacity;
+    /* Intuition's gradient title bars on true-colour public screens (gradient on|off; amigachrome-guest
+     * docs/design/gradient-title-bars.md); it takes effect when the Workbench opens next */
+    int gradient;
     char key[48];
     char never[160];
 };
@@ -98,6 +101,7 @@ static void defaults(struct wprefs *p)
     memset(p, 0, sizeof *p);
     p->snap = 1; p->snap_dist = 12; p->switcher = 1; p->wheel = 1; p->places = 1; p->dblfront = 1; p->edges = 1; p->drive_title = 1;
     p->composite = 1; p->shadows = 1; p->shadow_size = 8; p->shadow_strength = 40; p->drag_opacity = 75; p->inactive_opacity = 100;
+    p->gradient = 1;
     strcpy(p->key, "lcommand tab");
 }
 
@@ -124,6 +128,7 @@ static void parse(struct wprefs *p, char *text)
         else if (!strcmp(line, "drive.title")) p->drive_title = !strncmp(v, "on", 2);
         else if (!strcmp(line, "drag.solid")) p->solid = !strncmp(v, "on", 2);
         else if (!strcmp(line, "composite")) p->composite = !strncmp(v, "on", 2);
+        else if (!strcmp(line, "gradient")) p->gradient = !strncmp(v, "on", 2);
         else if (!strcmp(line, "shadows")) p->shadows = !strncmp(v, "on", 2);
         else if (!strcmp(line, "shadow.size")) p->shadow_size = atoi(v);
         else if (!strcmp(line, "shadow.strength")) p->shadow_strength = atoi(v);
@@ -146,12 +151,13 @@ static void make_text(const struct wprefs *p, char *out, int size)
         "; OpenPrefs Windows 0.6: what OpenWindows does\n"
         "snap %s %d\nsnap.halves %s\nswitcher %s\nswitcher.key %s\nwheel %s\nplaces %s\nplaces.drawers %s\ndrawer %d %d\n"
         "doubleclick.front %s\nedges %s\nedges.pointer %s\ndrive.title %s\ndrag.solid %s\n"
-        "composite %s\nshadows %s\nshadow.size %d\nshadow.strength %d\ndrag.opacity %d\ninactive.opacity %d\n",
+        "composite %s\nshadows %s\nshadow.size %d\nshadow.strength %d\ndrag.opacity %d\ninactive.opacity %d\n"
+        "gradient %s\n",
         p->snap ? "on" : "off", p->snap_dist, p->halves ? "on" : "off", p->switcher ? "on" : "off", p->key,
         p->wheel ? "on" : "off", p->places ? "on" : "off", p->places_wb ? "on" : "off", p->drawer_w, p->drawer_h,
         p->dblfront ? "on" : "off", p->edges ? "on" : "off", p->edge_ptr ? "on" : "off", p->drive_title ? "on" : "off",
         p->solid ? "on" : "off", p->composite ? "on" : "off", p->shadows ? "on" : "off", p->shadow_size,
-        p->shadow_strength, p->drag_opacity, p->inactive_opacity);
+        p->shadow_strength, p->drag_opacity, p->inactive_opacity, p->gradient ? "on" : "off");
     strcpy(never, p->never);
     for (n = never; *n && len < size - 40; n = e) {
         while (*n == ' ' || *n == ',') n++;
@@ -201,7 +207,7 @@ static int put_in_place(int save)
 
 /* ---- the window ---------------------------------------------------------------------- */
 
-enum { G_SNAP, G_DIST, G_HALVES, G_SWITCH, G_KEY, G_WHEEL, G_DBLFRONT, G_EDGES, G_SOLID, G_DRIVETITLE, G_COMP, G_PLACES, G_DRAWERS, G_NEVER, G_FORGET, G_DRAWW, G_DRAWH,
+enum { G_SNAP, G_DIST, G_HALVES, G_SWITCH, G_KEY, G_WHEEL, G_DBLFRONT, G_EDGES, G_SOLID, G_DRIVETITLE, G_COMP, G_GRAD, G_PLACES, G_DRAWERS, G_NEVER, G_FORGET, G_DRAWW, G_DRAWH,
        G_STATUS, G_SAVE, G_USE, G_CANCEL, G_COUNT };
 static struct Gadget *gad[G_COUNT];
 static struct Window *win;
@@ -254,6 +260,7 @@ static void show(void)
     SET(G_SOLID, GTCB_Checked, cur.solid);
     SET(G_DRIVETITLE, GTCB_Checked, cur.drive_title);
     SET(G_COMP, GTCB_Checked, cur.composite);
+    SET(G_GRAD, GTCB_Checked, cur.gradient);
     SET(G_PLACES, GTCB_Checked, cur.places);
     SET(G_NEVER, GTST_String, (ULONG)cur.never, GA_Disabled, !cur.places);
     SET(G_DRAWERS, GTCB_Checked, cur.places_wb, GA_Disabled, !cur.places);
@@ -343,6 +350,7 @@ static int gui_once(void)
         G(CHECKBOX_KIND, G_DRIVETITLE, LX, row, 26, lh, "Drive windows titled with the name only", PLACETEXT_RIGHT, GTCB_Scaled, TRUE);
         row += st;
         G(CHECKBOX_KIND, G_COMP, LX, row, 26, lh, "Transparency and shadows", PLACETEXT_RIGHT, GTCB_Scaled, TRUE);
+        G(CHECKBOX_KIND, G_GRAD, mid + 10, row, 26, lh, "Gradient title bars", PLACETEXT_RIGHT, GTCB_Scaled, TRUE);
         row += st + 4;
         G(CHECKBOX_KIND, G_PLACES, x1, row, 26, lh, "Remember places", PLACETEXT_LEFT, GTCB_Scaled, TRUE);
         G(BUTTON_KIND, G_FORGET, x1 + 34, row, mid - 12 - (x1 + 34), lh, "Forget all", 0, GA_Disabled, FALSE);
@@ -374,6 +382,9 @@ static int gui_once(void)
     row += lh + sp;
     /* layers' composited mode on RTG Workbench screens (composite on|off); it takes effect when the screen opens next */
     G(CHECKBOX_KIND, G_COMP, LX, row, 26, lh, "Transparency and shadows", PLACETEXT_RIGHT, GTCB_Scaled, TRUE);
+    row += lh + sp;
+    /* Intuition's gradient title bars on true-colour screens (gradient on|off); as above, from the next Workbench */
+    G(CHECKBOX_KIND, G_GRAD, LX, row, 26, lh, "Gradient title bars", PLACETEXT_RIGHT, GTCB_Scaled, TRUE);
     row += lh + (advanced ? 10 : sp);
     G(CHECKBOX_KIND, G_PLACES, X, row, 26, lh, "Remember places", PLACETEXT_LEFT, GTCB_Scaled, TRUE);
     if (advanced) G(BUTTON_KIND, G_FORGET, X + 120, row, 140, lh, "Forget all", 0, GA_Disabled, FALSE);
@@ -457,6 +468,7 @@ static int gui_once(void)
                 case G_SOLID: cur.solid = sel; break;
                 case G_DRIVETITLE: cur.drive_title = sel; break;
                 case G_COMP: cur.composite = sel; break;
+                case G_GRAD: cur.gradient = sel; break;
                 case G_PLACES: cur.places = sel; show(); break;
                 case G_DRAWERS: cur.places_wb = sel; break;
                 case G_NEVER: strncpy(cur.never, str, sizeof cur.never - 1); break;
