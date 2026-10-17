@@ -55,7 +55,7 @@ install puts every line back on.
 ### Building
 
 `Setup/build.sh [OUT_DIR]` uses the os32 stove (or `CC=`) and builds
-`OpenUp-Setup` for a 68020 or better, with no FPU needed.
+`OpenUp-Setup` for a 68040 (built with -m68040), with no FPU needed.
 
 ### For the OpenUp part (to add in openamigaup)
 

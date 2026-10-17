@@ -4,14 +4,17 @@
 # src/logo.h comes from tools/mklogo.py and AmigaChrome's logo; it is kept in
 # the repository, so the build needs no Python.
 # MIT, Copyright (c) 2026 AmigaChrome Team.
-# CPU= and OPT= change -m68020 and -O2 (the ROM's build: CPU=-m68040 OPT=-Os).
+# CPU= and OPT= change -m68040 and -O2 (the ROM's build: OPT=-Os).
 set -eu
 HERE=$(cd "$(dirname "$0")" && pwd)
+# The 68040, soft float: the specs file links libnix's soft libm (maths through
+# the mathieee libraries), not its FPU libm881, so one program runs on any 68040.
+SPECS="-specs=$HERE/../specs/m68k-soft-m68040.specs"
 STOVE=${STOVE:-$HOME/AmigaChrome/stoves/os32}
 CC="$STOVE/prefix/bin/m68k-amigaos-gcc"
 OGT=${OGT:-$HERE/../../opengadtools}      # a checkout of DalsinAI/opengadtools: its theme reader (lib/ogt_theme.c)
 OUT=${1:-$HERE/build/os3}
-CFLAGS="-noixemul ${CPU:--m68020} -std=gnu99 -Wall -Werror ${OPT:--O2} -fno-delete-null-pointer-checks -fno-common -I$HERE/src -I$HERE/include -I$HERE/../Common -I$OGT/lib"
+CFLAGS="-noixemul ${CPU:--m68040} $SPECS -std=gnu99 -Wall -Werror ${OPT:--O2} -fno-delete-null-pointer-checks -fno-common -I$HERE/src -I$HERE/include -I$HERE/../Common -I$OGT/lib"
 mkdir -p "$OUT"
 "$CC" $CFLAGS -o "$OUT/TitleBar" "$HERE/src/titlebar.c"
 # OpenTitle reads where OpenMenus' bar is with the Menus editor's om_prefs.c
