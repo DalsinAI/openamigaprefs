@@ -274,7 +274,13 @@ struct Window *lt_open(struct Screen *scr, int left, int top, int W, int H, stru
                                 WA_PubScreen, (ULONG)scr, WA_Left, left, WA_Top, top, WA_InnerWidth, w, WA_InnerHeight, h,
                                 WA_Gadgets, (ULONG)lt_fg, WA_DragBar, TRUE, WA_DepthGadget, TRUE, WA_CloseGadget, TRUE,
                                 WA_Activate, TRUE, WA_SmartRefresh, TRUE, WA_NewLookMenus, TRUE, WA_IDCMP, idcmp, TAG_DONE);
-        if (!lt_win) { lt_free_frame(); return NULL; }
+        if (!lt_win) {
+            if (ow > scr->Width || oh > scr->Height)
+                Printf((STRPTR)"%s: the window (%ld x %ld) is larger than the screen (%ld x %ld)\n", (LONG)lt_prog,
+                       (LONG)ow, (LONG)oh, (LONG)scr->Width, (LONG)scr->Height);
+            lt_free_frame();
+            return NULL;
+        }
         lt_win_w = w; lt_win_h = h;
         GT_RefreshWindow(lt_win, NULL);
         AddGList(lt_win, glist, ~0, -1, NULL);
@@ -439,6 +445,34 @@ static int lt_envarc(void)
 }
 
 int lt_envpath(const char *path) { return lt_prefix(path, "ENVARC:") || lt_prefix(path, "ENV:"); }
+
+int lt_ready(const char *path, int isdir);
+
+/* A page's Open and Lock (opshift.h): ENV: and ENVARC: with no system requester; a write gets its folders first */
+BPTR lt_open_file(CONST_STRPTR name, LONG mode)
+{
+    struct Process *me = (struct Process *)FindTask(NULL);
+    APTR was = me->pr_WindowPtr;
+    BPTR f;
+    if (mode != MODE_OLDFILE && name && lt_ready((const char *)name, 0)) name = (CONST_STRPTR)"NIL:";
+    if (!name || !lt_envpath((const char *)name)) return Open(name, mode);
+    me->pr_WindowPtr = (APTR)-1;
+    f = Open(name, mode);
+    me->pr_WindowPtr = was;
+    return f;
+}
+
+BPTR lt_lock_file(CONST_STRPTR name, LONG mode)
+{
+    struct Process *me = (struct Process *)FindTask(NULL);
+    APTR was = me->pr_WindowPtr;
+    BPTR l;
+    if (!name || !lt_envpath((const char *)name)) return Lock(name, mode);
+    me->pr_WindowPtr = (APTR)-1;
+    l = Lock(name, mode);
+    me->pr_WindowPtr = was;
+    return l;
+}
 
 int lt_ready(const char *path, int isdir)
 {
