@@ -35,6 +35,7 @@
 #include <exec/ports.h>
 #include <dos/dos.h>
 #include <dos/dosextens.h>
+#include <dos/dostags.h>
 #include <intuition/intuition.h>
 #include <libraries/gadtools.h>
 #include <libraries/asl.h>
@@ -55,7 +56,7 @@
 #include "od_dock.h"
 
 #ifndef IN_OPENBENCH
-const char version[] __attribute__((used)) = "$VER: OpenDock-Prefs 0.5.2 (10.10.2026) OpenPrefs, AmigaChrome Team";
+const char version[] __attribute__((used)) = "$VER: OpenDock-Prefs 0.5.3 (17.10.2026) OpenPrefs, AmigaChrome Team";   /* 0.5.3: Use and Save start the dock if it isn't running */
 #endif
 
 #define PREFS_ENV "ENV:OpenDock/Dock"
@@ -135,6 +136,20 @@ static int tell_opendock(void)
     if ((p = FindPort((STRPTR)"OpenDock"))) Signal(p->mp_SigTask, SIGBREAKF_CTRL_F);
     Permit();
     return p != NULL;
+}
+
+/* 0.5.3: the dock started when Use or Save puts settings in place and it isn't running (the dock in the
+ * ROM starts at boot only when ENV:OpenDock/Dock is there). By name, so the Shell finds the ROM's
+ * OpenDock (ROM:C) or a newer C:OpenDock; a second start ends at once (OpenDock 0.6.6). */
+static int start_opendock(void)
+{
+    BPTR in = Open((STRPTR)"NIL:", MODE_OLDFILE), out = Open((STRPTR)"NIL:", MODE_NEWFILE);
+    if (in && out && SystemTags((STRPTR)"OpenDock", SYS_Input, (ULONG)in, SYS_Output, (ULONG)out,
+                                SYS_Asynch, TRUE, NP_StackSize, 16384, TAG_DONE) != -1)
+        return 1;                              /* the handles are the new process's now */
+    if (in) Close(in);
+    if (out) Close(out);
+    return 0;
 }
 
 static int write_prefs(const od_dock *d, int save)
@@ -339,13 +354,15 @@ static ULONG now_seconds(void)
 
 static ULONG test_until;
 
-static int put_in_place(int save)
+/* save: ENVARC: too. start: Use or Save, which start the dock if it isn't running (Test only tells it). */
+static int put_in_place(int save, int start)
 {
     if (!write_prefs(&cur, save)) {
         status(save ? "The settings couldn't be saved. Is the system disk write-protected or full?" : "The settings couldn't be written. Is ENV: full?");
         return 0;
     }
-    if (!tell_opendock() && cur.n) status("OpenDock isn't running: it starts with the machine, or run C:OpenDock.");
+    if (!tell_opendock() && cur.n && !(start && start_opendock()))
+        status("OpenDock isn't running: it starts with the machine, or run C:OpenDock.");
     return 1;
 }
 
@@ -642,11 +659,11 @@ static int gui(void)
                 break;
             }
             case G_TEST:
-                if (put_in_place(0)) { test_until = now_seconds() + TEST_SECONDS; status("Testing: back in 15 s unless you choose Use or Save."); }
+                if (put_in_place(0, 0)) { test_until = now_seconds() + TEST_SECONDS; status("Testing: back in 15 s unless you choose Use or Save."); }
                 redraw = 0;
                 break;
-            case G_USE: if (put_in_place(0)) { test_until = 0; quit = 1; } redraw = 0; break;
-            case G_SAVE: if (put_in_place(1)) { test_until = 0; quit = 1; } redraw = 0; break;
+            case G_USE: if (put_in_place(0, 1)) { test_until = 0; quit = 1; } redraw = 0; break;
+            case G_SAVE: if (put_in_place(1, 1)) { test_until = 0; quit = 1; } redraw = 0; break;
             case G_CANCEL: if (test_until) go_back(); quit = 1; break;
             default: redraw = 0;
             }
@@ -755,7 +772,7 @@ int main(int argc, char **argv)
         if (!write_prefs(&cur, args[5] != 0)) {
             PutStr((STRPTR)"Dock: the settings couldn't be written.\n");
             rc = RETURN_FAIL;
-        } else tell_opendock();
+        } else if (!tell_opendock() && cur.n) start_opendock();
         goto done;
     }
     read_view();

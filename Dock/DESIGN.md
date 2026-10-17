@@ -132,7 +132,14 @@ rounded rectangle tinted to the look, through which the desktop shows.
   Quit.
 - Ctrl-F reads the settings again, which is what Dock sends. Ctrl-C ends
   it. Starting a second OpenDock only tells the first to read its settings
-  again.
+  again, and ends quietly (0.6.6: its port is looked for and added under
+  one Forbid, so two starts at once can't both run).
+- **Started when it has settings** (0.6.6, Dale, 17 Oct 2026): the ROM
+  carries OpenDock in ROM:C, and OpenBench starts it by name at
+  Workbench's start only when `ENV:OpenDock/Dock` is there; a newer
+  `C:OpenDock` wins by its `$VER`. With no settings file nothing shows.
+  OpenUp no longer puts `Run >NIL: C:OpenDock` in User-Startup; an old
+  line does no harm (the second start ends).
 - **It sits just above the backdrop** (0.2): every other window, Workbench's
   drawers too, goes over it, and clicking it never brings it in front. It is
   on the Workbench screen only.
@@ -244,7 +251,8 @@ ToolManager 2 file is the first thing to try on an instance.
 Since 10 October 2026 every editor of ours in SYS:Prefs is named Open... (OpenLook, OpenDock, OpenSound, OpenDateTime, OpenInput, OpenSerial, OpenGamepads, OpenTypes, OpenTata, OpenUp-Setup); the OS's own editors we replace go to SYS:Prefs/Classic. The user: "the preferences need consistent naming: either all are Open x or none are".
 
 A GadTools prefs editor like the others: Save, Use, Test (15 seconds),
-Cancel, and Ctrl-F to the `OpenDock` port.
+Cancel, and Ctrl-F to the `OpenDock` port. Save and Use (and `SAVE` or
+`USE` from the Shell) start the dock by name when it isn't running (0.5.3).
 
 - **Simple** view: the buttons in order (Up, Down, Remove, add a Line),
   place, size, names under the icons, the shelf (Solid, Clear, Glass)

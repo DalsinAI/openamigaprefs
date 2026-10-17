@@ -148,7 +148,9 @@ static void load_input(const char *path)
     else if (file_data && file_len >= 12 && !memcmp(file_data, "FORM", 4) && !memcmp(file_data + 8, "PREF", 4) &&
              (c = chunk(file_data, file_len, "INPT", &n)) && n >= INPT_SIZE) {
         memcpy(&ip, c, INPT_SIZE);               /* the OS editor's file: ICTL's other fields keep their defaults */
-        strncpy(ip.ip_KeymapName, ip.ip_Keymap, sizeof ip.ip_Keymap);
+        /* ip_Keymap (16) may fill its field with no 0: at most 15 of it, then a 0 (gcc 16 -Os) */
+        memcpy(ip.ip_KeymapName, ip.ip_Keymap, sizeof ip.ip_Keymap - 1);
+        ip.ip_KeymapName[sizeof ip.ip_Keymap - 1] = 0;
     }
     memcpy(oiac, oiac_defaults, sizeof oiac);
     had_oiac = 0;
