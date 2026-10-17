@@ -3,14 +3,14 @@
 # (m68k-amigaos-gcc, NDK 3.2, AHI's includes).
 #   Sound/build.sh [OUT_DIR]     (default build/os3)
 # MIT, Copyright (c) 2026 AmigaChrome Team.
-# CPU= and OPT= change -m68020 and -O2 (the ROM's build: CPU=-m68040 OPT=-Os).
+# CPU= and OPT= change -m68040 and -O2 (the ROM's build: OPT=-Os).
 set -eu
 HERE=$(cd "$(dirname "$0")" && pwd)
 STOVE=${STOVE:-$HOME/AmigaChrome/stoves/os32}
 CC="$STOVE/prefix/bin/m68k-amigaos-gcc"
 OGT=${OGT:-$HERE/../../opengadtools}      # a checkout of DalsinAI/opengadtools: its theme reader (lib/ogt_theme.c)
 OUT=${1:-$HERE/build/os3}
-CFLAGS="-noixemul ${CPU:--m68020} -std=gnu99 -Wall -Werror ${OPT:--O2} -fno-delete-null-pointer-checks -fno-common -I$HERE/src -I$HERE/../Common -I$OGT/lib"
+CFLAGS="-noixemul ${CPU:--m68040} -std=gnu99 -Wall -Werror ${OPT:--O2} -fno-delete-null-pointer-checks -fno-common -I$HERE/src -I$HERE/../Common -I$OGT/lib"
 mkdir -p "$OUT"
 S="$HERE/src"
 "$CC" $CFLAGS -o "$OUT/Sound" "$S/sound.c" "$S/sp_core.c" "$S/sp_amiga.c" "$S/sp_test.c"
