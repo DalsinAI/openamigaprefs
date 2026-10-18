@@ -38,6 +38,20 @@
  *                 pointer) can't be read back, so it would come back as the
  *                 default one
  *
+ *   gestures      (0.9, the action filter: docs/design/action-filter.md) every
+ *                 left press goes through one table (ENV:OpenPrefs/Gestures,
+ *                 built in when there is none): where it was (title bar,
+ *                 inside a window, a border gadget, an edge, the backdrop),
+ *                 the qualifiers, and what the hand did (a click with no
+ *                 move, a double-click, a press and a move past 4 pixels)
+ *                 give the actions, decided once. A press OpenWindows does
+ *                 not take goes on to Intuition at once, so a drag starts
+ *                 on the first move; a click fronts the window at its
+ *                 release, never at the press; the release ends a drag at
+ *                 its own place. With OpenIntuition (which drags windows
+ *                 with their contents itself) drag.solid leaves the drag to
+ *                 Intuition; OpenWindows' own solid drag is for the others
+ *
  * Settings: ENV:OpenPrefs/Windows (OpenPrefs Windows writes it, then sends
  * Ctrl-F to the task of the public port "OpenWindows" to read it again). Places: ENV:OpenPrefs/WindowPlaces,
  * kept in ENVARC: too. Exchange can disable, enable or quit it.
@@ -72,8 +86,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include "../../Common/cogplace.h"
+#include "gestures.h"
 
-static const char version[] __attribute__((used)) = "$VER: OpenWindows 0.8.6 (17.10.2026) MIT, Copyright (c) 2026 AmigaChrome Team";
+static const char version[] __attribute__((used)) = "$VER: OpenWindows 0.9 (18.10.2026) MIT, Copyright (c) 2026 AmigaChrome Team";
 
 #define PREFS_ENV "ENV:OpenPrefs/Windows"
 #define PLACES_ENV "ENV:OpenPrefs/WindowPlaces"
@@ -154,6 +169,41 @@ static void read_prefs(void)
     FreeVec(text);
 }
 
+/* ---- the action filter's table (0.9; gestures.h, docs/design/action-filter.md) ---------- */
+
+#define GESTURES_ENV "ENV:OpenPrefs/Gestures"
+static struct gesture_table gtab;               /* the handler reads it; changed under Forbid */
+static int intuition_drags;                     /* Intuition drags windows with their contents itself (OpenIntuition) */
+
+/* The built-in table from the settings, or ENV:OpenPrefs/Gestures in its place
+ * when there is one that reads (a line it can't read: the built-in one, and why). */
+static void read_gestures(void)
+{
+    static struct gesture_table t;
+    char *text = read_file(GESTURES_ENV);
+    gestures_default(&t, cfg.dblfront, cfg.edges, cfg.snap);
+    if (text) {
+        int n = gestures_parse(&t, text);
+        if (n < 0) {
+            char msg[96];
+            snprintf(msg, sizeof msg, "OpenWindows: " GESTURES_ENV " line %d can't be read; the built-in table is used\n", -n);
+            PutStr((STRPTR)msg);
+        }
+        FreeVec(text);
+    }
+    Forbid();
+    gtab = t;
+    Permit();
+}
+
+static void read_settings(void)
+{
+    const char *id = (const char *)IntuitionBase->LibNode.lib_IdString;
+    read_prefs();
+    read_gestures();
+    intuition_drags = id && strstr(id, "OpenIntuition") != NULL;
+}
+
 /* ---- taller title bars (0.8.2) ---------------------------------------------------
  *
  * Intuition gives a window's title bar scr->WBorTop + the screen font's height + 1 rows,
@@ -193,17 +243,35 @@ static void taller_off(void)
 static struct Task *me;
 static struct cogplace cog;                      /* 0.8.1: the cog's request, public by name (cogplace.h) */
 static ULONG sig_button, sig_wheel;
-static volatile int ev_down, ev_up;             /* left button down / up seen */
-static volatile WORD down_x, down_y, up_x, up_y; /* the pointer, screen relative, at that moment */
 #define WHEEL_RING 16
 static struct InputEvent wheel_ring[WHEEL_RING];
 static volatile int wheel_in, wheel_out;
 static volatile int pass_wheel;                 /* events we put back: let them through */
 static volatile int on = 1;
-/* left button presses for the double-click: when and where, from input.device's task */
-#define CLICK_RING 8
-static struct click { ULONG secs, micro; WORD x, y; struct Screen *s; } click_ring[CLICK_RING];
-static volatile int click_in, click_out;
+
+/* The action filter (0.9). The press being watched, the handler's own: where
+ * it was and on what, whether OpenWindows took it, where the pointer is now
+ * and whether it has gone past the threshold. At the release the gesture is
+ * decided and its actions go to the main task through the done ring. */
+static struct {
+    int on, target, take, moved;
+    struct Window *w;
+    struct Screen *s;
+    WORD x0, y0, x, y;
+    WORD l, t, wd, ht;                          /* the window's box at the press */
+    ULONG secs, micro;
+    unsigned qual;
+} press;
+/* the last click, for a double-click: a second click on the same thing, close in place and time */
+static struct { struct Window *w; int target; WORD x, y; ULONG secs, micro; } last_click;
+#define DONE_RING 8
+static struct done {
+    struct Window *w;
+    struct Screen *s;
+    UBYTE kind, target, actions, pad;
+    WORD x0, y0, x, y, l, t, wd, ht;
+} done_ring[DONE_RING];
+static volatile int done_in, done_out;
 
 /* Resizing from an edge (0.5): the handler sees a press on an edge, keeps it
  * from Intuition and tells the main task, which resizes the window with
@@ -226,8 +294,15 @@ static ULONG sig_hover;                         /* 0.8.4: the grip under the poi
 static struct Window *volatile hover_win;       /* the active window whose grip the pointer is over, or NULL */
 static volatile int hover_edges;
 static struct Window *volatile grab_win;        /* the window being resized, set by the handler */
-static volatile int grab_edges, grab_on, grab_end;
+static volatile int grab_edges, grab_on;
 static volatile WORD grab_x0, grab_y0;          /* the pointer at the press, screen relative */
+/* 0.9: the pointer as the handler saw it with the drag's latest event, and at
+ * the release: the main task follows these, not the screen's MouseX, which by
+ * the time it runs may hold moves made after the release (W66: the drag went
+ * on past the release by what the hand did after it) */
+static volatile WORD grab_px, grab_py, grab_ex, grab_ey;
+static volatile ULONG grab_gen;                 /* up by one for each press taken: a new press is never lost to the end of the last */
+static volatile ULONG grab_end_gen;             /* the press whose release came (its place: grab_ex, grab_ey) */
 static volatile ULONG grab_last;                /* the time stamp (seconds) of the drag's latest event, from the handler */
 
 /* The window whose edge (x, y) is on, and which edges, or NULL. The screen's
@@ -292,25 +367,27 @@ static struct Window *edge_at(struct Screen *s, WORD x, WORD y, int *edges)
     return found;
 }
 
-/* 0.8: the window whose drag bar (x, y) is on, for dragging it solid, or NULL. Read as edge_at reads: the
- * layers front to back under their lock (AttemptSemaphore: never waiting in the input task), the frontmost
- * window under the point; then its title bar, on its drag gadget and on no other gadget. */
-static struct Window *drag_bar_at(struct Screen *s, WORD x, WORD y)
+/* 0.9: what a press at (x, y) is on, for the gesture table: the frontmost layer there (read as edge_at reads,
+ * under the layers' lock, AttemptSemaphore: the input task never waits), its window, and which part of it:
+ * the drag bar (the title bar's drag gadget and no other gadget), a gadget of the border (close, depth, zoom,
+ * size), inside it (GT_BODY), a backdrop window, or the screen's bar. -1 when the layers are busy. */
+static int target_at(struct Screen *s, WORD x, WORD y, struct Window **wp)
 {
     struct Layer *l;
-    struct Window *found = NULL;
+    int t = GT_BACKDROP;                                    /* nothing there: the screen itself */
+    *wp = NULL;
     if (!AttemptSemaphore(&s->LayerInfo.Lock))
-        return NULL;
+        return -1;
     for (l = s->LayerInfo.top_layer; l; l = l->back) {
         struct Window *w = (struct Window *)l->Window;
         if (x < l->bounds.MinX || x > l->bounds.MaxX || y < l->bounds.MinY || y > l->bounds.MaxY) continue;
-        if (!w || l == s->BarLayer) break;                  /* the screen's title bar, a menu */
-        if (!(w->Flags & WFLG_DRAGBAR) || (w->Flags & WFLG_BACKDROP)) break;
+        if (!w || l == s->BarLayer) { t = GT_SCREENBAR; break; }   /* the screen's title bar, a menu */
+        *wp = w;
+        if (w->Flags & WFLG_BACKDROP) { t = GT_BACKDROP; break; }
         {
             WORD wx = x - w->LeftEdge, wy = y - w->TopEdge;
             struct Gadget *g;
-            int drag = 0, other = 0;
-            if (wy < 0 || wy >= w->BorderTop) break;          /* not its title bar */
+            int drag = 0, border = 0, other = 0;
             for (g = w->FirstGadget; g; g = g->NextGadget) {
                 WORD gl = g->LeftEdge + ((g->Flags & GFLG_RELRIGHT) ? w->Width - 1 : 0);
                 WORD gt = g->TopEdge + ((g->Flags & GFLG_RELBOTTOM) ? w->Height - 1 : 0);
@@ -318,14 +395,16 @@ static struct Window *drag_bar_at(struct Screen *s, WORD x, WORD y)
                 WORD gh = g->Height + ((g->Flags & GFLG_RELHEIGHT) ? w->Height : 0);
                 if (wx < gl || wx >= gl + gw || wy < gt || wy >= gt + gh) continue;
                 if ((g->GadgetType & GTYP_SYSTYPEMASK) == GTYP_WDRAGGING && (g->GadgetType & GTYP_SYSGADGET)) drag = 1;
+                else if (g->GadgetType & GTYP_SYSGADGET) border = 1;
                 else other = 1;
             }
-            if (drag && !other) found = w;
+            t = drag && !border && !other && (w->Flags & WFLG_DRAGBAR) && wy >= 0 && wy < w->BorderTop ? GT_TITLE
+              : border ? GT_GADGET : GT_BODY;
         }
         break;
     }
     ReleaseSemaphore(&s->LayerInfo.Lock);
-    return found;
+    return t;
 }
 
 static int over_active(void)
@@ -339,21 +418,114 @@ static int over_active(void)
     return x >= w->LeftEdge && y >= w->TopEdge && x < w->LeftEdge + w->Width && y < w->TopEdge + w->Height;
 }
 
+/* The action filter (0.9, docs/design/action-filter.md): a left press. What it is on and the table decide, once,
+ * whether OpenWindows takes it (an edge to size, or a title bar to drag where Intuition's drag is an outline) or
+ * it goes on to Intuition at once (Intuition's own drag then starts on the first move; a press is never held
+ * back to see what it becomes). Answers 1 when it took it. */
+static int press_begin(struct InputEvent *ie, struct Screen *s)
+{
+    struct Window *w = NULL;
+    int target, edges = 0, take = 0;
+    unsigned qual = gestures_qual(ie->ie_Qualifier), move;
+    WORD x = s->MouseX, y = s->MouseY;                      /* this handler runs before Intuition: the place of the events before */
+    target = gestures_actions(&gtab, GT_EDGE, GB_SELECT, GK_MOVE, qual, &take) && take ? -2 : -1;
+    if (target == -2 && (w = edge_at(s, x, y, &edges))) target = GT_EDGE;
+    else target = target_at(s, x, y, &w);
+    press.on = 0;
+    if (target < 0) return 0;                               /* the layers busy: Intuition has it, and no gesture */
+    move = gestures_actions(&gtab, target, GB_SELECT, GK_MOVE, qual, &take);
+    if (target == GT_TITLE && (move & GA_DRAG) && cfg.solid && !intuition_drags) take = 1;   /* OpenWindows' own solid drag */
+    if (target != GT_EDGE && target != GT_TITLE) take = 0;  /* only an edge or a title bar is OpenWindows' to drag */
+    press.on = 1; press.target = target; press.take = take; press.moved = 0;
+    press.w = w; press.s = s; press.x0 = press.x = x; press.y0 = press.y = y; press.qual = qual;
+    press.secs = ie->ie_TimeStamp.tv_secs; press.micro = ie->ie_TimeStamp.tv_micro;
+    if (w) { press.l = w->LeftEdge; press.t = w->TopEdge; press.wd = w->Width; press.ht = w->Height; }
+    if (!take || !w) { press.take = 0; return 0; }
+    grab_win = w; grab_edges = target == GT_EDGE ? edges : EDGE_MOVE;
+    grab_x0 = grab_px = grab_ex = x; grab_y0 = grab_py = grab_ey = y;
+    grab_gen++;
+    grab_on = 1; grab_last = ie->ie_TimeStamp.tv_secs;
+    ie->ie_Code = IECODE_NOBUTTON;                          /* Intuition sees a move, not the press */
+    Signal(me, sig_grab);
+    return 1;
+}
+
+/* The pointer moved to (x, y) with the button held: past the threshold, the gesture is a move */
+static void press_moved(WORD x, WORD y)
+{
+    press.x = x; press.y = y;
+    if (!press.moved && gestures_moved(press.x0, press.y0, x, y)) press.moved = 1;
+}
+
+/* The release: the gesture is decided and its actions go to the main task. A click (no move past the threshold)
+ * is a double-click when the last click was on the same thing, close in place, within Input prefs' time. The drag
+ * itself is over already: Intuition ended its own at this event, OpenWindows' ends at this place. */
+static void press_end(struct InputEvent *ie)
+{
+    int kind;
+    unsigned a;
+    if (!press.on) return;
+    press.on = 0;
+    kind = press.moved ? GK_MOVE : GK_CLICK;
+    if (kind == GK_CLICK) {
+        if (last_click.w == press.w && last_click.target == press.target && press.w &&
+            last_click.x - press.x0 <= 4 && press.x0 - last_click.x <= 4 && last_click.y - press.y0 <= 4 && press.y0 - last_click.y <= 4 &&
+            DoubleClick(last_click.secs, last_click.micro, press.secs, press.micro)) {
+            kind = GK_DOUBLE;
+            last_click.w = NULL;                            /* a third click starts again */
+        } else {
+            last_click.w = press.w; last_click.target = press.target; last_click.x = press.x0; last_click.y = press.y0;
+            last_click.secs = press.secs; last_click.micro = press.micro;
+        }
+    } else last_click.w = NULL;
+    a = gestures_actions(&gtab, press.target, GB_SELECT, kind, press.qual, NULL);
+    a &= ~(GA_DRAG | GA_RESIZE);                            /* done as the pointer moved */
+    if (press.take) a &= ~GA_SNAP;                          /* OpenWindows' own drag snaps at its end (resize) */
+    if (!a || !press.w || ((done_in + 1) & (DONE_RING - 1)) == done_out) return;
+    {
+        struct done *d = &done_ring[done_in];
+        d->w = press.w; d->s = press.s; d->kind = (UBYTE)kind; d->target = (UBYTE)press.target; d->actions = (UBYTE)a;
+        d->x0 = press.x0; d->y0 = press.y0; d->x = press.x; d->y = press.y;
+        d->l = press.l; d->t = press.t; d->wd = press.wd; d->ht = press.ht;
+        done_in = (done_in + 1) & (DONE_RING - 1);
+    }
+    (void)ie;
+    Signal(me, sig_button);
+}
+
+/* The place an event puts the pointer at on screen s, when it is a placing (IECLASS_NEWPOINTERPOS, as
+ * AmigaChrome's absolute pointer and tablets send) on that screen: 1 and (x, y) */
+static int placed_at(struct InputEvent *ie, struct Screen *s, WORD *x, WORD *y)
+{
+    if (ie->ie_Class == IECLASS_NEWPOINTERPOS && ie->ie_SubClass == IESUBCLASS_PIXEL && ie->ie_EventAddress) {
+        struct IEPointerPixel *pp = (struct IEPointerPixel *)ie->ie_EventAddress;
+        if (pp->iepp_Screen != s) return 0;
+        *x = pp->iepp_Position.X; *y = pp->iepp_Position.Y;
+        return 1;
+    }
+    return 0;
+}
+
 static void custom(CxMsg *msg, CxObj *co)
 {
     struct InputEvent *ie = (struct InputEvent *)CxMsgData(msg);
     (void)co;
     if (!on) return;
     for (; ie; ie = ie->ie_NextEvent) {
+        struct Screen *s = IntuitionBase->FirstScreen;
+        WORD px, py;
         if (ie->ie_Class == IECLASS_RAWMOUSE) {
-            struct Screen *s = IntuitionBase->FirstScreen;
-            if (grab_on) {                         /* resizing from an edge: the button coming up ends it */
+            WORD mx = s ? s->MouseX + ie->ie_X : 0, my = s ? s->MouseY + ie->ie_Y : 0;   /* a relative mouse's move, near enough */
+            if (grab_on) {                         /* OpenWindows' own drag or edge: the button coming up ends it, here */
+                grab_px = mx; grab_py = my;
                 if (ie->ie_Code == (IECODE_LBUTTON | IECODE_UP_PREFIX)) {
-                    grab_on = 0; grab_end = 1;
+                    grab_ex = mx; grab_ey = my;
+                    grab_on = 0; grab_end_gen = grab_gen;
                     ie->ie_Code = IECODE_NOBUTTON;     /* the pointer's last move still goes on */
-                }
+                    press_end(ie);
+                } else if (press.on && (ie->ie_X || ie->ie_Y)) press_moved(mx, my);
                 grab_last = ie->ie_TimeStamp.tv_secs;
-                Signal(me, sig_grab);              /* the main task reads where the pointer is */
+                Signal(me, sig_grab);              /* the main task follows the place the handler saw */
                 continue;
             }
             if (ie->ie_Code == IECODE_NOBUTTON && cfg.edges && cfg.edge_ptr && s && sig_hover) {
@@ -363,48 +535,21 @@ static void custom(CxMsg *msg, CxObj *co)
                 if (hw != IntuitionBase->ActiveWindow) { hw = NULL; e = 0; }
                 if (hw != hover_win || e != hover_edges) { hover_win = hw; hover_edges = e; Signal(me, sig_hover); }
             }
-            if (ie->ie_Code == IECODE_LBUTTON && (cfg.edges || cfg.solid) && s && !(ie->ie_Qualifier & (IEQUALIFIER_LSHIFT | IEQUALIFIER_RSHIFT |
-                IEQUALIFIER_CONTROL | IEQUALIFIER_LALT | IEQUALIFIER_RALT | IEQUALIFIER_LCOMMAND | IEQUALIFIER_RCOMMAND))) {
-                int edges = 0;
-                struct Window *gw = cfg.edges ? edge_at(s, s->MouseX, s->MouseY, &edges) : NULL;
-                if (!gw && cfg.solid && (gw = drag_bar_at(s, s->MouseX, s->MouseY))) {
-                    edges = EDGE_MOVE;
-                    if (cfg.dblfront && ((click_in + 1) & (CLICK_RING - 1)) != click_out) {   /* a double-click still counts */
-                        struct click *c = &click_ring[click_in];
-                        c->secs = ie->ie_TimeStamp.tv_secs; c->micro = ie->ie_TimeStamp.tv_micro;
-                        c->x = s->MouseX; c->y = s->MouseY; c->s = s;
-                        click_in = (click_in + 1) & (CLICK_RING - 1);
-                        Signal(me, sig_button);
-                    }
-                }
-                if (gw) {
-                    grab_win = gw; grab_edges = edges; grab_x0 = s->MouseX; grab_y0 = s->MouseY;
-                    grab_end = 0; grab_on = 1; grab_last = ie->ie_TimeStamp.tv_secs;
-                    ie->ie_Code = IECODE_NOBUTTON;     /* Intuition sees a move, not the press */
-                    Signal(me, sig_grab);
-                    continue;
-                }
-            }
-            if (ie->ie_Code == IECODE_LBUTTON) {
-                ev_down = 1; down_x = s ? s->MouseX : 0; down_y = s ? s->MouseY : 0;
-                if (cfg.dblfront && s && ((click_in + 1) & (CLICK_RING - 1)) != click_out) {
-                    struct click *c = &click_ring[click_in];
-                    c->secs = ie->ie_TimeStamp.tv_secs; c->micro = ie->ie_TimeStamp.tv_micro;
-                    c->x = s->MouseX; c->y = s->MouseY; c->s = s;
-                    click_in = (click_in + 1) & (CLICK_RING - 1);
-                }
-                Signal(me, sig_button);
+            if (ie->ie_Code == IECODE_LBUTTON && s) {
+                if (press_begin(ie, s)) continue;
             } else if (ie->ie_Code == (IECODE_LBUTTON | IECODE_UP_PREFIX)) {
-                ev_up = 1; up_x = s ? s->MouseX : 0; up_y = s ? s->MouseY : 0;
-                Signal(me, sig_button);
+                press_end(ie);
+            } else if (press.on && (ie->ie_X || ie->ie_Y)) press_moved(mx, my);
+        } else if ((ie->ie_Class == IECLASS_POINTERPOS || ie->ie_Class == IECLASS_NEWPOINTERPOS) && s) {
+            /* a pointer put somewhere (not a mouse counting): the drag follows it too. 0.8.6: AmigaChrome's absolute
+             * pointer comes through the open input.device as IECLASS_NEWPOINTERPOS (IESUBCLASS_PIXEL), one a move */
+            if (!placed_at(ie, s, &px, &py)) { px = s->MouseX; py = s->MouseY; }
+            if (press.on) press_moved(px, py);
+            if (grab_on) {
+                grab_px = px; grab_py = py;
+                grab_last = ie->ie_TimeStamp.tv_secs;
+                Signal(me, sig_grab);
             }
-        } else if (grab_on && (ie->ie_Class == IECLASS_POINTERPOS || ie->ie_Class == IECLASS_NEWPOINTERPOS)) {
-            /* a pointer put somewhere (not a mouse counting): it moves the window or the outline too. 0.8.6:
-             * AmigaChrome's absolute pointer comes through the open input.device as IECLASS_NEWPOINTERPOS
-             * (IESUBCLASS_PIXEL), one a move; tablets send the same class; a drag that only woke on IECLASS_POINTERPOS stood still until the button came up (lab
-             * t5-events, W53: DragTest ABS, LeftEdge changed once in 40 moves; RAWMOUSE moves, 39 times) */
-            grab_last = ie->ie_TimeStamp.tv_secs;
-            Signal(me, sig_grab);
         } else if (cfg.wheel && (ie->ie_Class == IECLASS_RAWKEY || ie->ie_Class == IECLASS_NEWMOUSE_) &&
                    (ie->ie_Code & 0x7F) >= RAWKEY_WHEEL_UP && (ie->ie_Code & 0x7F) <= RAWKEY_WHEEL_RIGHT) {
             if (pass_wheel) { pass_wheel--; continue; }
@@ -509,39 +654,7 @@ static void halves(struct Window *w, WORD px)
     ChangeWindowBox(w, px <= 1 ? 0 : s->Width - half, top, half, s->Height - top);
 }
 
-static struct Window *drag_win;
-static WORD drag_l, drag_t, drag_w, drag_h;
-
-/* ---- double-click in a title bar --------------------------------------------------------------- */
-
-/* A gadget's box in the window, with its GFLG_REL* flags worked out. */
-static int in_gadget(struct Window *w, struct Gadget *g, WORD x, WORD y)
-{
-    WORD l = g->LeftEdge + ((g->Flags & GFLG_RELRIGHT) ? w->Width - 1 : 0);
-    WORD t = g->TopEdge + ((g->Flags & GFLG_RELBOTTOM) ? w->Height - 1 : 0);
-    WORD wd = g->Width + ((g->Flags & GFLG_RELWIDTH) ? w->Width : 0);
-    WORD ht = g->Height + ((g->Flags & GFLG_RELHEIGHT) ? w->Height : 0);
-    return x >= l && x < l + wd && y >= t && y < t + ht;
-}
-
-/* 1 when (x, y), screen relative, is on w's drag bar: in its title bar, on the
- * drag gadget, and on no other gadget (close, depth, zoom, a program's own) */
-static int on_drag_bar(struct Window *w, WORD x, WORD y)
-{
-    struct Gadget *g;
-    int drag = 0, other = 0;
-    ULONG lock;
-    x -= w->LeftEdge; y -= w->TopEdge;
-    if (!(w->Flags & WFLG_DRAGBAR) || x < 0 || x >= w->Width || y < 0 || y >= w->BorderTop) return 0;
-    lock = LockIBase(0);
-    for (g = w->FirstGadget; g; g = g->NextGadget) {
-        if (!in_gadget(w, g, x, y)) continue;
-        if ((g->GadgetType & GTYP_SYSTYPEMASK) == GTYP_WDRAGGING && (g->GadgetType & GTYP_SYSGADGET)) drag = 1;
-        else other = 1;
-    }
-    UnlockIBase(lock);
-    return drag && !other;
-}
+/* ---- the gestures' actions (0.9, the main task) ------------------------------------------------- */
 
 /* 1 when no other window's layer in front of w overlaps it */
 static int in_front(struct Window *w)
@@ -559,53 +672,28 @@ static int in_front(struct Window *w)
     return !covered;
 }
 
-static struct click last_click;
-static struct Window *last_click_win;
-
-/* The presses the handler saw: two on the same window's drag bar, close in place and within
- * the double-click time of Input prefs, bring it to the front. The presses go on to Intuition
- * as they are (a drag, the window made active); this only acts after them. */
-static void clicks(void)
+/* What the handler decided at each release, in order: the window to the front or the back, made
+ * active, or lined up with an edge after a drag. Intuition has ended its drag before this runs (the
+ * input task, at priority 20, takes the release through every handler first); a Intuition that
+ * moves a dragged window at the next event (OS 3.2's) gets a frame for it before a snap. */
+static void gestures_done(void)
 {
-    while (click_out != click_in) {
-        struct click c = click_ring[click_out];
-        struct Window *w;
-        click_out = (click_out + 1) & (CLICK_RING - 1);
-        if (!on || !cfg.dblfront) { last_click_win = NULL; continue; }
-        w = c.s == IntuitionBase->FirstScreen ? window_at(c.s, c.x, c.y) : NULL;
-        if (w && !is_window(w)) w = NULL;
-        if (w && ((w->Flags & WFLG_BACKDROP) || !on_drag_bar(w, c.x, c.y))) w = NULL;
-        if (w && w == last_click_win && c.s == last_click.s &&
-            c.x - last_click.x <= 4 && last_click.x - c.x <= 4 && c.y - last_click.y <= 4 && last_click.y - c.y <= 4 &&
-            DoubleClick(last_click.secs, last_click.micro, c.secs, c.micro)) {
-            if (!in_front(w)) WindowToFront(w);
-            last_click_win = NULL;                 /* a third click starts again */
-            continue;
+    while (done_out != done_in) {
+        struct done d = done_ring[done_out];
+        struct Window *w = d.w;
+        done_out = (done_out + 1) & (DONE_RING - 1);
+        if (!on || !w || !is_window(w)) continue;
+        if ((d.actions & GA_SNAP) && d.kind == GK_MOVE) {
+            if (!intuition_drags) Delay(1);
+            if (is_window(w) && w->Width == d.wd && w->Height == d.ht && (w->LeftEdge != d.l || w->TopEdge != d.t)) {
+                if (cfg.halves && (d.x <= 1 || d.x >= w->WScreen->Width - 2)) halves(w, d.x);
+                else snap(w);
+            }
         }
-        last_click = c;
-        last_click_win = w;
-    }
-}
-
-static void buttons(void)
-{
-    if (ev_down) {
-        ev_down = 0;
-        Delay(2);                                  /* the click has made its window active */
-        drag_win = IntuitionBase->ActiveWindow;
-        if (drag_win) { drag_l = drag_win->LeftEdge; drag_t = drag_win->TopEdge; drag_w = drag_win->Width; drag_h = drag_win->Height; }
-    }
-    if (ev_up) {
-        struct Window *w = drag_win;
-        ev_up = 0;
-        drag_win = NULL;
-        if (!w || !cfg.snap) return;
-        Delay(3);                                  /* the drag has ended and the window is in place */
-        if (!is_window(w) || w != IntuitionBase->ActiveWindow) return;
-        if (w->Width != drag_w || w->Height != drag_h) return;                 /* a resize, not a move */
-        if (w->LeftEdge == drag_l && w->TopEdge == drag_t) return;            /* not moved */
-        if (cfg.halves && (up_x <= 1 || up_x >= w->WScreen->Width - 2)) halves(w, up_x);
-        else snap(w);
+        if (!is_window(w)) continue;
+        if ((d.actions & GA_ACTIVATE) && w != IntuitionBase->ActiveWindow) ActivateWindow(w);
+        if ((d.actions & GA_FRONT) && !in_front(w)) WindowToFront(w);
+        if (d.actions & GA_BACK) WindowToBack(w);
     }
 }
 
@@ -682,6 +770,7 @@ static void pointers_off(void)
 }
 
 static struct Window *rs_win;                   /* the window the main task is resizing */
+static ULONG rs_gen, rs_gen_done;               /* its press (grab_gen), and the last press done with */
 static int rs_edges, rs_ptr;
 static WORD rs_l, rs_t, rs_w, rs_h, rs_x0, rs_y0;
 static ULONG rs_start;                          /* when the press came (seconds), for the time limit */
@@ -778,7 +867,8 @@ static void resize_watch(void)
     if (!rs_win || !grab_on) return;
     CurrentTime(&secs, &micro);
     if (secs - rs_start > DRAG_MAX_SECS || (secs - grab_last > DRAG_IDLE_SECS && grab_last <= secs)) {
-        grab_on = 0; grab_end = 0; grab_win = NULL;
+        Forbid(); if (grab_gen == rs_gen) grab_on = 0; Permit();
+        rs_gen_done = rs_gen;
         resize_end();
     }
 }
@@ -810,71 +900,88 @@ static void hover(void)
 
 static void resize(void)
 {
-    struct Window *w;
-    struct Screen *s;
-    WORD dx, dy, l, t, wd, ht, maxw, maxh;
-    if (!rs_win && grab_win) {                  /* a new press on an edge */
-        w = grab_win;
-        if (!is_window(w)) { grab_win = NULL; grab_on = 0; grab_end = 0; return; }
-        rs_win = w; rs_edges = grab_edges; rs_x0 = grab_x0; rs_y0 = grab_y0;
-        rs_l = w->LeftEdge; rs_t = w->TopEdge; rs_w = w->Width; rs_h = w->Height;
-        { ULONG micro; CurrentTime(&rs_start, &micro); }
-        if (w != IntuitionBase->ActiveWindow) ActivateWindow(w);
-        if (rs_edges & EDGE_MOVE) drag_look(w, 1);
-        if (!(rs_edges & EDGE_MOVE)) {          /* a solid move keeps the window's own pointer */
-            int k = !(rs_edges & EDGE_B) ? PTR_H : (rs_edges & EDGE_R) ? PTR_D1 : (rs_edges & EDGE_L) ? PTR_D2 : PTR_V;
-            /* only when asked for: the window's own pointer can't be read, so
-             * the end of the drag gives it the default one */
-            if (cfg.edge_ptr && ptr_obj[k]) { SetWindowPointer(w, WA_Pointer, (ULONG)ptr_obj[k], TAG_DONE); rs_ptr = 1; }
+    for (;;) {
+        struct Window *w, *gw;
+        struct Screen *s;
+        WORD dx, dy, l, t, wd, ht, maxw, maxh, px, py, ex, ey, gx0, gy0;
+        ULONG gen, endgen;
+        int gedges, ended;
+        /* what the handler has, in one piece (it runs in input.device's task: Forbid keeps it out) */
+        Forbid();
+        gen = grab_gen; endgen = grab_end_gen; gw = grab_win; gedges = grab_edges; gx0 = grab_x0; gy0 = grab_y0;
+        px = grab_px; py = grab_py; ex = grab_ex; ey = grab_ey;
+        Permit();
+        if (!rs_win) {                              /* a new press on an edge, or a title bar to drag */
+            if (!gw || gen == rs_gen_done) return;
+            w = gw;
+            rs_gen = gen;
+            if (!is_window(w)) { rs_gen_done = gen; Forbid(); if (grab_gen == gen) grab_on = 0; Permit(); return; }
+            rs_win = w; rs_edges = gedges; rs_x0 = gx0; rs_y0 = gy0;
+            rs_l = w->LeftEdge; rs_t = w->TopEdge; rs_w = w->Width; rs_h = w->Height;
+            { ULONG micro; CurrentTime(&rs_start, &micro); }
+            if (w != IntuitionBase->ActiveWindow) ActivateWindow(w);
+            if (rs_edges & EDGE_MOVE) drag_look(w, 1);
+            if (!(rs_edges & EDGE_MOVE)) {          /* a solid move keeps the window's own pointer */
+                int k = !(rs_edges & EDGE_B) ? PTR_H : (rs_edges & EDGE_R) ? PTR_D1 : (rs_edges & EDGE_L) ? PTR_D2 : PTR_V;
+                /* only when asked for: the window's own pointer can't be read, so
+                 * the end of the drag gives it the default one */
+                if (cfg.edge_ptr && ptr_obj[k]) { SetWindowPointer(w, WA_Pointer, (ULONG)ptr_obj[k], TAG_DONE); rs_ptr = 1; }
+            }
         }
-    }
-    if (!(w = rs_win)) return;
-    if (!is_window(w)) { ol_on = 0; rs_win = NULL; rs_ptr = 0; grab_win = NULL; grab_on = 0; grab_end = 0; return; }
-    s = w->WScreen;
-    dx = s->MouseX - rs_x0;
-    dy = s->MouseY - rs_y0;
-    if (rs_edges & EDGE_MOVE) {                 /* 0.8: the window itself follows the pointer, contents and all */
-        l = rs_l + dx; t = rs_t + dy;
-        if (l < 0) l = 0;
-        if (t < 0) t = 0;
-        if (l + w->Width > s->Width) l = s->Width - w->Width;
-        if (t + w->Height > s->Height) t = s->Height - w->Height;
-        if (l != w->LeftEdge || t != w->TopEdge) MoveWindow(w, l - w->LeftEdge, t - w->TopEdge);
-        if (grab_end) {
-            WORD px = s->MouseX;
-            grab_end = 0;
-            grab_win = NULL;
+        w = rs_win;
+        if (!is_window(w)) {
+            ol_on = 0; rs_win = NULL; rs_ptr = 0; rs_gen_done = rs_gen;
+            Forbid(); if (grab_gen == rs_gen) grab_on = 0; Permit();
+            continue;
+        }
+        /* 0.9: the place the handler saw with the drag's last event, or at its release: never one made after it */
+        ended = endgen == rs_gen || gen != rs_gen;
+        if (endgen == rs_gen) { px = ex; py = ey; }
+        s = w->WScreen;
+        dx = px - rs_x0;
+        dy = py - rs_y0;
+        if (rs_edges & EDGE_MOVE) {                 /* 0.8: the window itself follows the pointer, contents and all */
+            l = rs_l + dx; t = rs_t + dy;
+            if (l < 0) l = 0;
+            if (t < 0) t = 0;
+            if (l + w->Width > s->Width) l = s->Width - w->Width;
+            if (t + w->Height > s->Height) t = s->Height - w->Height;
+            if (l != w->LeftEdge || t != w->TopEdge) MoveWindow(w, l - w->LeftEdge, t - w->TopEdge);
+            if (ended) {
+                rs_gen_done = rs_gen;
+                resize_end();
+                if (cfg.halves && (px <= 1 || px >= s->Width - 2)) halves(w, px);
+                else if (cfg.snap) { Delay(1); if (is_window(w)) snap(w); }   /* after the last move has been done */
+                continue;                           /* a press that came after the release: its drag now */
+            }
+            return;
+        }
+        l = rs_l; t = rs_t; wd = rs_w; ht = rs_h;
+        maxw = w->MaxWidth == 0 || w->MaxWidth > (UWORD)s->Width ? s->Width : (WORD)w->MaxWidth;
+        maxh = w->MaxHeight == 0 || w->MaxHeight > (UWORD)s->Height ? s->Height : (WORD)w->MaxHeight;
+        if (rs_edges & EDGE_R) wd += dx;
+        if (rs_edges & EDGE_L) wd -= dx;
+        if (rs_edges & EDGE_B) ht += dy;
+        if (wd < w->MinWidth) wd = w->MinWidth;
+        if (wd > maxw) wd = maxw;
+        if (ht < w->MinHeight) ht = w->MinHeight;
+        if (ht > maxh) ht = maxh;
+        if (rs_edges & EDGE_L) l = rs_l + rs_w - wd;          /* the right edge stays where it was */
+        if (l < 0) { wd += l; l = 0; }
+        if (l + wd > s->Width) wd = s->Width - l;
+        if (t + ht > s->Height) ht = s->Height - t;
+        if (wd < w->MinWidth || ht < w->MinHeight) { wd = w->Width; ht = w->Height; l = w->LeftEdge; }   /* nothing sensible: no change */
+        if (ended) {
+            rs_gen_done = rs_gen;
+            ol_clear();                                          /* the outline goes first, then the one size */
+            if (wd != w->Width || ht != w->Height || l != w->LeftEdge)
+                ChangeWindowBox(w, l, t, wd, ht);
             resize_end();
-            if (cfg.halves && (px <= 1 || px >= s->Width - 2)) halves(w, px);
-            else if (cfg.snap) { Delay(1); if (is_window(w)) snap(w); }   /* after the last move has been done */
+            continue;
         }
+        ol_show(s, l, t, wd, ht);
         return;
     }
-    l = rs_l; t = rs_t; wd = rs_w; ht = rs_h;
-    maxw = w->MaxWidth == 0 || w->MaxWidth > (UWORD)s->Width ? s->Width : (WORD)w->MaxWidth;
-    maxh = w->MaxHeight == 0 || w->MaxHeight > (UWORD)s->Height ? s->Height : (WORD)w->MaxHeight;
-    if (rs_edges & EDGE_R) wd += dx;
-    if (rs_edges & EDGE_L) wd -= dx;
-    if (rs_edges & EDGE_B) ht += dy;
-    if (wd < w->MinWidth) wd = w->MinWidth;
-    if (wd > maxw) wd = maxw;
-    if (ht < w->MinHeight) ht = w->MinHeight;
-    if (ht > maxh) ht = maxh;
-    if (rs_edges & EDGE_L) l = rs_l + rs_w - wd;          /* the right edge stays where it was */
-    if (l < 0) { wd += l; l = 0; }
-    if (l + wd > s->Width) wd = s->Width - l;
-    if (t + ht > s->Height) ht = s->Height - t;
-    if (wd < w->MinWidth || ht < w->MinHeight) { wd = w->Width; ht = w->Height; l = w->LeftEdge; }   /* nothing sensible: no change */
-    if (grab_end) {
-        grab_end = 0;
-        grab_win = NULL;
-        ol_clear();                                          /* the outline goes first, then the one size */
-        if (wd != w->Width || ht != w->Height || l != w->LeftEdge)
-            ChangeWindowBox(w, l, t, wd, ht);
-        resize_end();
-        return;
-    }
-    ol_show(s, l, t, wd, ht);
 }
 
 /* A window Amiga+Tab offers: not a backdrop, not tiny, and not Workbench's
@@ -1489,7 +1596,7 @@ int main(void)
     port->mp_Node.ln_Pri = 0;
     AddPort(port);
     InitSemaphore(&places_sem);
-    read_prefs();
+    read_settings();
     read_places();
     taller_on();                                       /* 0.8.2: taller title bars from here on */
     places_patch_on();                                 /* 0.8.1: always: the cog's placing goes through it too */
@@ -1511,13 +1618,13 @@ int main(void)
         CxMsg *m;
         if (got & SIGBREAKF_CTRL_C) quit = 1;
         if (got & SIGBREAKF_CTRL_F) {
-            read_prefs(); hotkeys(port); taller_on();
+            read_settings(); hotkeys(port); taller_on();
             places_patch_on();                   /* 0.8.1: always on: the kept places follow cfg.places inside it */
         }
         if (got & sig_wheel) wheel();
         if (got & sig_grab) resize();
         if (got & sig_hover) hover();
-        if (got & sig_button) { clicks(); buttons(); }
+        if (got & sig_button) gestures_done();
         while ((m = (CxMsg *)GetMsg(port))) {
             ULONG type = CxMsgType(m), id = CxMsgID(m);
             ReplyMsg((struct Message *)m);
@@ -1529,7 +1636,7 @@ int main(void)
                 case CXCMD_ENABLE: ActivateCxObj(broker, 1); on = 1; break;
                 case CXCMD_KILL: quit = 1; break;
                 case CXCMD_UNIQUE:                    /* started again: read the settings again, stay */
-                    read_prefs(); hotkeys(port); taller_on();
+                    read_settings(); hotkeys(port); taller_on();
                     places_patch_on();               /* 0.8.1: always on */
                     break;
                 }
