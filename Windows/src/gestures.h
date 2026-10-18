@@ -62,6 +62,26 @@ unsigned gestures_qual(unsigned ie_qualifier);
 unsigned gestures_actions(const struct gesture_table *t, int target, int button, int kind, unsigned qual, int *take);
 /* 1 when the pointer has gone past the threshold from where the press was */
 int gestures_moved(int x0, int y0, int x, int y);
+
+/* 0.9.1 (W67, Dale 18 October: "window jumps forward and menu winds up behind",
+ * "open files ... wont close"): what a press inside a window is on. A gadget of
+ * the program's own (a scroller, a button, OpenFiles' toolbar), a border gadget,
+ * or anything in a window with a requester up is GT_GADGET: its press is the
+ * gadget's and nothing of ours follows it. The title bar is the drag bar with
+ * no other gadget there. */
+struct gesture_hit {
+    unsigned char drag_bar;                 /* the drag bar's system gadget is under it */
+    unsigned char in_title;                 /* inside the title bar's height, the window has a drag bar */
+    unsigned char border_gadget;            /* close, depth, zoom, size */
+    unsigned char own_gadget;               /* a gadget of the program's own (not disabled) */
+    unsigned char requester;                /* the window has a requester up */
+};
+int gestures_target(const struct gesture_hit *h);
+/* 0.9.1: a click's actions at its release, less to the front when that would
+ * cover what the press itself brought up: the menu button came while it was
+ * held, or another window came in front between the press and now (the
+ * popup, the requester or the drawer the press opened). */
+unsigned gestures_release(unsigned actions, int menu, int front_changed);
 /* A row as text, for the doc and the tests: "title select none move drag,snap pass" */
 void gestures_row_text(const struct gesture_row *r, char *out, int size);
 

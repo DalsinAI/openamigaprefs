@@ -88,7 +88,7 @@
 #include "../../Common/cogplace.h"
 #include "gestures.h"
 
-static const char version[] __attribute__((used)) = "$VER: OpenWindows 0.9 (18.10.2026) MIT, Copyright (c) 2026 AmigaChrome Team";
+static const char version[] __attribute__((used)) = "$VER: OpenWindows 0.9.1 (18.10.2026) MIT, Copyright (c) 2026 AmigaChrome Team";
 
 #define PREFS_ENV "ENV:OpenPrefs/Windows"
 #define PLACES_ENV "ENV:OpenPrefs/WindowPlaces"
@@ -255,8 +255,10 @@ static volatile int on = 1;
  * decided and its actions go to the main task through the done ring. */
 static struct {
     int on, target, take, moved;
+    int menu;                                   /* 0.9.1: the menu button came while it was held */
     struct Window *w;
     struct Screen *s;
+    struct Layer *top;                          /* 0.9.1: the screen's front layer at the press */
     WORD x0, y0, x, y;
     WORD l, t, wd, ht;                          /* the window's box at the press */
     ULONG secs, micro;
@@ -268,6 +270,7 @@ static struct { struct Window *w; int target; WORD x, y; ULONG secs, micro; } la
 static struct done {
     struct Window *w;
     struct Screen *s;
+    struct Layer *top;                          /* 0.9.1: the screen's front layer at the press */
     UBYTE kind, target, actions, pad;
     WORD x0, y0, x, y, l, t, wd, ht;
 } done_ring[DONE_RING];
@@ -369,8 +372,9 @@ static struct Window *edge_at(struct Screen *s, WORD x, WORD y, int *edges)
 
 /* 0.9: what a press at (x, y) is on, for the gesture table: the frontmost layer there (read as edge_at reads,
  * under the layers' lock, AttemptSemaphore: the input task never waits), its window, and which part of it:
- * the drag bar (the title bar's drag gadget and no other gadget), a gadget of the border (close, depth, zoom,
- * size), inside it (GT_BODY), a backdrop window, or the screen's bar. -1 when the layers are busy. */
+ * the drag bar (the title bar's drag gadget and no other gadget), a gadget (0.9.1: the border's, close, depth,
+ * zoom, size, or one of the program's own, or anything while a requester is up: gestures_target), inside it
+ * (GT_BODY), a backdrop window, or the screen's bar. -1 when the layers are busy. */
 static int target_at(struct Screen *s, WORD x, WORD y, struct Window **wp)
 {
     struct Layer *l;
@@ -387,19 +391,25 @@ static int target_at(struct Screen *s, WORD x, WORD y, struct Window **wp)
         {
             WORD wx = x - w->LeftEdge, wy = y - w->TopEdge;
             struct Gadget *g;
-            int drag = 0, border = 0, other = 0;
+            struct gesture_hit h;
+            memset(&h, 0, sizeof h);
             for (g = w->FirstGadget; g; g = g->NextGadget) {
-                WORD gl = g->LeftEdge + ((g->Flags & GFLG_RELRIGHT) ? w->Width - 1 : 0);
-                WORD gt = g->TopEdge + ((g->Flags & GFLG_RELBOTTOM) ? w->Height - 1 : 0);
-                WORD gw = g->Width + ((g->Flags & GFLG_RELWIDTH) ? w->Width : 0);
-                WORD gh = g->Height + ((g->Flags & GFLG_RELHEIGHT) ? w->Height : 0);
+                /* 0.9.1: a GimmeZeroZero window's own gadgets are placed in its inner part */
+                int inner = (w->Flags & WFLG_GIMMEZEROZERO) && !(g->GadgetType & GTYP_GZZGADGET);
+                WORD ox = inner ? w->BorderLeft : 0, oy = inner ? w->BorderTop : 0;
+                WORD bw = inner ? w->GZZWidth : w->Width, bh = inner ? w->GZZHeight : w->Height;
+                WORD gl = ox + g->LeftEdge + ((g->Flags & GFLG_RELRIGHT) ? bw - 1 : 0);
+                WORD gt = oy + g->TopEdge + ((g->Flags & GFLG_RELBOTTOM) ? bh - 1 : 0);
+                WORD gw = g->Width + ((g->Flags & GFLG_RELWIDTH) ? bw : 0);
+                WORD gh = g->Height + ((g->Flags & GFLG_RELHEIGHT) ? bh : 0);
                 if (wx < gl || wx >= gl + gw || wy < gt || wy >= gt + gh) continue;
-                if ((g->GadgetType & GTYP_SYSTYPEMASK) == GTYP_WDRAGGING && (g->GadgetType & GTYP_SYSGADGET)) drag = 1;
-                else if (g->GadgetType & GTYP_SYSGADGET) border = 1;
-                else other = 1;
+                if ((g->GadgetType & GTYP_SYSTYPEMASK) == GTYP_WDRAGGING && (g->GadgetType & GTYP_SYSGADGET)) h.drag_bar = 1;
+                else if (g->GadgetType & GTYP_SYSGADGET) h.border_gadget = 1;
+                else if (!(g->Flags & GFLG_DISABLED)) h.own_gadget = 1;   /* 0.9.1: its press is the gadget's */
             }
-            t = drag && !border && !other && (w->Flags & WFLG_DRAGBAR) && wy >= 0 && wy < w->BorderTop ? GT_TITLE
-              : border ? GT_GADGET : GT_BODY;
+            h.in_title = (w->Flags & WFLG_DRAGBAR) && wy >= 0 && wy < w->BorderTop;
+            h.requester = w->FirstRequest != NULL;
+            t = gestures_target(&h);
         }
         break;
     }
@@ -428,6 +438,10 @@ static int press_begin(struct InputEvent *ie, struct Screen *s)
     int target, edges = 0, take = 0;
     unsigned qual = gestures_qual(ie->ie_Qualifier), move;
     WORD x = s->MouseX, y = s->MouseY;                      /* this handler runs before Intuition: the place of the events before */
+    if (ie->ie_Qualifier & IEQUALIFIER_RBUTTON) {           /* 0.9.1: a left press while the menu button is held is the menus' */
+        press.on = 0;
+        return 0;
+    }
     target = gestures_actions(&gtab, GT_EDGE, GB_SELECT, GK_MOVE, qual, &take) && take ? -2 : -1;
     if (target == -2 && (w = edge_at(s, x, y, &edges))) target = GT_EDGE;
     else target = target_at(s, x, y, &w);
@@ -436,7 +450,8 @@ static int press_begin(struct InputEvent *ie, struct Screen *s)
     move = gestures_actions(&gtab, target, GB_SELECT, GK_MOVE, qual, &take);
     if (target == GT_TITLE && (move & GA_DRAG) && cfg.solid && !intuition_drags) take = 1;   /* OpenWindows' own solid drag */
     if (target != GT_EDGE && target != GT_TITLE) take = 0;  /* only an edge or a title bar is OpenWindows' to drag */
-    press.on = 1; press.target = target; press.take = take; press.moved = 0;
+    press.on = 1; press.target = target; press.take = take; press.moved = 0; press.menu = 0;
+    press.top = s->LayerInfo.top_layer;                     /* 0.9.1: what the press brings up comes in front of it */
     press.w = w; press.s = s; press.x0 = press.x = x; press.y0 = press.y = y; press.qual = qual;
     press.secs = ie->ie_TimeStamp.tv_secs; press.micro = ie->ie_TimeStamp.tv_micro;
     if (w) { press.l = w->LeftEdge; press.t = w->TopEdge; press.wd = w->Width; press.ht = w->Height; }
@@ -479,12 +494,16 @@ static void press_end(struct InputEvent *ie)
         }
     } else last_click.w = NULL;
     a = gestures_actions(&gtab, press.target, GB_SELECT, kind, press.qual, NULL);
+    /* 0.9.1: a window the press brought up (a popup, a requester, a new drawer) is in front of the screen's layers
+     * by now: it stays in front. The main task looks again before it fronts (gestures_done). */
+    a = gestures_release(a, press.menu, press.s && press.s->LayerInfo.top_layer != press.top);
     a &= ~(GA_DRAG | GA_RESIZE);                            /* done as the pointer moved */
     if (press.take) a &= ~GA_SNAP;                          /* OpenWindows' own drag snaps at its end (resize) */
     if (!a || !press.w || ((done_in + 1) & (DONE_RING - 1)) == done_out) return;
     {
         struct done *d = &done_ring[done_in];
-        d->w = press.w; d->s = press.s; d->kind = (UBYTE)kind; d->target = (UBYTE)press.target; d->actions = (UBYTE)a;
+        d->w = press.w; d->s = press.s; d->top = press.top;
+        d->kind = (UBYTE)kind; d->target = (UBYTE)press.target; d->actions = (UBYTE)a;
         d->x0 = press.x0; d->y0 = press.y0; d->x = press.x; d->y = press.y;
         d->l = press.l; d->t = press.t; d->wd = press.wd; d->ht = press.ht;
         done_in = (done_in + 1) & (DONE_RING - 1);
@@ -516,6 +535,7 @@ static void custom(CxMsg *msg, CxObj *co)
         WORD px, py;
         if (ie->ie_Class == IECLASS_RAWMOUSE) {
             WORD mx = s ? s->MouseX + ie->ie_X : 0, my = s ? s->MouseY + ie->ie_Y : 0;   /* a relative mouse's move, near enough */
+            if (ie->ie_Code == IECODE_RBUTTON && press.on) press.menu = 1;   /* 0.9.1: the menus' now; it goes on untouched */
             if (grab_on) {                         /* OpenWindows' own drag or edge: the button coming up ends it, here */
                 grab_px = mx; grab_py = my;
                 if (ie->ie_Code == (IECODE_LBUTTON | IECODE_UP_PREFIX)) {
@@ -672,6 +692,32 @@ static int in_front(struct Window *w)
     return !covered;
 }
 
+/* 0.9.1: 1 when w's program waits on another window of its own that is in front of w and overlaps it: a
+ * requester (EasyRequest, ASL, its own dialog) whose loop isn't reading w's port, so w in front would hide
+ * it and the program would look stuck (Dale, 18 October: "open files ... wont close"). A program that waits
+ * on w's port too (OpenBench's drawers share one) or is running isn't held. */
+static int own_requester_in_front(struct Window *w)
+{
+    struct MsgPort *p = w->UserPort;
+    struct Task *t = p && (p->mp_Flags & PF_ACTION) == PA_SIGNAL ? (struct Task *)p->mp_SigTask : NULL;
+    struct Layer *l;
+    int waits_elsewhere, found = 0;
+    if (!t) return 0;
+    Forbid();
+    waits_elsewhere = t->tc_State == TS_WAIT && !(t->tc_SigWait & (1UL << p->mp_SigBit));
+    Permit();
+    if (!waits_elsewhere) return 0;
+    LockLayerInfo(&w->WScreen->LayerInfo);
+    for (l = w->WLayer->front; l && !found; l = l->front) {
+        struct Window *o = (struct Window *)l->Window;
+        if (!o || o == w || !o->UserPort || o->UserPort->mp_SigTask != (APTR)t) continue;
+        found = l->bounds.MinX <= w->WLayer->bounds.MaxX && l->bounds.MaxX >= w->WLayer->bounds.MinX &&
+                l->bounds.MinY <= w->WLayer->bounds.MaxY && l->bounds.MaxY >= w->WLayer->bounds.MinY;
+    }
+    UnlockLayerInfo(&w->WScreen->LayerInfo);
+    return found;
+}
+
 /* What the handler decided at each release, in order: the window to the front or the back, made
  * active, or lined up with an edge after a drag. Intuition has ended its drag before this runs (the
  * input task, at priority 20, takes the release through every handler first); a Intuition that
@@ -692,7 +738,11 @@ static void gestures_done(void)
         }
         if (!is_window(w)) continue;
         if ((d.actions & GA_ACTIVATE) && w != IntuitionBase->ActiveWindow) ActivateWindow(w);
-        if ((d.actions & GA_FRONT) && !in_front(w)) WindowToFront(w);
+        /* 0.9.1: only when nothing came in front since the press: a popup, a requester or a drawer the click
+         * opened after the release (its program had the release first) stays in front of it */
+        if ((d.actions & GA_FRONT) && w->WScreen->LayerInfo.top_layer == d.top && !in_front(w) &&
+            !own_requester_in_front(w))
+            WindowToFront(w);
         if (d.actions & GA_BACK) WindowToBack(w);
     }
 }
@@ -1537,7 +1587,7 @@ static void watch(void)
 /* ---- the commodity --------------------------------------------------------------------------- */
 
 static struct NewBroker nb = {
-    NB_VERSION, (STRPTR)"OpenWindows", (STRPTR)"OpenWindows 0.7", (STRPTR)"Snapping, edges, Amiga+Tab, wheel and window places",
+    NB_VERSION, (STRPTR)"OpenWindows", (STRPTR)"OpenWindows 0.9.1", (STRPTR)"Snapping, edges, Amiga+Tab, wheel and window places",
     NBU_UNIQUE | NBU_NOTIFY, 0, 0, NULL, 0
 };
 static CxObj *broker, *hot_fwd, *hot_back;
