@@ -433,6 +433,17 @@ static int list_dir(const char *dir, const char *ext, char *names, int width)
     return n;
 }
 
+/* s into d (n bytes), cut short if it must and always ended with a 0. Where
+ * strncpy(d, s, n - 1) left the last byte as it was, GCC 16 can't see that
+ * it is already 0 and stops the build (-Wstringop-truncation). */
+static void copy_text(char *d, const char *s, size_t n)
+{
+    size_t i;
+    for (i = 0; i + 1 < n && s[i]; i++)
+        d[i] = s[i];
+    d[i] = 0;
+}
+
 static void new_list(struct List *list)
 {
     list->lh_Head = (struct Node *)&list->lh_Tail;      /* NewList, which is amiga.lib's */
@@ -607,7 +618,7 @@ static LONG keep_once(struct keeper *k)
     flags = zp.zp_Flags;
     if (!region_saved && !host) { strcpy(k->said, "no region is saved: nothing to keep"); return 3600; }
     if (host) {                                        /* AmigaChrome: the host says */
-        strncpy(place, hc.zone, sizeof place - 1);
+        copy_text(place, hc.zone, sizeof place);
         strncpy(rule, place_rule(hc.zone), sizeof rule - 1);
         flags = ZPF_HOST;
         want = hc.east;
@@ -956,7 +967,7 @@ static void put_place(const char *name, tz_t local)
         lp.lp_GMTOffset = -(LONG)(tz_zone_offset_for_local(&z, local, NULL) / 60);
     } else return;
     memset(&zp, 0, sizeof zp);
-    strncpy(zp.zp_Place, name, sizeof zp.zp_Place - 1);
+    copy_text(zp.zp_Place, name, sizeof zp.zp_Place);
     strncpy(zp.zp_Rule, place_rule(name), sizeof zp.zp_Rule - 1);
     zp.zp_Flags = host_ok ? ZPF_HOST : 0;
 }
