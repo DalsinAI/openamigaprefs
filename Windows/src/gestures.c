@@ -155,6 +155,20 @@ int gestures_moved(int x0, int y0, int x, int y)
     return dx >= GESTURE_MOVE || dx <= -GESTURE_MOVE || dy >= GESTURE_MOVE || dy <= -GESTURE_MOVE;
 }
 
+int gestures_target(const struct gesture_hit *h)
+{
+    if (h->requester || h->border_gadget || h->own_gadget) return GT_GADGET;
+    if (h->drag_bar && h->in_title) return GT_TITLE;
+    return GT_BODY;
+}
+
+unsigned gestures_release(unsigned actions, int menu, int front_changed)
+{
+    if (menu) return 0;                             /* the menu button's: nothing of ours */
+    if (front_changed) actions &= ~GA_FRONT;        /* what the press brought up stays in front */
+    return actions;
+}
+
 void gestures_row_text(const struct gesture_row *r, char *out, int size)
 {
     char q[40], a[64];
