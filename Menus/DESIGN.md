@@ -113,6 +113,13 @@ for the 68040 (-m68040), an FPU is not needed, and it never uses OpenGPU.
 ### The engine, OpenMenus 0.1
 
 `Menus/engine/openmenus.c` builds `C:OpenMenus` (`Menus/engine/build.sh`).
+Since 18 October 2026 the engine is built with GCC 16 (the os32-gcc16 stove,
+`-fno-tree-loop-distribute-patterns`), and its script stops when given an
+older GCC: the os32 stove's GCC 6.5.0b at -O2 compiled `copy_item()`'s
+`c->nsubs = 0; c->subs = NULL;` into one `clr.l`, leaving the low word of
+`subs`. Nothing read that `subs` yet (a top-level item's is set again after,
+a submenu item's is never read), so menus worked; the editor
+(`Menus/build.sh`) had no such case and stays as it is.
 It is a commodity and does not patch Intuition:
 
 - **Taking the button.** A custom commodity object takes the right mouse
