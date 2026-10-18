@@ -37,7 +37,7 @@
 #include <stdlib.h>
 #include "../../Common/looktabs.h"
 
-static const char version[] __attribute__((used)) = "$VER: Windows 0.6.7 (17.10.2026) OpenPrefs, MIT, Copyright (c) 2026 AmigaChrome Team";
+static const char version[] __attribute__((used)) = "$VER: Windows 0.6.8 (18.10.2026) OpenPrefs, MIT, Copyright (c) 2026 AmigaChrome Team";
 
 #define PREFS_ENV "ENV:OpenPrefs/Windows"
 #define PREFS_ENVARC "ENVARC:OpenPrefs/Windows"
@@ -212,6 +212,7 @@ enum { G_SNAP, G_DIST, G_HALVES, G_SWITCH, G_KEY, G_WHEEL, G_DBLFRONT, G_EDGES, 
 static struct Gadget *gad[G_COUNT];
 static struct Window *win;
 static char status_text[120];
+static char compoff_text[64];           /* the switch's words with why this screen isn't composited (comp_off) */
 
 #define SET(id, ...) do { if (gad[id]) GT_SetGadgetAttrs(gad[id], win, NULL, __VA_ARGS__, TAG_DONE); } while (0)
 static int advanced;                     /* the view: Simple shows the four switches, Advanced every setting */
@@ -284,6 +285,37 @@ static void forget_places(void)
     status("Window places forgotten: programs open where they choose.");
 }
 
+/* Why layers.library doesn't composite this screen, as the switch's words in compoff_text ("Transparency
+ * and shadows (off on this screen: 8-bit)"); empty while it does, or when layers can't say. OpenLayers
+ * 47.102 and up: ComposeLayerInfo(li, NULL, LAYERS_COMPOSE_WHY) (-246; openamigagfx
+ * include/graphics/openlayers.h, LAYERS_WHY_ 1-8 in this order). Its own open of layers.library: built
+ * into OpenBench, this file declares no library base. */
+static void comp_off(struct Screen *scr)
+{
+    static const char why[] = "not asked\0switched off\0not RTG\0" "8-bit\0pixel layout\0no GPU driver\0no OpenGPU\0no memory";
+    const char *p = why;
+    struct Library *lb = OpenLibrary((STRPTR)"layers.library", 47);
+    ULONG w = 0;
+    compoff_text[0] = 0;
+    if (lb && lb->lib_Revision >= 102 && lb->lib_NegSize >= 252) {
+        /* A6 saved by hand: it may be the frame pointer */
+        register struct Library *d1 __asm("d1") = lb;
+        register void *a0 __asm("a0") = &scr->LayerInfo;
+        register void *a1 __asm("a1") = NULL;
+        register ULONG d0 __asm("d0") = 2;      /* LAYERS_COMPOSE_WHY */
+        __asm__ volatile("move.l %%a6,-(%%sp)\n\tmove.l %%d1,%%a6\n\tjsr -246(%%a6)\n\tmove.l (%%sp)+,%%a6"
+                         : "+r"(d0), "+r"(a0), "+r"(a1), "+r"(d1) : : "cc", "memory");
+        w = d0;
+    }
+    if (lb) CloseLibrary(lb);
+    if (w >= 1 && w <= 8) {
+        while (--w) p += strlen(p) + 1;
+        strcpy(compoff_text, "Transparency and shadows (off on this screen: ");
+        strcat(compoff_text, p);
+        strcat(compoff_text, ")");
+    }
+}
+
 /* 1 quit, 2 the view changed (open again) */
 static int gui_once(void)
 {
@@ -305,6 +337,8 @@ static int gui_once(void)
                                              "Resize a window from any edge but its title bar",
                                              "Drag windows with their contents, not an outline", "Drive windows titled with the name only", NULL };
         int k, t, most = 0;
+        comp_off(scr);
+        if ((t = TextLength(&scr->RastPort, (STRPTR)compoff_text, strlen(compoff_text))) > most) most = t;
         for (k = 0; longs[k]; k++)
             if ((t = TextLength(&scr->RastPort, (STRPTR)longs[k], strlen(longs[k]))) > most) most = t;
         LX = X + 26 + 8 + most + 16 <= 620 ? X : 10;
@@ -314,6 +348,8 @@ static int gui_once(void)
     compact = advanced && scr->Height < 400;
     if (compact && W < 620) W = 620;
     strcpy(status_text, running() ? "OpenWindows is running." : "OpenWindows isn't running: Use or Save starts it.");
+    /* not composited, and why (comp_off, above): the switch's words, or the status line in the two-column view */
+    if (compoff_text[0] && compact) strcpy(status_text, compoff_text);
 
     g = CreateContext(&glist);
     memset(&ng, 0, sizeof ng);
@@ -381,7 +417,8 @@ static int gui_once(void)
     G(CHECKBOX_KIND, G_DRIVETITLE, LX, row, 26, lh, "Drive windows titled with the name only", PLACETEXT_RIGHT, GTCB_Scaled, TRUE);
     row += lh + sp;
     /* layers' composited mode on RTG Workbench screens (composite on|off); it takes effect when the screen opens next */
-    G(CHECKBOX_KIND, G_COMP, LX, row, 26, lh, "Transparency and shadows", PLACETEXT_RIGHT, GTCB_Scaled, TRUE);
+    G(CHECKBOX_KIND, G_COMP, LX, row, 26, lh, compoff_text[0] ? compoff_text : "Transparency and shadows", PLACETEXT_RIGHT,
+      GTCB_Scaled, TRUE);
     row += lh + sp;
     /* Intuition's gradient title bars on true-colour screens (gradient on|off); as above, from the next Workbench */
     G(CHECKBOX_KIND, G_GRAD, LX, row, 26, lh, "Gradient title bars", PLACETEXT_RIGHT, GTCB_Scaled, TRUE);
