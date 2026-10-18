@@ -70,6 +70,34 @@ int main(void)
     CHECK(!gestures_moved(100, 100, 103, 97) && gestures_moved(100, 100, 104, 100) && gestures_moved(100, 100, 100, 96),
           "the threshold: 4 pixels either way");
 
+    /* 0.9.1 (W67): a press on a gadget is the gadget's; a click that brought a window up never covers it */
+    {
+        struct gesture_hit h;
+        memset(&h, 0, sizeof h);
+        CHECK(gestures_target(&h) == GT_BODY, "nothing under it: inside the window");
+        h.drag_bar = 1; h.in_title = 1;
+        CHECK(gestures_target(&h) == GT_TITLE, "the drag bar alone in the title bar: the title");
+        h.own_gadget = 1;
+        CHECK(gestures_target(&h) == GT_GADGET, "a program's gadget in the title bar: the gadget's");
+        memset(&h, 0, sizeof h); h.own_gadget = 1;
+        CHECK(gestures_target(&h) == GT_GADGET, "a scroller or a button inside: the gadget's, not the body's");
+        memset(&h, 0, sizeof h); h.border_gadget = 1; h.drag_bar = 1; h.in_title = 1;
+        CHECK(gestures_target(&h) == GT_GADGET, "the close or depth gadget over the drag bar: the gadget's");
+        memset(&h, 0, sizeof h); h.requester = 1;
+        CHECK(gestures_target(&h) == GT_GADGET, "a window with a requester up: the requester's");
+        memset(&h, 0, sizeof h); h.drag_bar = 1;
+        CHECK(gestures_target(&h) == GT_BODY, "the drag gadget below the title bar's height: inside");
+    }
+    gestures_default(&t, 1, 1, 1);
+    a = gestures_actions(&t, GT_GADGET, GB_SELECT, GK_CLICK, 0, &take);
+    CHECK(a == 0 && !take, "a click on a program's gadget (the drawer's scroller, OpenFiles' toolbar): nothing of ours");
+    a = gestures_actions(&t, GT_BODY, GB_SELECT, GK_CLICK, 0, NULL);
+    CHECK(gestures_release(a, 0, 0) == GA_FRONT, "a plain click on the body: still to the front at the release");
+    CHECK(gestures_release(a, 0, 1) == 0, "... not when the press brought a window up (OpenBench's ... popup)");
+    CHECK(gestures_release(a, 1, 0) == 0, "... nor when the menu button came while it was held");
+    CHECK(gestures_release(GA_DRAG | GA_SNAP, 0, 1) == (GA_DRAG | GA_SNAP), "a drag's snap stays");
+    CHECK(gestures_release(GA_FRONT | GA_ACTIVATE, 0, 1) == GA_ACTIVATE, "only the front goes");
+
     gestures_default(&t, 1, 1, 1);
     for (i = 0; i < t.n; i++) { gestures_row_text(&t.row[i], text, sizeof text); printf("  %s\n", text); }
     gestures_row_text(&t.row[0], text, sizeof text);

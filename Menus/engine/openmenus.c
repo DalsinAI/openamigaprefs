@@ -68,7 +68,7 @@
 #include "om_kbd.h"
 #include "ogt_theme.h"
 
-static const char version[] __attribute__((used)) = "$VER: OpenMenus 0.4.4 (12.10.2026) MIT, Copyright (c) 2026 AmigaChrome Team";   /* 0.4.4: commands start with both NIL: handles */
+static const char version[] __attribute__((used)) = "$VER: OpenMenus 0.4.5 (18.10.2026) MIT, Copyright (c) 2026 AmigaChrome Team";   /* 0.4.5: no WORKBENCH port (OpenBench): the right button opens the window's own menus */
 
 #define PREFS_ENV "ENV:OpenMenus/Menus"
 #define TRAY_DIR "ENV:OpenMenus/Tray"     /* one file per tray program: "width order" (OpenSpeaker, the clock) */
@@ -194,6 +194,20 @@ static int menu_window(struct Window *w)
     return w && w->MenuStrip && !(w->Flags & WFLG_RMBTRAP) && w->WScreen == IntuitionBase->FirstScreen;
 }
 
+/* 0.4.5 (W67, Dale 18 October: "no right click menu in list mode"): the right-click menus on
+ * Workbench's icons and background ask Workbench's ARexx port (WORKBENCH) everything. OpenBench,
+ * which marks its drawers as Workbench's windows, has no such port: the press was taken, nothing
+ * answered, and no menu showed in any of its windows. Without the port the press is an ordinary
+ * one (the window's own menus). FindPort under Forbid: the input handler may call it. */
+static int wb_port_there(void)
+{
+    struct MsgPort *p;
+    Forbid();
+    p = FindPort((STRPTR)"WORKBENCH");
+    Permit();
+    return p != NULL;
+}
+
 /* By key, RMBTRAP doesn't matter: it is about the right button, not the menus. */
 static int kbd_window(struct Window *w)
 {
@@ -243,10 +257,12 @@ static void custom(CxMsg *msg, CxObj *co)
                         continue;
                     }
                 }
-                if (code == IECODE_RBUTTON && prefs.rightclick) {
+                if (code == IECODE_RBUTTON && prefs.rightclick && wb_port_there()) {
                     /* on a Workbench window's icons or background (not its title bar, not
                      * the screen bar): the icon or desktop menu (the layers are read
-                     * unlocked here: only to choose, and the choice is checked again) */
+                     * unlocked here: only to choose, and the choice is checked again).
+                     * 0.4.5: only with Workbench's ARexx port to ask; OpenBench has none, and
+                     * its windows' right button goes to their own menus below */
                     struct Screen *s = IntuitionBase->FirstScreen;
                     struct Layer *l = s ? WhichLayer(&s->LayerInfo, s->MouseX, s->MouseY) : NULL;
                     struct Window *w = l ? (struct Window *)l->Window : NULL;
@@ -1744,7 +1760,7 @@ out:
 /* ---- the commodity ----------------------------------------------------------------------------- */
 
 static struct NewBroker nb = {
-    NB_VERSION, (STRPTR)"OpenMenus", (STRPTR)"OpenMenus 0.3", (STRPTR)"The Open family's own menus",
+    NB_VERSION, (STRPTR)"OpenMenus", (STRPTR)"OpenMenus 0.4.5", (STRPTR)"The Open family's own menus",
     NBU_UNIQUE | NBU_NOTIFY, 0, 0, NULL, 0
 };
 

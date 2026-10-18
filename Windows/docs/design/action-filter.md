@@ -50,7 +50,7 @@ target  button  qualifier  gesture  actions  press
 
 | Field | Values |
 | --- | --- |
-| target | `title` (the drag bar), `body` (inside the window, its own gadgets too), `gadget` (a border gadget: close, depth, zoom, size), `edge` (OpenWindows' grips), `backdrop`, `screenbar` |
+| target | `title` (the drag bar), `body` (inside the window, off its gadgets), `gadget` (0.9.1: any gadget, the program's own or the border's, and anything in a window with a requester up), `edge` (OpenWindows' grips), `backdrop`, `screenbar` |
 | button | `select` (the left button: the only one the filter watches for now), `menu`, `middle` |
 | qualifier | `none`, `any`, or `shift`, `alt`, `ctrl`, `amiga` joined by `+` (exactly those held) |
 | gesture | `click`, `double`, `move` |
@@ -76,6 +76,23 @@ edge   select none click  activate   take
 
 - `drag` on a passed press is Intuition's own drag, so its look (solid, drag opacity) is Intuition's.
 - With qualifiers held, no built-in row fits. Shift, Alt and Amiga presses are Intuition's, as on 3.2.3, for example Left Amiga dragging the screen.
+
+## 0.9.1: a click never covers what it brought up
+
+Dale, 18 October 07:09 to 07:22, on Instance-32 with 0.9:
+- "odd three dots behaviour on file windows, window jumps forward and menu winds up behind";
+- "open files is now buggy and wont close".
+
+The built-in `body click front` row fronted a window at the release of every click inside it. When the press itself had opened a window (OpenBench's "..." popup opens at the press, OpenFiles' toolbar opens a requester), the clicked window was then covered by that window, so the release brought it in front of it. A requester hidden that way keeps its program waiting in the requester's loop, so the window's close gadget does nothing.
+
+What 0.9.1 does (W67):
+- **A press on a gadget is the gadget's.** Any gadget of the program's own (a scroller, a button, a list, OpenFiles' toolbar), a border gadget (close, depth, zoom, size), or anything in a window while an Intuition requester is up is the target `gadget`. The built-in table has no `gadget` rows, so nothing of OpenWindows' follows such a press. A disabled gadget counts as the body. A GimmeZeroZero window's own gadgets are found in its inner part.
+- **What the press brought up stays in front.** The screen's front layer is noted at the press. If another window has come in front by the release (a popup, a requester, a new drawer), the release does not front. The main task looks again before it calls `WindowToFront`, for a window opened just after the release.
+- **A window whose program is busy with a requester of its own is not brought over it.** If the window's task is waiting, but not on the window's own port, and a window of that same task is in front of it and overlaps it, the window is not fronted. For example, a click on OpenFiles' body or title bar while its Search requester is up leaves the requester in front. OpenBench's drawers share one port, so a click on one drawer still fronts it over another.
+- **The menu button.** A left press while the right button is held belongs to the menus, and no gesture starts. A right press during a left press ends that gesture with no actions. The right button's events always go on untouched.
+- **Kept:** a plain click on a window's own body or title bar, with no move, still fronts it at the release.
+
+The decision helpers are pure and run on the host: `gestures_target()` (what a press is on) and `gestures_release()` (a click's actions at its release), both in `Windows/tests/test_gestures.c`.
 
 ## What each commodity does now
 
