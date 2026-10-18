@@ -14,5 +14,5 @@ CC="$STOVE/prefix/bin/m68k-amigaos-gcc"
 OUT=${1:-$HERE/build/os3}
 mkdir -p "$OUT"
 "$CC" -noixemul ${CPU:--m68040} $SPECS -std=gnu99 -Wall -Werror ${OPT:--O2} -fno-delete-null-pointer-checks -fno-common -o "$OUT/Windows" "$HERE/src/windows.c"
-"$CC" -noixemul ${CPU:--m68040} $SPECS -std=gnu99 -Wall -Werror ${OPT:--O2} -fno-delete-null-pointer-checks -fno-common -o "$OUT/OpenWindows" "$HERE/src/openwindows.c"
+"$CC" -noixemul ${CPU:--m68040} $SPECS -std=gnu99 -Wall -Werror ${OPT:--O2} -fno-delete-null-pointer-checks -fno-common -o "$OUT/OpenWindows" "$HERE/src/openwindows.c" "$HERE/src/gestures.c"
 echo "$OUT/Windows ($(wc -c < "$OUT/Windows") bytes), $OUT/OpenWindows ($(wc -c < "$OUT/OpenWindows") bytes)"
