@@ -8,8 +8,11 @@
  *   OpenPrefs APPLY                                     at boot: what OpenSound USE, OpenGamepads USE (when
  *                                                       openinput.library is there) and OpenSystem APPLY did
  *
- * SECTION: THEME (LOOK), POINTER, FONTS, COLOURS, BACKDROPS, WORKBENCH, FILEREQUESTERS, WINDOWS, TITLEBAR,
- * MENUS, DOCK, SOUND, INPUT, GAMEPADS, DATETIME, SERIAL, TYPES, SYSTEM, BLANKER.
+ * SECTION: THEME (LOOK), SCREENMODE (OVERSCAN), POINTER, FONTS, COLOURS, BACKDROPS (WBPATTERN), WORKBENCH,
+ * FILEREQUESTERS, WINDOWS, TITLEBAR, MENUS, ICONTROL, DOCK, SOUND, INPUT (MOUSE, KEYBOARD, KEYMAP), GAMEPADS,
+ * DATETIME, SERIAL, TYPES, SYSTEM, BLANKER. Mouse and keys, Screen mode with Overscan, and IControl joined on
+ * 21 October 2026 (Dale: "fold mouse and keys into a single app", "overscan should be under screenmode",
+ * IControl "fold into openprefs").
  *
  * The old names work as they did, by the name OpenPrefs runs as (a ROM: alias of this body, a name stub in
  * SYS:Prefs, a copy): Look, OpenLook, Windows, TitleBar, Menus, OpenDock, OpenSound, OpenInput,
@@ -55,7 +58,9 @@ static const struct { const char *name; int page; } sections[] = {
     { "SOUND", LT_SOUND }, { "INPUT", LT_INPUT }, { "GAMEPADS", LT_GAMEPADS }, { "DATETIME", LT_DATETIME },
     { "TIME", LT_DATETIME }, { "DATE", LT_DATETIME }, { "SERIAL", LT_SERIAL }, { "TYPES", LT_TYPES },
     { "FILETYPES", LT_TYPES }, { "OPENTYPES", LT_TYPES }, { "SYSTEM", LT_SYSTEM }, { "STACK", LT_SYSTEM },
-    { "BLANKER", LT_BLANKER },
+    { "BLANKER", LT_BLANKER }, { "MOUSE", LT_INPUT }, { "KEYBOARD", LT_INPUT }, { "KEYS", LT_INPUT },
+    { "KEYMAP", LT_INPUT }, { "SCREENMODE", LT_SCREENMODE }, { "OVERSCAN", LT_SCREENMODE }, { "DISPLAY", LT_SCREENMODE },
+    { "ICONTROL", LT_ICONTROL },
 };
 
 /* The old editors' names: each opens its section, and takes its own arguments */
@@ -94,6 +99,8 @@ int op_page(int page, int argc, char **argv)
     case LT_TYPES: return types_main(argc, argv);
     case LT_SYSTEM: return system_main(argc, argv);
     case LT_BLANKER: return blanker_main(argc, argv);
+    case LT_SCREENMODE: return screenmode_main(argc, argv);
+    case LT_ICONTROL: return icontrol_main(argc, argv);
     }
     return RETURN_FAIL;
 }
@@ -126,8 +133,9 @@ static int as_openprefs(void)
     if (a[0]) { static char pub[140]; strncpy(pub, (const char *)a[0], sizeof pub - 1); lt_pubname = pub; }
     if (a[1]) { FreeArgs(rd); return op_apply(); }
     if (a[2] && (page = section_of((const char *)a[2])) < 0) {
-        Printf((STRPTR)"OpenPrefs: no section %s; the sections are THEME, POINTER, FONTS, COLOURS, BACKDROPS, WORKBENCH,\n"
-               "FILEREQUESTERS, WINDOWS, TITLEBAR, MENUS, DOCK, SOUND, INPUT, GAMEPADS, DATETIME, SERIAL, TYPES, SYSTEM, BLANKER\n", a[2]);
+        Printf((STRPTR)"OpenPrefs: no section %s; the sections are THEME, SCREENMODE, POINTER, FONTS, COLOURS, BACKDROPS,\n"
+               "WORKBENCH, FILEREQUESTERS, WINDOWS, TITLEBAR, MENUS, ICONTROL, DOCK, SOUND, INPUT, GAMEPADS, DATETIME, SERIAL,\n"
+               "TYPES, SYSTEM, BLANKER\n", a[2]);
         FreeArgs(rd);
         return RETURN_ERROR;
     }
