@@ -88,7 +88,7 @@ enum {
     /* Pointer (G_PCOLR, G_PCOLG, G_PCOLB in that order) */
     G_PSETS, G_PUSESET, G_PONLY, G_PTYPES, G_PHOTX, G_PHOTY, G_PHOT, G_PCOLR, G_PCOLG, G_PCOLB, G_PCLEAR,
     /* Fonts */
-    G_FSCREEN, G_FSCREENPICK, G_FICON, G_FICONPICK, G_FSYS, G_FSYSPICK, G_FLABELS, G_FTEXTPEN, G_FFIELDPEN,
+    G_FSCREEN, G_FSCREENPICK, G_FSCREENSTD, G_FICON, G_FICONPICK, G_FICONSTD, G_FSYS, G_FSYSPICK, G_FLABELS, G_FTEXTPEN, G_FFIELDPEN,
     /* Colours */
     G_CPAL, G_CR, G_CG, G_CB, G_COS, G_CPENS, G_CPEN4, G_CPEN8,
     /* Backdrops */
@@ -269,8 +269,9 @@ static int ask_font(const char *title, pf_font *f, int fixed)
     if (!AslBase) { status("asl.library isn't there: no font requester."); return 0; }
     fr = (struct FontRequester *)AllocAslRequestTags(ASL_FontRequest, ASLFO_Window, (ULONG)win, ASLFO_SleepWindow, TRUE,
                                                      ASLFO_TitleText, (ULONG)title,
-                                                     ASLFO_InitialName, (ULONG)(f->name[0] ? f->name : "topaz.font"),
-                                                     ASLFO_InitialSize, f->ysize ? f->ysize : 8, ASLFO_FixedWidthOnly, fixed,
+                                                     ASLFO_InitialName, (ULONG)(f->name[0] ? f->name : fixed ? "topaz.font" : PF_STANDARD_FONT),
+                                                     ASLFO_InitialSize, f->ysize ? f->ysize : fixed ? 8 : PF_STANDARD_SIZE,
+                                                     ASLFO_FixedWidthOnly, fixed,
                                                      ASLFO_MaxHeight, 64, TAG_DONE);
     if (!fr) return 0;
     if (AslRequest(fr, NULL) && fr->fo_Attr.ta_Name) {
@@ -673,24 +674,26 @@ static void describe_font(int type, char *out)
     if (!pf_font_get(&cur, type, &f) || !f.name[0]) { strcpy(out, "(the OS's own)"); return; }
     strcpy(n, f.name);
     if ((dot = strstr(n, ".font")) && !dot[5]) *dot = 0;
-    snprintf(out, 80, "%s %d", n, f.ysize);
+    snprintf(out, 80, pf_font_is_standard(&f) ? "%s %d (standard)" : "%s %d", n, f.ysize);
 }
 
 static int fonts_make(int row)
 {
     static const char *const left[] = { "Screen font", "Icon font", "System font", "Icon labels", "Label colour", "Field colour", NULL };
-    int bw = tw("Choose...") + 24, boxw, nc = screen_colours(), pw;
+    int bw = tw("Choose...") + 24, sw = tw("Standard") + 24, boxw, nc = screen_colours(), pw;
     columns(left, NULL);
-    boxw = W1 - bw - 6;
+    boxw = W1 - bw - sw - 12;
     if (boxw > 300) boxw = 300;
     pw = 24 * nc > W1 ? W1 : 24 * nc;
     describe_font(PF_SCREENFONT, font_text[PF_SCREENFONT]);
     describe_font(PF_WBFONT, font_text[PF_WBFONT]);
     describe_font(PF_SYSFONT, font_text[PF_SYSFONT]);
     G(TEXT_KIND, G_FSCREEN, X1, row, boxw, lh, "Screen font", PLACETEXT_LEFT, GTTX_Border, TRUE, GTTX_Text, (ULONG)font_text[PF_SCREENFONT]);
-    G(BUTTON_KIND, G_FSCREENPICK, X1 + boxw + 6, row, bw, lh, "Choose...", 0, GA_Disabled, damaged); row += lh + 4;
+    G(BUTTON_KIND, G_FSCREENPICK, X1 + boxw + 6, row, bw, lh, "Choose...", 0, GA_Disabled, damaged);
+    G(BUTTON_KIND, G_FSCREENSTD, X1 + boxw + bw + 12, row, sw, lh, "Standard", 0, GA_Disabled, damaged); row += lh + 4;
     G(TEXT_KIND, G_FICON, X1, row, boxw, lh, "Icon font", PLACETEXT_LEFT, GTTX_Border, TRUE, GTTX_Text, (ULONG)font_text[PF_WBFONT]);
-    G(BUTTON_KIND, G_FICONPICK, X1 + boxw + 6, row, bw, lh, "Choose...", 0, GA_Disabled, damaged); row += lh + 4;
+    G(BUTTON_KIND, G_FICONPICK, X1 + boxw + 6, row, bw, lh, "Choose...", 0, GA_Disabled, damaged);
+    G(BUTTON_KIND, G_FICONSTD, X1 + boxw + bw + 12, row, sw, lh, "Standard", 0, GA_Disabled, damaged); row += lh + 4;
     if (advanced) {
         G(TEXT_KIND, G_FSYS, X1, row, boxw, lh, "System font", PLACETEXT_LEFT, GTTX_Border, TRUE, GTTX_Text, (ULONG)font_text[PF_SYSFONT]);
         G(BUTTON_KIND, G_FSYSPICK, X1 + boxw + 6, row, bw, lh, "Choose...", 0, GA_Disabled, damaged); row += lh + 8;
@@ -727,10 +730,24 @@ static void pick_font(int type, const char *title, int fixed)
     status("Use, Test or Save: the font is used when the Workbench screen opens again.");
 }
 
+/* The Team's standard font for the screen or the icons (pf_font_standard), its pens and mode kept */
+static void standard_font(int type)
+{
+    pf_font f;
+    if (!pf_font_get(&cur, type, &f)) {
+        f.front = 1; f.back = 0; f.drawmode = type == PF_WBFONT ? 0 : 1;
+    }
+    pf_font_standard(&f);
+    if (!pf_font_put(&cur, &f)) { status("No memory for that."); return; }
+    status("Use, Test or Save: the standard font is used when the Workbench screen opens again.");
+}
+
 static void fonts_handle(int id, UWORD code)
 {
     pf_font wb;
     if (id == G_FSCREENPICK) pick_font(PF_SCREENFONT, "The screen's font", 0);
+    else if (id == G_FSCREENSTD) standard_font(PF_SCREENFONT);
+    else if (id == G_FICONSTD) standard_font(PF_WBFONT);
     else if (id == G_FICONPICK) pick_font(PF_WBFONT, "The icons' font", 0);
     else if (id == G_FSYSPICK) pick_font(PF_SYSFONT, "The system font (fixed width)", 1);
     else if ((id == G_FLABELS || id == G_FTEXTPEN || id == G_FFIELDPEN) && pf_font_get(&cur, PF_WBFONT, &wb)) {
