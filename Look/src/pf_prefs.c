@@ -134,7 +134,7 @@ void pf_font_standard(pf_font *f)
 
 int pf_font_is_standard(const pf_font *f)
 {
-    return f->ysize == PF_STANDARD_SIZE && !strcmp(f->name, PF_STANDARD_FONT);
+    return f->ysize == PF_STANDARD_SIZE && f->style == 0 && !strcmp(f->name, PF_STANDARD_FONT);
 }
 
 /* ---- palette.prefs ---------------------------------------------------------------------------------- */

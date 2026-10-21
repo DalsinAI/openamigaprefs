@@ -34,7 +34,7 @@ int pf_font_put(pf_file *f, const pf_font *in);             /* 1, or 0 with no m
 #define PF_STANDARD_FONT "CGTriumvirate.font"
 #define PF_STANDARD_SIZE 13
 void pf_font_standard(pf_font *f);                           /* name, size, style 0, flags FPF_DISKFONT */
-int pf_font_is_standard(const pf_font *f);                   /* 1 when f names the standard font and size */
+int pf_font_is_standard(const pf_font *f);                   /* 1 when f is the standard font, size and plain style */
 
 /* ---- palette.prefs: PALT, struct PalettePrefs (400 bytes) ---- */
 #define PF_PALT PF_ID('P', 'A', 'L', 'T')

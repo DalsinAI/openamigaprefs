@@ -172,6 +172,8 @@ static void fonts(void)
           t.flags == 2 && t.special == 1 && t.front == 3 && t.type == PF_WBFONT, "standard: %s %d", t.name, t.ysize);
     t.ysize = 12;
     CHECK(!pf_font_is_standard(&t), "another size isn't the standard");
+    t.ysize = 13; t.style = 1;
+    CHECK(!pf_font_is_standard(&t), "the standard font in bold isn't the standard");
     pf_free(&f); pf_free(&g); free(b);
 }
 
