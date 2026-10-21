@@ -63,7 +63,7 @@ static const struct { const char *name; int page; } sections[] = {
     { "ICONTROL", LT_ICONTROL },
 };
 
-/* The old editors' names: each opens its section, and takes its own arguments */
+/* The old editors' names, and a name for each other section: each opens its section, and takes its own arguments */
 enum { N_OPENPREFS = -1, N_OPENLOOK = -2 };
 static const struct { const char *name; int page; } old_names[] = {
     { "OpenPrefs", N_OPENPREFS }, { "OpenLook", N_OPENLOOK }, { "Look", LT_LOOK }, { "Windows", LT_WINDOWS },
@@ -71,6 +71,10 @@ static const struct { const char *name; int page; } old_names[] = {
     { "OpenSound", LT_SOUND }, { "Sound", LT_SOUND }, { "OpenInput", LT_INPUT }, { "OpenGamepads", LT_GAMEPADS },
     { "Gamepads", LT_GAMEPADS }, { "OpenDateTime", LT_DATETIME }, { "OpenSerial", LT_SERIAL },
     { "OpenTypes", LT_TYPES }, { "OpenSystem", LT_SYSTEM },
+    /* the sections no editor had a name for (Dale, 21 October 2026: an icon per section) */
+    { "OpenScreenMode", LT_SCREENMODE }, { "OpenPointer", LT_POINTER }, { "OpenFonts", LT_FONTS },
+    { "OpenColours", LT_COLOURS }, { "OpenBackdrops", LT_BACKDROPS }, { "OpenWorkbench", LT_WORKBENCH },
+    { "OpenFileRequesters", LT_ASL }, { "OpenBlanker", LT_BLANKER }, { "OpenIControl", LT_ICONTROL },
 };
 
 static int section_of(const char *s)
