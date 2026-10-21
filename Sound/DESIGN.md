@@ -5,7 +5,7 @@ Prefs/AHI, and a speaker on the menu bar that shows and turns the volume.
 Dale asked for them on 6 October 2026 ("a single combined sound prefs and a
 menu bar speaker and volume control"), chose that the new editor **replaces**
 the two old ones (they move to `Prefs/Classic`), and approved the mockup:
-https://claude.ai/artifact/W1mg2U2wxfxtmgRySFsdHG. MIT, Copyright (c) 2026
+in the Team's design archive. MIT, Copyright (c) 2026
 AmigaChrome Team.
 
 ## 0.1 (6 October 2026)

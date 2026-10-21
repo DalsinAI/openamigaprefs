@@ -1,6 +1,6 @@
 # Combined preferences (design)
 
-**Since 17 October 2026: one app, OpenPrefs (the first revision below).** The rest of this design records the plan it replaces: nine OpenPrefs editors in place of twenty-three. Design taken 6 October 2026; P1 (the shared frame and Appearance) approved to build. Branded PDF: `Combined-prefs-design.pdf`; interactive mockup: `mockup.html` (also https://claude.ai/artifact/PtThdaBYG8KFHgES7bvzsh). MIT, Copyright (c) 2026 AmigaChrome Team.
+**Since 17 October 2026: one app, OpenPrefs (the first revision below).** The rest of this design records the plan it replaces: nine OpenPrefs editors in place of twenty-three. Design taken 6 October 2026; P1 (the shared frame and Appearance) approved to build. Branded PDF: `Combined-prefs-design.pdf`; interactive mockup: `mockup.html`. MIT, Copyright (c) 2026 AmigaChrome Team.
 
 The team was asked to design new preferences editors that combine similar settings and replace the old ones. Today a Workbench user meets twenty-three separate editors for settings that belong together: Font, Palette, Pointer, WBPattern and Look all change how the screen looks. We propose nine editors, each about one subject, built on one shared frame, and we keep every old editor working in a Classic drawer.
 
