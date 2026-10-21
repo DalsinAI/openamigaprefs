@@ -155,7 +155,7 @@ Windows, Title bar and Menus and the OpenBench built-ins still build.
 | Tab | Simple | Advanced adds |
 | --- | --- | --- |
 | Pointer | The sets in `SYS:Prefs/Presets/Pointers` (a click takes the whole set), a preview of Normal and Busy | The pointer types the file holds, a preview of one, its hot spot, The set or This one (that type only) |
-| Fonts | Screen font, icon font (the ASL font requester) | System (fixed-width) font, icon labels (plain, fields, shadow, outline), label and field colours |
+| Fonts | Screen font, icon font (the ASL font requester, or Standard: the Team's CGTriumvirate 13, shown as "(standard)") | System (fixed-width) font, icon labels (plain, fields, shadow, outline), label and field colours |
 | Colours | The first eight colours, red, green and blue, shown on the screen as they move | The thirteen DrawInfo pens for 4-colour and for 8-colour screens; the OS's own colours |
 | Backdrops | For the Workbench, drawers or the screen: the picture (typed or chosen), how it is placed | A picture, the pattern the file had, or nothing; remap, dither, colour match |
 | Workbench | Borders round icons, disk gauge, screen title bar, icon label length | NewIcons, colour icons, icon colour precision, lock pens, default stack, drawers in lists, oldest first, keep lists in view, title update, copy buffer, type-ahead, the screen title's text |

@@ -163,6 +163,15 @@ static void fonts(void)
     strcpy(t.name, "XEN.font");
     CHECK(pf_font_put(&f, &t) && !strcmp((char *)f.ch[1].data + 28, "XEN.font") && f.ch[1].data[28 + 9] == 'r' &&
           f.ch[1].data[28 + 19] == 'x', "a new name over the old, the bytes after its 0 as they were (as Font copies it)");
+    /* the Team's standard font: name, size, style and flags; pens, mode and label style as they were */
+    t = wb;
+    t.special = 1; t.front = 3; strcpy(t.name, "topaz.font"); t.ysize = 8; t.style = 1; t.flags = 0x41;
+    CHECK(!pf_font_is_standard(&t), "topaz 8 isn't the standard");
+    pf_font_standard(&t);
+    CHECK(pf_font_is_standard(&t) && !strcmp(t.name, "CGTriumvirate.font") && t.ysize == 13 && t.style == 0 &&
+          t.flags == 2 && t.special == 1 && t.front == 3 && t.type == PF_WBFONT, "standard: %s %d", t.name, t.ysize);
+    t.ysize = 12;
+    CHECK(!pf_font_is_standard(&t), "another size isn't the standard");
     pf_free(&f); pf_free(&g); free(b);
 }
 
