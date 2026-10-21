@@ -53,6 +53,12 @@ page "$P/OpenTypes/src/opentypes.c" -Dmain=types_main -Dversion=types_version -D
   -DIconBase=types_IconBase -DDataTypesBase=types_DataTypesBase -DAslBase=types_AslBase -DGadToolsBase=types_GadToolsBase
 page "$P/System/src/opensystem.c" -Dmain=system_main -Dversion=system_version
 page "$HERE/src/blankerprefs.c" -Dmain=blanker_main
+DISP="-I$P/Look/src -I$P/Display/src"
+page "$P/Display/src/screenmode.c" -Dmain=screenmode_main -Dversion=screenmode_version $DISP
+page "$P/Display/src/dp_prefs.c" $DISP
+ICTL="-I$P/Look/src -I$P/IControl/src"
+page "$P/IControl/src/icontrol.c" -Dmain=icontrol_main -Dversion=icontrol_version $ICTL
+page "$P/IControl/src/ic_prefs.c" $ICTL
 # the frame and the program, not moved: openprefs.c first, so its $VER is the file's first
 "$CC" $FRAME -o "$OUT/OpenPrefs" "$HERE/src/openprefs.c" "$HERE/src/op_apply.c" "$HERE/src/opframe.c" "$O"/app/*.o \
   "$OGT/lib/ogt_theme.c"
@@ -74,7 +80,8 @@ small "$P/System/src/opensystem.c" -Dmain=system_main -Dversion=system_version
 "$CC" $FRAME $SM -Wl,--gc-sections -o "$OUT/OpenPrefs.small" "$HERE/src/op_small.c" "$HERE/src/op_apply.c" "$HERE/src/opframe.c" \
   "$O"/small/*.o -Wl,--defsym=look_main=0 -Wl,--defsym=windows_main=0 -Wl,--defsym=titlebar_main=0 -Wl,--defsym=menus_main=0 \
   -Wl,--defsym=appearance_main=0 -Wl,--defsym=dock_main=0 -Wl,--defsym=input_main=0 -Wl,--defsym=datetime_main=0 \
-  -Wl,--defsym=serial_main=0 -Wl,--defsym=types_main=0 -Wl,--defsym=blanker_main=0
+  -Wl,--defsym=serial_main=0 -Wl,--defsym=types_main=0 -Wl,--defsym=blanker_main=0 -Wl,--defsym=screenmode_main=0 \
+  -Wl,--defsym=icontrol_main=0
 
 # the name stubs: no C library
 for n in Look OpenLook Windows TitleBar Menus OpenDock OpenSound OpenInput OpenGamepads OpenDateTime OpenSerial OpenTypes OpenSystem; do

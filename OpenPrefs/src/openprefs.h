@@ -19,6 +19,8 @@ int serial_main(int argc, char **argv);
 int types_main(int argc, char **argv);
 int system_main(int argc, char **argv);
 int blanker_main(int argc, char **argv);
+int screenmode_main(int argc, char **argv);
+int icontrol_main(int argc, char **argv);
 
 /* OpenPrefs APPLY (op_apply.c): what the boot's OpenSound USE, OpenGamepads USE and OpenSystem APPLY did */
 int op_apply(void);

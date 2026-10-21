@@ -13,6 +13,17 @@ The team was asked to design new preferences editors that combine similar settin
 - Everything runs on a real 68040 with FPU and no OpenGPU. Rows a machine can't use are left out, not greyed.
 - Dale took the five decisions on 6 October 2026, listed at the end.
 
+## Revision, 21 October 2026: Mouse and keys, Screen mode with Overscan, IControl
+
+**Status:** Dale's decisions of 21 October 2026, written (Display/, IControl/; host tests in their tests/). Where this section and the older ones disagree, this one wins.
+
+- "fold mouse and keys into a single app": the Input section (OpenInput: the mouse, its acceleration, the keyboard's repeat and the keymap) is shown as **Mouse and keys**. `INPUT`, `MOUSE`, `KEYBOARD`, `KEYS` and `KEYMAP` all open it. This answers question 1 of the 10 October revision: one section for mouse and keys, Gamepads beside it.
+- WBPattern stays in OpenPrefs as the Backdrops section (`BACKDROPS` or `WBPATTERN`).
+- "overscan should be under screenmode": a new **Screen mode** section (`Display/src/screenmode.c`, `SCREENMODE`, `OVERSCAN` or `DISPLAY`) in the look group. The mode list, the width and height (each the mode's own or a number), the colours and autoscroll write `ENV:Sys/screenmode.prefs`; under them, for a chipset mode only, the text overscan's size and the standard overscan's rectangle for the mode's monitor write `overscan.prefs` (only when changed), and Reset gives the display database's own back. Still to check in a lab against OS 3.2.3's Overscan editor: the OSCN chunk's HStart..VStop and view position for a monitor that has no chunk yet, and the units of its rectangles.
+- IControl, "fold into openprefs": a new **IControl** section (`IControl/src/icontrol.c`, `ICONTROL`) in the desktop group: the verify time-out, the keys that drag a screen, the four Amiga-key shortcuts, and avoid flicker, preserve colours, mode promotion, menu snap, the text gadget filter and windows off screen. OS 3.2's longer chunk is kept byte for byte. Its defaults with no file are still to compare with OS 3.2.3's editor in a lab.
+
+The sections are now 21. The title bar's cog lists Screen mode and IControl, and Input as Mouse and keys.
+
 ## Revision, 17 October 2026: one app, OpenPrefs
 
 **Status:** Dale's decisions of 17 October 2026, built (W48). Where this section and the older ones disagree, this one wins. It replaces the nine (and then ten) editors of the 6 and 10 October plan with **one program with one icon, OpenPrefs**; everything else stands: the shared frame, Simple and Advanced (`ENV:OpenAmiga/PrefsView`), each page writing the same files its old editor wrote, and OS 3.2.3's own editors staying on disk in `Prefs/Classic`.

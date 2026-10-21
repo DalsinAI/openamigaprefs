@@ -874,12 +874,14 @@ static const char *const cog13[13] = {
  * src/openupmenu.c). */
 static const struct { const char *label, *path, *section, *needs; } cog_items[] = {
     { "Look",          NULL, "THEME",    NULL },
+    { "Screen mode",   NULL, "SCREENMODE", NULL },
     { "Windows",       NULL, "WINDOWS",  NULL },
     { "Title bar",     NULL, "TITLEBAR", NULL },
     { "Menus",         NULL, "MENUS",    NULL },
+    { "IControl",      NULL, "ICONTROL", NULL },
     { "Dock",          NULL, "DOCK",     NULL },
     { "Sound",         NULL, "SOUND",    NULL },
-    { "Input",         NULL, "INPUT",    NULL },
+    { "Mouse and keys", NULL, "INPUT",   NULL },
     { "Gamepads",      NULL, "GAMEPADS", NULL },
     { "Date and time", NULL, "DATETIME", NULL },
     { "Serial",        NULL, "SERIAL",   NULL },
@@ -894,7 +896,7 @@ static const struct { const char *label, *path, *section, *needs; } cog_items[] 
     { NULL,            NULL, NULL,       NULL },                          /* a line */
     { "All Prefs...",  "SYS:Prefs",              NULL, NULL },
 };
-#define COG_SECTIONS 13                        /* the first ones: OpenPrefs's */
+#define COG_SECTIONS 15                        /* the first ones: OpenPrefs's */
 #define COG_ITEMS (int)(sizeof cog_items / sizeof cog_items[0])
 #define COG_PAD 10
 static int menu_idx[COG_ITEMS], menu_n;        /* what the list shows: indexes into cog_items */

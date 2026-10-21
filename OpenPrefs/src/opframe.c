@@ -1,9 +1,9 @@
 /* opframe.c: OpenPrefs's frame, the one window every page goes into (Common/looktabs.h with LT_OP).
  *
  * The sections stand down the left, one row each, the open one filled, in four groups: the look (Theme,
- * Pointer, Fonts, Colours, Backdrops, Workbench, File requesters), the desktop (Windows, Title bar, Menus,
- * Dock), sound and input (Sound, Input, Gamepads) and the rest (Date and time, Serial, File types, System,
- * Blanker). Each page stands lt_dx to the right of them, as it was laid out alone (opshift.h moves it), with
+ * Screen mode, Pointer, Fonts, Colours, Backdrops, Workbench, File requesters), the desktop (Windows, Title
+ * bar, Menus, IControl, Dock), sound and input (Sound, Mouse and keys, Gamepads) and the rest (Date and time,
+ * Serial, File types, System, Blanker). Each page stands lt_dx to the right of them, as it was laid out alone (opshift.h moves it), with
  * its own Save, Use, Test and Cancel along its foot. On a screen too narrow for the list beside the widest
  * page (under LT_LIST_MIN wide: 640 x 256 PAL), the sections are a cycle gadget above the page, where the
  * tabs were, and nothing moves.
@@ -53,14 +53,16 @@ const char *lt_pubname;
 const char *lt_prog = "OpenPrefs";         /* the name it runs as, for the Shell's lines */
 
 static const char *const lt_label[LT_N] = { "Theme", "Windows", "Title bar", "Menus", "Pointer", "Fonts", "Colours",
-                                            "Backdrops", "Workbench", "File requesters", "Dock", "Sound", "Input",
-                                            "Gamepads", "Date and time", "Serial", "File types", "System", "Blanker" };
+                                            "Backdrops", "Workbench", "File requesters", "Dock", "Sound",
+                                            "Mouse and keys", "Gamepads", "Date and time", "Serial", "File types", "System",
+                                            "Blanker", "Screen mode", "IControl" };
 /* the order down the list, and the row after which a group ends */
-static const UBYTE lt_order[LT_N] = { LT_LOOK, LT_POINTER, LT_FONTS, LT_COLOURS, LT_BACKDROPS, LT_WORKBENCH, LT_ASL,
-                                      LT_WINDOWS, LT_TITLEBAR, LT_MENUS, LT_DOCK,
+static const UBYTE lt_order[LT_N] = { LT_LOOK, LT_SCREENMODE, LT_POINTER, LT_FONTS, LT_COLOURS, LT_BACKDROPS, LT_WORKBENCH,
+                                      LT_ASL,
+                                      LT_WINDOWS, LT_TITLEBAR, LT_MENUS, LT_ICONTROL, LT_DOCK,
                                       LT_SOUND, LT_INPUT, LT_GAMEPADS,
                                       LT_DATETIME, LT_SERIAL, LT_TYPES, LT_SYSTEM, LT_BLANKER };
-static const UBYTE lt_group_end[LT_N] = { 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0 };
+static const UBYTE lt_group_end[LT_N] = { 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0 };
 #define LT_GAP 4                           /* between the groups */
 #define LT_LX 8                            /* the list's left edge in the window */
 #define LT_LIST_MIN 760                    /* a screen at least this wide has the list beside the page */
