@@ -11,7 +11,10 @@ Since 17 October 2026 the editors below are **one program with one icon, OpenPre
 (a cycle gadget of sections on a 640-wide screen), each section the editor it was. The old names (`Look`,
 `OpenLook`, `Windows`, `TitleBar`, `Menus`, `OpenDock`, `OpenSound`, `OpenInput`, `OpenGamepads`, `OpenDateTime`,
 `OpenSerial`, `OpenTypes`, `OpenSystem`) open their sections and take their arguments as before; `OpenPrefs APPLY`
-at boot is served by a small body, `C:OpenPrefs`. See [docs/combined-prefs](docs/combined-prefs/DESIGN.md), its
+at boot is served by a small body, `C:OpenPrefs`. Since 21 October every section has a name and an icon in
+SYS:Prefs: the old names, and `OpenScreenMode`, `OpenPointer`, `OpenFonts`, `OpenColours`, `OpenBackdrops`,
+`OpenWorkbench`, `OpenFileRequesters`, `OpenBlanker` and `OpenIControl` for the sections no editor had a name for.
+Names that are OS 3.2.3's own editors (`Pointer`, `Sound`, `Serial`, `Workbench`, `IControl`) are left to them. See [docs/combined-prefs](docs/combined-prefs/DESIGN.md), its
 revision of 17 October.
 
 | Editor | What it sets | State |

@@ -84,7 +84,7 @@ small "$P/System/src/opensystem.c" -Dmain=system_main -Dversion=system_version
   -Wl,--defsym=icontrol_main=0
 
 # the name stubs: no C library
-for n in Look OpenLook Windows TitleBar Menus OpenDock OpenSound OpenInput OpenGamepads OpenDateTime OpenSerial OpenTypes OpenSystem; do
+for n in Look OpenLook Windows TitleBar Menus OpenDock OpenSound OpenInput OpenGamepads OpenDateTime OpenSerial OpenTypes OpenSystem OpenScreenMode OpenPointer OpenFonts OpenColours OpenBackdrops OpenWorkbench OpenFileRequesters OpenBlanker OpenIControl; do
   "$CC" -noixemul ${CPU:--m68020} -Os -nostartfiles -nostdlib -ffreestanding -fno-tree-loop-distribute-patterns -ffunction-sections -s -Wall -Werror -DSTUB_NAME="\"$n\"" \
     -o "$OUT/stubs/$n" "$HERE/src/stub.c"
 done
