@@ -468,11 +468,11 @@ static int gui_once(void)
 #endif
         while (!quit && (m = GT_GetIMsg(win->UserPort))) {
             ULONG cls = m->Class;
+            UWORD code = m->Code;
             struct Gadget *gg = (struct Gadget *)m->IAddress;
             GT_ReplyIMsg(m);
             if (cls == IDCMP_CLOSEWINDOW) quit = 1;
             else if (cls == IDCMP_MENUPICK) {
-                UWORD code = m->Code;
                 while (code != MENUNULL && !quit) {
                     struct MenuItem *it = ItemAddress(menu, code);
                     if (!it) break;
