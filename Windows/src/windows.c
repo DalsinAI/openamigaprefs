@@ -350,13 +350,20 @@ static int gui_once(void)
      * Workbench drawers): one a row it was taller than 256 lines, and its buttons were cut off (lab
      * t3-openprefs-20261022, 22 October 2026) */
     pair = !advanced && scr->Height < 400;
-    if ((compact || pair) && W < 620) W = 620;
+    if (compact && W < 620) W = 620;
+    /* the paired columns are measured, and the window widens only when they need it (a 600-wide screen keeps it) */
     if (pair) {
         static const char *const right[] = { "Wheel under pointer", "Workbench drawers too", NULL };
-        int k, t;
+        int k, t, left, need;
+        left = 10 + 26 + 8 + TextLength(&scr->RastPort, (STRPTR)"Transparency and shadows", 24);
+        if (left < X + 26) left = X + 26;
         mid = (W - 20) / 2 + 10;
+        if (mid < left + 10) mid = left + 10;
         for (k = 0; right[k]; k++) if ((t = TextLength(&scr->RastPort, (STRPTR)right[k], strlen(right[k]))) > x2) x2 = t;
         x2 += mid + 10;
+        need = mid + 10 + 26 + 8 + TextLength(&scr->RastPort, (STRPTR)"Gradient title bars", 19);
+        if (need < x2 + 26) need = x2 + 26;
+        if (W < need + 10) W = need + 10;
     }
     strcpy(status_text, running() ? "OpenWindows is running." : "OpenWindows isn't running: Use or Save starts it.");
     /* not composited, and why (comp_off, above): the switch's words, or the status line in the two-column view */
