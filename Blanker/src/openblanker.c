@@ -31,8 +31,8 @@
 #include <proto/dos.h>
 #include <proto/intuition.h>
 #include <proto/graphics.h>
-#include <proto/diskfont.h>
 #include <proto/commodities.h>
+#include "openfont_text.h"
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -41,7 +41,7 @@ static const char version[] __attribute__((used)) = "$VER: OpenBlanker 1.1.1 (10
 
 struct IntuitionBase *IntuitionBase;
 struct GfxBase *GfxBase;
-struct Library *CxBase, *DiskfontBase;
+struct Library *CxBase, *OpenFontTextBase;
 
 static struct Task *me;
 static volatile ULONG idle_ticks;      /* seconds since the last key or mouse */
@@ -122,7 +122,7 @@ static struct TextFont *font(const char *name, int px)
     struct TextFont *f;
     if (px < 8) px = 8;
     ta.ta_Name = (STRPTR)name; ta.ta_YSize = (UWORD)px; ta.ta_Style = FS_NORMAL; ta.ta_Flags = FPF_DISKFONT;
-    f = DiskfontBase ? OpenDiskFont(&ta) : NULL;     /* an outline font: made at this size */
+    f = OpenFontTextBase ? openfont_text_font(OpenFontTextBase, &ta) : NULL;     /* an outline font: made at this size */
     if (!f) { ta.ta_Name = (STRPTR)"topaz.font"; ta.ta_YSize = 8; ta.ta_Flags = FPF_ROMFONT; f = OpenFont(&ta); }
     return f;
 }
@@ -346,7 +346,7 @@ int main(int argc, char **argv)
     IntuitionBase = (struct IntuitionBase *)OpenLibrary((STRPTR)"intuition.library", 39);
     GfxBase = (struct GfxBase *)OpenLibrary((STRPTR)"graphics.library", 39);
     CxBase = OpenLibrary((STRPTR)"commodities.library", 39);
-    DiskfontBase = OpenLibrary((STRPTR)"diskfont.library", 39);
+    OpenFontTextBase = openfont_text_open();
     if (!IntuitionBase || !GfxBase || !CxBase) goto out;
     if (argc > 0 && (rd = ReadArgs((STRPTR)"TIMEOUT/N,NOW/S", args, NULL))) {
         now = args[1] != 0;
@@ -407,7 +407,7 @@ out:
     if (broker) DeleteCxObjAll(broker);
     if (port) { struct Message *msg; if (port->mp_Node.ln_Name) RemPort(port); while ((msg = GetMsg(port))) ReplyMsg(msg); DeleteMsgPort(port); }
     if (rd) FreeArgs(rd);
-    if (DiskfontBase) CloseLibrary(DiskfontBase);
+    if (OpenFontTextBase) CloseLibrary(OpenFontTextBase);
     if (CxBase) CloseLibrary(CxBase);
     if (GfxBase) CloseLibrary((struct Library *)GfxBase);
     if (IntuitionBase) CloseLibrary((struct Library *)IntuitionBase);
