@@ -20,8 +20,13 @@ O=$OUT/obj
 mkdir -p "$O/app" "$O/small" "$OUT/stubs"
 BASE="-noixemul ${CPU:--m68020} -std=gnu99 -Wall -Werror ${OPT:--O2} -fno-delete-null-pointer-checks -fno-common"
 FRAME="$BASE -DLT_OP -DLT_ONE -I$P/Common -I$HERE/src -I$OGT/lib"
-# GCC 16 warns of truncation in the editors' bounded copies (snprintf, strncpy): warnings, not errors, here
-PAGE="$FRAME -Wno-error=format-truncation -Wno-error=stringop-truncation -include $HERE/src/opshift.h"
+# GCC 16 warns of truncation in the editors' bounded copies (snprintf, strncpy): warnings, not errors, here.
+# GCC 6.5 (the os32 stove) has neither warning and refuses -Wno-error= for one it doesn't know.
+TRUNC=""
+for w in format-truncation stringop-truncation; do
+  if echo 'int x;' | "$CC" -Werror -Wno-error=$w -fsyntax-only -x c - 2>/dev/null; then TRUNC="$TRUNC -Wno-error=$w"; fi
+done
+PAGE="$FRAME$TRUNC -include $HERE/src/opshift.h"
 
 # page DIR FILE.c [extra flags...]: one source as a page of the app
 page() { f=$1; shift; "$CC" $PAGE "$@" -c -o "$O/app/$(basename "$f" .c).o" "$f"; }
