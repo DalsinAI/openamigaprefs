@@ -807,7 +807,7 @@ static int gui(void)
             }
             if (id < 0) continue;
             if (LT_IS(id)) {                                  /* another tab: keep, as Use, and hand over (OpenPrefs: when changed) */
-                int to = lt_hit(gg, 0);
+                int to = lt_hit(gg, code);
                 if (to >= 0 && (!LT_DIRTY || put_in_place(0))) { test_until = 0; lt_go(win, to); quit = 1; }
                 continue;
             }

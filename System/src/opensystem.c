@@ -403,7 +403,7 @@ static int gui(void)
                 case G_REMOVE: remove_selected(); break;
 #ifdef LT_ONE
                 default: {                          /* another section: the page's changes kept, as Use, when it has any */
-                    int to = lt_hit(gg, 0);
+                    int to = lt_hit(gg, code);
                     if (to >= 0) { if (LT_DIRTY) put_in_place(0); lt_go(win, to); quit = 1; }
                     break;
                 }

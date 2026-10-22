@@ -928,9 +928,9 @@ static int gui_once(void)
                 case G_SAVE: put_in_place(1); focus_now(); test_until = 0; quit = 1; break;
                 case G_CANCEL: if (test_until) go_back(); quit = 1; break;
                 default:
-                    if (lt_hit(gg, 0) >= 0) {   /* another tab: keep, as Use, and hand over (OpenPrefs: when changed) */
+                    if (lt_hit(gg, code) >= 0) {   /* another tab: keep, as Use, and hand over (OpenPrefs: when changed) */
                         if (LT_DIRTY) { put_in_place(0); focus_now(); }
-                        test_until = 0; lt_go(win, lt_hit(gg, 0)); quit = 1;
+                        test_until = 0; lt_go(win, lt_hit(gg, code)); quit = 1;
                     }
                     break;
                 }

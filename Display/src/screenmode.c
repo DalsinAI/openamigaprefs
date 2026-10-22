@@ -62,6 +62,7 @@ static const char version[] __attribute__((used)) = "$VER: OpenScreenMode 0.1 (2
 struct dmode {
     struct Node node;                       /* ln_Name: name */
     ULONG id;
+    ULONG alt;                              /* the same mode by another ID (the default monitor's), or INVALID_ID */
     struct DimensionInfo dim;
     Point view;                             /* the monitor's view position */
     char name[DISPLAYNAMELEN + 12];
@@ -97,6 +98,7 @@ static void find_modes(void)
             if (wb_only && !(di.PropertyFlags & DIPF_IS_WB)) continue;
             if (!GetDisplayInfoData(h, (UBYTE *)&m->dim, sizeof m->dim, DTAG_DIMS, INVALID_ID)) continue;
             m->id = id;
+            m->alt = INVALID_ID;
             m->view.x = m->view.y = 0;
             if (GetDisplayInfoData(h, (UBYTE *)&mi, sizeof mi, DTAG_MNTR, INVALID_ID)) m->view = mi.ViewPosition;
             if (GetDisplayInfoData(h, (UBYTE *)&ni, sizeof ni, DTAG_NAME, INVALID_ID) && ni.Name[0])
@@ -112,6 +114,24 @@ static void find_modes(void)
         for (j = i; j > 0 && strcmp(modes[j - 1].name, t.name) > 0; j--) modes[j] = modes[j - 1];
         modes[j] = t;
     }
+    /* One row a mode: the display database lists the default monitor's modes again under their own IDs and
+     * the same names (each mode twice on stock 3.2.3, lab t3-openprefs-20261022); the real monitor's ID is
+     * kept and the other remembered, so a file naming either finds the row */
+    for (i = 0, j = 0; i < nmodes; i++) {
+        if (j > 0 && !strcmp(modes[j - 1].name, modes[i].name)) {
+            struct dmode *k = &modes[j - 1];
+            if ((k->id & MONITOR_ID_MASK) == DEFAULT_MONITOR_ID && (modes[i].id & MONITOR_ID_MASK) != DEFAULT_MONITOR_ID) {
+                k->alt = k->id;
+                k->id = modes[i].id;
+                k->dim = modes[i].dim;
+                k->view = modes[i].view;
+            } else if (k->alt == (ULONG)INVALID_ID) k->alt = modes[i].id;
+            continue;
+        }
+        if (j != i) modes[j] = modes[i];
+        j++;
+    }
+    nmodes = j;
     for (i = 0; i < nmodes; i++) {
         modes[i].node.ln_Name = modes[i].name;
         AddTail(&mode_list, &modes[i].node);
@@ -122,6 +142,7 @@ static int mode_index(ULONG id)
 {
     int i;
     for (i = 0; i < nmodes; i++) if (modes[i].id == id) return i;
+    for (i = 0; i < nmodes; i++) if (id != (ULONG)INVALID_ID && modes[i].alt == id) return i;
     return -1;
 }
 
@@ -352,7 +373,7 @@ static int gui(void)
     lvh = 5 * lh;
     nw = TextLength(rp, (STRPTR)"000000", 6) + 16;            /* a number */
     cbw = 26;                                                 /* a check box */
-    lw2 = TextLength(rp, (STRPTR)"Colours", 7) + 16;
+    lw2 = TextLength(rp, (STRPTR)"Autoscroll", 10) + 16;      /* the right column's longest label */
     X2 = 12 + lvw + 12 + lw2;                                 /* the right column's gadgets */
     lw3 = TextLength(rp, (STRPTR)"Standard overscan", 17) + 16;
     X3 = 12 + lw3;                                            /* the overscan rows' gadgets */
@@ -504,7 +525,7 @@ static int gui(void)
                     break;
 #ifdef LT_ONE
                 default: {                          /* another section: the page's changes kept, as Use, when it has any */
-                    int to = lt_hit(gg, 0);
+                    int to = lt_hit(gg, code);
                     if (to >= 0) { if (LT_DIRTY) put_in_place(0); lt_go(win, to); quit = 1; }
                     break;
                 }
