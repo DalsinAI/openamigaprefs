@@ -892,7 +892,7 @@ static int gui(void)
             case G_CANCEL: quit = 1; break;
 #ifdef LT_ONE
             default: {                               /* another section: the kinds changed kept, as Use, when there are any */
-                int to = lt_hit(gg, 0), k;
+                int to = lt_hit(gg, code), k;
                 if (to < 0) break;
                 if (LT_DIRTY)
                     for (k = 0; k < ntypes; k++)

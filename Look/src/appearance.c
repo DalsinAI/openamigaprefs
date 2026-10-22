@@ -1516,10 +1516,10 @@ static int gui_once(void)
                 else if (id == G_TEST) test();
                 else if (id == G_CANCEL) { if (test_until) put_back(); quit = 1; }
                 else if (LT_IS(id)) {
-                    if (lt_hit(gg, 0) >= 0) {     /* another tab: keep, as Use, and hand over (OpenPrefs: when changed) */
+                    if (lt_hit(gg, code) >= 0) {     /* another tab: keep, as Use, and hand over (OpenPrefs: when changed) */
                         if (!damaged && LT_DIRTY) keep(0);
                         kept = 1;
-                        lt_go(win, lt_hit(gg, 0));
+                        lt_go(win, lt_hit(gg, code));
                         quit = 1;
                     }
                 } else {

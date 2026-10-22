@@ -640,7 +640,7 @@ static int gui(void)
             if (id < 0) continue;
 #ifdef LT_ONE
             if (LT_IS(id)) {                         /* another section: the changes kept, as Use, when there are any */
-                int to = lt_hit(gg, 0);
+                int to = lt_hit(gg, code);
                 if (to >= 0 && (!LT_DIRTY || put_in_place(0, 1))) { test_until = 0; lt_go(win, to); quit = 1; }
                 continue;
             }

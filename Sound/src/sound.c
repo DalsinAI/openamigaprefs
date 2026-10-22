@@ -376,7 +376,7 @@ static int gui_once(void)
                 int id = gg->GadgetID, again = 0;
 #ifdef LT_ONE
                 if (LT_IS(id)) {                     /* another section: the changes kept, as Use, when there are any */
-                    int to = lt_hit(gg, 0);
+                    int to = lt_hit(gg, code);
                     if (to >= 0) { if (LT_DIRTY) put_in_place(0); lt_go(win, to); quit = 1; }
                     continue;
                 }
