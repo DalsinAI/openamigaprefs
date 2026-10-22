@@ -72,6 +72,7 @@ static int lt_ry[LT_N];                    /* each section's row top, by section
 static struct TextAttr lt_ta;
 static char lt_font[64];
 static struct Gadget *lt_fg, *lt_cyc;      /* the frame's own gadgets */
+static struct Gadget *lt_flast;            /* the last of them: a page's AddGList hangs its gadgets on after it */
 static APTR lt_vi;
 static char lt_note[160];
 static int lt_refused, lt_refused_now, lt_made_tree;
@@ -226,11 +227,16 @@ static int lt_frame_gadgets(struct Screen *scr)
         ng.ng_GadgetText = (STRPTR)"Section"; ng.ng_Flags = PLACETEXT_LEFT; ng.ng_GadgetID = LT_CYCLE;
         g = lt_cyc = CreateGadget(CYCLE_KIND, g, &ng, GTCY_Labels, (ULONG)labels, GTCY_Active, lt_pos(lt_me), TAG_DONE);
     }
+    for (lt_flast = lt_fg; lt_flast && lt_flast->NextGadget; lt_flast = lt_flast->NextGadget) ;
     return g != NULL;
 }
 
+/* The frame's gadgets only: a page still in the window has its own after lt_flast, which the page frees
+ * (FreeGadgets follows NextGadget: without the cut, the page's gadgets were freed here and again by the
+ * page, AN_FreeTwice on closing the window, lab t3-openprefs-20261022) */
 static void lt_free_frame(void)
 {
+    if (lt_flast) { lt_flast->NextGadget = NULL; lt_flast = NULL; }
     if (lt_fg) { FreeGadgets(lt_fg); lt_fg = NULL; }
     lt_cyc = NULL;
     if (lt_vi) { FreeVisualInfo(lt_vi); lt_vi = NULL; }
@@ -319,6 +325,7 @@ void lt_close(struct Window *win, struct Gadget *glist)
     if (lt_next >= 0) { lt_detach(win, glist); return; }
     lt_rp = NULL;
     lt_win = NULL;
+    if (glist) RemoveGList(win, glist, -1);
     CloseWindow(win);
     lt_free_frame();
 }
