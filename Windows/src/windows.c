@@ -323,7 +323,7 @@ static int gui_once(void)
     APTR vi = scr ? GetVisualInfoA(scr, NULL) : NULL;
     struct Gadget *glist = NULL, *g;
     struct NewGadget ng;
-    int fh, lh, top, row, quit = 0, rc = 1, W = 480, X = 200, i, wl = 60, wt, sp, LX, compact;
+    int fh, lh, top, row, quit = 0, rc = 1, W = 480, X = 200, i, wl = 60, wt, sp, LX, compact, pair, mid = 0, x2 = 0;
     struct Menu *menu = NULL;
     if (!vi) { if (scr) UnlockPubScreen(NULL, scr); return -1; }
     memset(gad, 0, sizeof gad);
@@ -346,10 +346,21 @@ static int gui_once(void)
     }
     /* Advanced on a screen under 400 lines has the short switches in two columns, so it fits 640 x 256 */
     compact = advanced && scr->Height < 400;
-    if (compact && W < 620) W = 620;
+    /* Simple on such a screen pairs three rows (Snap and Wheel, Transparency and Gradient, Remember places and
+     * Workbench drawers): one a row it was taller than 256 lines, and its buttons were cut off (lab
+     * t3-openprefs-20261022, 22 October 2026) */
+    pair = !advanced && scr->Height < 400;
+    if ((compact || pair) && W < 620) W = 620;
+    if (pair) {
+        static const char *const right[] = { "Wheel under pointer", "Workbench drawers too", NULL };
+        int k, t;
+        mid = (W - 20) / 2 + 10;
+        for (k = 0; right[k]; k++) if ((t = TextLength(&scr->RastPort, (STRPTR)right[k], strlen(right[k]))) > x2) x2 = t;
+        x2 += mid + 10;
+    }
     strcpy(status_text, running() ? "OpenWindows is running." : "OpenWindows isn't running: Use or Save starts it.");
     /* not composited, and why (comp_off, above): the switch's words, or the status line in the two-column view */
-    if (compoff_text[0] && compact) strcpy(status_text, compoff_text);
+    if (compoff_text[0] && (compact || pair)) strcpy(status_text, compoff_text);
 
     g = CreateContext(&glist);
     memset(&ng, 0, sizeof ng);
@@ -399,12 +410,13 @@ static int gui_once(void)
     } else {
     G(CHECKBOX_KIND, G_SNAP, X, row, 26, lh, "Snap to edges", PLACETEXT_LEFT, GTCB_Scaled, TRUE);
     if (advanced) G(INTEGER_KIND, G_DIST, X + 160, row, 50, lh, "within", PLACETEXT_LEFT, GTIN_MaxChars, 2);
+    if (pair) G(CHECKBOX_KIND, G_WHEEL, x2, row, 26, lh, "Wheel under pointer", PLACETEXT_LEFT, GTCB_Scaled, TRUE);
     row += lh + sp;
     if (advanced) { G(CHECKBOX_KIND, G_HALVES, X, row, 26, lh, "Fill a half", PLACETEXT_LEFT, GTCB_Scaled, TRUE); row += lh + 10; }
     G(CHECKBOX_KIND, G_SWITCH, X, row, 26, lh, "Window switcher", PLACETEXT_LEFT, GTCB_Scaled, TRUE);
     if (advanced) G(STRING_KIND, G_KEY, X + 100, row, 160, lh, "key", PLACETEXT_LEFT, GTST_MaxChars, 46);
     row += lh + (advanced ? 10 : sp);
-    G(CHECKBOX_KIND, G_WHEEL, X, row, 26, lh, "Wheel under pointer", PLACETEXT_LEFT, GTCB_Scaled, TRUE); row += lh + sp;
+    if (!pair) { G(CHECKBOX_KIND, G_WHEEL, X, row, 26, lh, "Wheel under pointer", PLACETEXT_LEFT, GTCB_Scaled, TRUE); row += lh + sp; }
     /* a long label: the box in the column with its words after it */
     G(CHECKBOX_KIND, G_DBLFRONT, LX, row, 26, lh, "Double-click a title bar to bring the window to the front", PLACETEXT_RIGHT,
       GTCB_Scaled, TRUE);
@@ -417,16 +429,16 @@ static int gui_once(void)
     G(CHECKBOX_KIND, G_DRIVETITLE, LX, row, 26, lh, "Drive windows titled with the name only", PLACETEXT_RIGHT, GTCB_Scaled, TRUE);
     row += lh + sp;
     /* layers' composited mode on RTG Workbench screens (composite on|off); it takes effect when the screen opens next */
-    G(CHECKBOX_KIND, G_COMP, LX, row, 26, lh, compoff_text[0] ? compoff_text : "Transparency and shadows", PLACETEXT_RIGHT,
+    G(CHECKBOX_KIND, G_COMP, pair ? 10 : LX, row, 26, lh, compoff_text[0] && !pair ? compoff_text : "Transparency and shadows", PLACETEXT_RIGHT,
       GTCB_Scaled, TRUE);
-    row += lh + sp;
+    if (!pair) row += lh + sp;
     /* Intuition's gradient title bars on true-colour screens (gradient on|off); as above, from the next Workbench */
-    G(CHECKBOX_KIND, G_GRAD, LX, row, 26, lh, "Gradient title bars", PLACETEXT_RIGHT, GTCB_Scaled, TRUE);
+    G(CHECKBOX_KIND, G_GRAD, pair ? mid + 10 : LX, row, 26, lh, "Gradient title bars", PLACETEXT_RIGHT, GTCB_Scaled, TRUE);
     row += lh + (advanced ? 10 : sp);
     G(CHECKBOX_KIND, G_PLACES, X, row, 26, lh, "Remember places", PLACETEXT_LEFT, GTCB_Scaled, TRUE);
     if (advanced) G(BUTTON_KIND, G_FORGET, X + 120, row, 140, lh, "Forget all", 0, GA_Disabled, FALSE);
-    row += lh + sp;
-    G(CHECKBOX_KIND, G_DRAWERS, X, row, 26, lh, "Workbench drawers too", PLACETEXT_LEFT, GTCB_Scaled, TRUE);
+    if (!pair) row += lh + sp;
+    G(CHECKBOX_KIND, G_DRAWERS, pair ? x2 : X, row, 26, lh, "Workbench drawers too", PLACETEXT_LEFT, GTCB_Scaled, TRUE);
     if (advanced) {
         row += lh + sp;
         G(STRING_KIND, G_NEVER, X, row, 260, lh, "Never for", PLACETEXT_LEFT, GTST_MaxChars, 158); row += lh + 10;
