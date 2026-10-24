@@ -1,9 +1,9 @@
 /* opframe.c: OpenPrefs's frame, the one window every page goes into (Common/looktabs.h with LT_OP).
  *
  * The sections stand down the left, one row each, the open one filled, in four groups: the look (Theme,
- * Screen mode, Pointer, Fonts, Colours, Backdrops, Workbench, File requesters), the desktop (Windows, Title
- * bar, Menus, IControl, Dock), sound and input (Sound, Mouse and keys, Gamepads) and the rest (Date and time,
- * Serial, File types, System, Blanker). Each page stands lt_dx to the right of them, as it was laid out alone (opshift.h moves it), with
+ * Screen Mode, Pointer, Fonts, Colours, Backdrops, Workbench, File Requesters), the desktop (Windows, Title
+ * Bar, Menus, IControl, Dock), sound and input (Sound, Input, Gamepads) and the rest (Date & Time,
+ * Serial, File Types, System, Blanker). Each page stands lt_dx to the right of them, as it was laid out alone (opshift.h moves it), with
  * its own Save, Use, Test and Cancel along its foot. On a screen too narrow for the list beside the widest
  * page (under LT_LIST_MIN wide: 640 x 256 PAL), the sections are a cycle gadget above the page, where the
  * tabs were, and nothing moves.
@@ -36,6 +36,7 @@
 #include <proto/intuition.h>
 #include <proto/graphics.h>
 #include <proto/gadtools.h>
+#include <proto/utility.h>
 #include <string.h>
 #include <stdio.h>
 
@@ -52,10 +53,21 @@ const char *lt_args;
 const char *lt_pubname;
 const char *lt_prog = "OpenPrefs";         /* the name it runs as, for the Shell's lines */
 
-static const char *const lt_label[LT_N] = { "Theme", "Windows", "Title bar", "Menus", "Pointer", "Fonts", "Colours",
-                                            "Backdrops", "Workbench", "File requesters", "Dock", "Sound",
-                                            "Mouse and keys", "Gamepads", "Date and time", "Serial", "File types", "System",
-                                            "Blanker", "Screen mode", "IControl" };
+/* the pages' names, as the user named them (salvor/Design-No-ROM-Volume-20261024.md, section 8): the list's
+ * rows, and the plain names OpenPrefs takes for a section (OpenPrefs "Date & Time", a project icon's name) */
+static const char *const lt_label[LT_N] = { "Theme", "Windows", "Title Bar", "Menus", "Pointer", "Fonts", "Colours",
+                                            "Backdrops", "Workbench", "File Requesters", "Dock", "Sound",
+                                            "Input", "Gamepads", "Date & Time", "Serial", "File Types", "System",
+                                            "Blanker", "Screen Mode", "IControl" };
+
+/* A page by its name, its letters in either case; -1 for none */
+int lt_page_named(const char *name)
+{
+    int i;
+    for (i = 0; i < LT_N; i++)
+        if (!Stricmp((CONST_STRPTR)name, (CONST_STRPTR)lt_label[i])) return i;
+    return -1;
+}
 /* the order down the list, and the row after which a group ends */
 static const UBYTE lt_order[LT_N] = { LT_LOOK, LT_SCREENMODE, LT_POINTER, LT_FONTS, LT_COLOURS, LT_BACKDROPS, LT_WORKBENCH,
                                       LT_ASL,
@@ -314,10 +326,44 @@ void lt_detach(struct Window *win, struct Gadget *glist)
     lt_rp = NULL;
 }
 
+/* Ctrl-C (OpenBench's Quit sends it to the programs it started; Break): OpenPrefs ends, as its close gadget
+ * ends it. A page waits for its window with Wait or WaitPort (opshift.h makes both these); on Ctrl-C a
+ * close-window message goes on the window's port once, which the page reads as its own, puts its settings
+ * back and ends, and no page opens after it. The message has no reply port: ReplyMsg marks it free. */
+static int lt_broken;
+static struct IntuiMessage lt_close_msg;
+
+ULONG lt_wait(ULONG sigs)
+{
+    ULONG got = Wait(sigs | SIGBREAKF_CTRL_C);
+    if ((got & SIGBREAKF_CTRL_C) && !(sigs & SIGBREAKF_CTRL_C) && lt_win) {
+        got &= ~SIGBREAKF_CTRL_C;
+        if (!lt_broken) {
+            lt_broken = 1;
+            memset(&lt_close_msg, 0, sizeof lt_close_msg);
+            lt_close_msg.ExecMessage.mn_Node.ln_Type = NT_MESSAGE;
+            lt_close_msg.ExecMessage.mn_Length = sizeof lt_close_msg;
+            lt_close_msg.Class = IDCMP_CLOSEWINDOW;
+            lt_close_msg.IDCMPWindow = lt_win;
+            PutMsg(lt_win->UserPort, &lt_close_msg.ExecMessage);
+        }
+        got |= 1UL << lt_win->UserPort->mp_SigBit;
+    }
+    return got;
+}
+
+struct Message *lt_waitport(struct MsgPort *port)
+{
+    while (port->mp_MsgList.lh_Head->ln_Succ == NULL)
+        lt_wait(1UL << port->mp_SigBit);
+    return (struct Message *)port->mp_MsgList.lh_Head;
+}
+
 void lt_close(struct Window *win, struct Gadget *glist)
 {
     if (!win) return;
-    if (lt_next < 0 && lt_refused_now) {      /* a Save went to ENV: only: the page again, saying so */
+    if (lt_broken) lt_next = -1;              /* Ctrl-C: no page after this one */
+    if (lt_next < 0 && lt_refused_now && !lt_broken) {      /* a Save went to ENV: only: the page again, saying so */
         lt_next = lt_me;
         snprintf(lt_note, sizeof lt_note, "Not saved: used for now (ENV: only), as SYS: has no preferences folders.");
     }

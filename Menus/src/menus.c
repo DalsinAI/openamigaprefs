@@ -61,6 +61,7 @@
 #include "om_prefs.h"
 #include "ogt_theme.h"
 #include "../../Common/looktabs.h"
+#include "../../Common/prefsapp.h"           /* where OpenPrefs is (SYS:Preferences) */
 
 #ifndef IN_OPENBENCH
 const char version[] __attribute__((used)) = "$VER: Menus 0.2.5 (12.10.2026) OpenPrefs, AmigaChrome Team";
@@ -75,7 +76,8 @@ const char version[] __attribute__((used)) = "$VER: Menus 0.2.5 (12.10.2026) Ope
 #define TEST_SECONDS 15
 #define VIEW_ENV "ENV:OpenAmiga/PrefsView"
 #define VIEW_ENVARC "ENVARC:OpenAmiga/PrefsView"
-#define LOOK_TOOL "SYS:Prefs/OpenLook"   /* the one-window editor (10 Oct 2026) */
+#define LOOK_TOOL "SYS:Prefs/OpenLook"   /* OpenBench's own Look editor's name (ob_builtin_open) */
+#define LOOK_RUN "Run >NIL: <NIL: \"%s\" THEME"   /* else OpenPrefs at its Theme page (prefsapp.h) */
 
 #ifdef IN_OPENBENCH
 #define AslBase menus_AslBase                    /* its own asl.library, under its own name (ob_builtin.h) */
@@ -403,7 +405,7 @@ static void show(const om_prefs *p)
     SET(G_RCNAME, GTCB_Checked, p->rightclick_name, GA_Disabled, !p->rightclick);
     SET(G_TAKEOVER, GA_Disabled, magicmenu_file() == NULL);
     SET(G_FEEL, GTCY_Active, p->use[p->open == OM_OPEN_POPUP ? OM_PU : OM_PD]);
-    SET(G_LOOK, GA_Disabled, !exists(LOOK_TOOL));
+    SET(G_LOOK, GA_Disabled, !op_app_path(0) && !exists(LOOK_TOOL));
     draw_preview(win, px, py, pw, ph, p);
 }
 
@@ -863,10 +865,15 @@ static int gui(void)
                 break;
             case G_CHOOSE: choose_image(); break;
 #ifdef IN_OPENBENCH
-            /* OpenLook built into OpenBench too: started there; else from SYS:Prefs, as before */
-            case G_LOOK: if (!ob_builtin_open(LOOK_TOOL)) SystemTags((STRPTR)"Run >NIL: <NIL: SYS:Prefs/OpenLook", TAG_DONE); redraw = 0; break;
+            /* OpenLook built into OpenBench too: started there; else OpenPrefs at its Theme page */
+            case G_LOOK: {
+                char cmd[80];
+                if (!ob_builtin_open(LOOK_TOOL)) { snprintf(cmd, sizeof cmd, LOOK_RUN, op_app_path(1)); SystemTags((STRPTR)cmd, TAG_DONE); }
+                redraw = 0;
+                break;
+            }
 #else
-            case G_LOOK: SystemTags((STRPTR)"Run >NIL: <NIL: SYS:Prefs/OpenLook", TAG_DONE); redraw = 0; break;
+            case G_LOOK: { char cmd[80]; snprintf(cmd, sizeof cmd, LOOK_RUN, op_app_path(1)); SystemTags((STRPTR)cmd, TAG_DONE); redraw = 0; break; }
 #endif
             case G_ENABLED: cur.enabled = (gg->Flags & GFLG_SELECTED) != 0; break;
             case G_BAR: cur.bar = code; break;

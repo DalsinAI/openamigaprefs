@@ -3,9 +3,10 @@
 # (m68k-amigaos-gcc, NDK 3.2) and the theme reader of an opengadtools checkout beside this one (OGT=dir).
 #   OpenPrefs/build.sh [OUT_DIR]                    (default build/os3)
 # writes
-#   OUT_DIR/OpenPrefs        the app: SYS:Prefs/OpenPrefs, ROM:Prefs/OpenPrefs
-#   OUT_DIR/OpenPrefs.small  the small body: C:OpenPrefs (APPLY at boot; anything else runs the app)
-#   OUT_DIR/stubs/NAME       a name stub for each old editor's name, for SYS:Prefs on a disk (OpenUp)
+#   OUT_DIR/OpenPrefs        the app: SYS:Preferences/OpenPrefs (SYS:Prefs/OpenPrefs on an older disk), and
+#                            OpenPrefs APPLY at boot on OS 3.2.3's own ROM (an open ROM applies at boot itself)
+# The small body (C:OpenPrefs) and the old names' stubs are no longer built: OpenUp archives them
+# (salvor/Design-No-ROM-Volume-20261024.md, section 8).
 # Each page is its editor's own source, compiled with LT_OP and OpenPrefs/src/opshift.h, its main renamed
 # (as Look/build-one.sh builds OpenLook). CPU= and OPT= change -m68020 and -O2 (the ROM's: -m68040 -Os).
 # MIT, Copyright (c) 2026 AmigaChrome Team.
@@ -17,7 +18,7 @@ CC="$STOVE/prefix/bin/m68k-amigaos-gcc"
 OGT=${OGT:-$P/../opengadtools}
 OUT=${1:-$HERE/build/os3}
 O=$OUT/obj
-mkdir -p "$O/app" "$O/small" "$OUT/stubs"
+mkdir -p "$O/app"
 BASE="-noixemul ${CPU:--m68020} -std=gnu99 -Wall -Werror ${OPT:--O2} -fno-delete-null-pointer-checks -fno-common"
 FRAME="$BASE -DLT_OP -DLT_ONE -I$P/Common -I$HERE/src -I$OGT/lib"
 # GCC 16 warns of truncation in the editors' bounded copies (snprintf, strncpy): warnings, not errors, here.
@@ -68,30 +69,4 @@ page "$P/IControl/src/ic_prefs.c" $ICTL
 "$CC" $FRAME -o "$OUT/OpenPrefs" "$HERE/src/openprefs.c" "$HERE/src/op_apply.c" "$HERE/src/opframe.c" "$O"/app/*.o \
   "$OGT/lib/ogt_theme.c"
 
-# the small body: APPLY's three pages without their windows (OP_APPLY), the rest dropped by the linker
-# -resident (libnix's: each run its own data): in ROM:C it is a resident command, its seglist shared by every run
-# (measured, lab t5-prefs-one: built without it, a second OpenPrefs APPLY from ROM:C hung)
-SM="-resident -DOP_APPLY -ffunction-sections -fdata-sections -Wno-unused-function -Wno-unused-variable"   # the windows' code is unused here
-small() { f=$1; shift; "$CC" $PAGE $SM "$@" -c -o "$O/small/$(basename "$f" .c).o" "$f"; }
-small "$P/Sound/src/sound.c" -Dmain=sound_main -Dversion=sound_version
-small "$P/Sound/src/sp_core.c"
-small "$P/Sound/src/sp_amiga.c"
-small "$P/Sound/src/sp_test.c"
-small "$P/Gamepads/src/gamepads.c" -Dmain=gamepads_main -Dversion=gamepads_version $GPD
-small "$P/Gamepads/src/gp_core.c" $GPD
-small "$P/Gamepads/src/gp_pad.c" $GPD
-small "$P/Gamepads/src/gp_draw.c" $GPD
-small "$P/System/src/opensystem.c" -Dmain=system_main -Dversion=system_version
-"$CC" $FRAME $SM -Wl,--gc-sections -o "$OUT/OpenPrefs.small" "$HERE/src/op_small.c" "$HERE/src/op_apply.c" "$HERE/src/opframe.c" \
-  "$O"/small/*.o -Wl,--defsym=look_main=0 -Wl,--defsym=windows_main=0 -Wl,--defsym=titlebar_main=0 -Wl,--defsym=menus_main=0 \
-  -Wl,--defsym=appearance_main=0 -Wl,--defsym=dock_main=0 -Wl,--defsym=input_main=0 -Wl,--defsym=datetime_main=0 \
-  -Wl,--defsym=serial_main=0 -Wl,--defsym=types_main=0 -Wl,--defsym=blanker_main=0 -Wl,--defsym=screenmode_main=0 \
-  -Wl,--defsym=icontrol_main=0
-
-# the name stubs: no C library
-for n in Look OpenLook Windows TitleBar Menus OpenDock OpenSound OpenInput OpenGamepads OpenDateTime OpenSerial OpenTypes OpenSystem OpenScreenMode OpenPointer OpenFonts OpenColours OpenBackdrops OpenWorkbench OpenFileRequesters OpenBlanker OpenIControl; do
-  "$CC" -noixemul ${CPU:--m68020} -Os -nostartfiles -nostdlib -ffreestanding -fno-tree-loop-distribute-patterns -ffunction-sections -s -Wall -Werror -DSTUB_NAME="\"$n\"" \
-    -o "$OUT/stubs/$n" "$HERE/src/stub.c"
-done
-echo "$OUT/OpenPrefs ($(wc -c < "$OUT/OpenPrefs") bytes), OpenPrefs.small ($(wc -c < "$OUT/OpenPrefs.small") bytes)," \
-  "stubs $(wc -c < "$OUT/stubs/OpenSound") bytes each"
+echo "$OUT/OpenPrefs ($(wc -c < "$OUT/OpenPrefs") bytes)"

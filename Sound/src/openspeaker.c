@@ -67,8 +67,9 @@
 #include "wbclose.h"
 #include "popuptheme.h"
 #include "barpaint.h"
+#include "../../Common/prefsapp.h"           /* where OpenPrefs is (SYS:Preferences) */
 
-const char version[] __attribute__((used)) = "$VER: OpenSpeaker 0.1.4 (12.10.2026) OpenPrefs, AmigaChrome Team";
+const char version[] __attribute__((used)) = "$VER: OpenSpeaker 0.1.5 (24.10.2026) OpenPrefs, AmigaChrome Team";
 
 struct IntuitionBase *IntuitionBase;
 struct Library *CyberGfxBase;
@@ -80,7 +81,7 @@ struct Library *GadToolsBase, *LayersBase, *CxBase;
 #define TRAY_DIR  "ENV:OpenMenus/Tray"        /* the tray: a file per program on the menu bar's end, "width order" */
 #define TRAY_MINE "ENV:OpenMenus/Tray/Speaker"
 #define MY_ORDER  0                           /* lower is nearer the bar's end: OpenTitle's cog (-5) is rightmost, then the speaker, the clock (10) left of it */
-#define SOUND_PREFS "SYS:Prefs/OpenSound"     /* 0.1.2: the editor is OpenSound in Prefs (the OS's Sound is in Classic) */
+#define SOUND_SECTION "SOUND"                /* 0.1.5: OpenPrefs at its Sound page (SYS:Preferences/OpenPrefs: prefsapp.h) */
 #define NM_WHEEL_UP   0x7A                   /* the mouse wheel, as NewMouse and OS 3.2 send it */
 #define NM_WHEEL_DOWN 0x7B
 #define IECLASS_NEWMOUSE_ 0x16
@@ -441,8 +442,11 @@ static void pop_open(void)
 
 static void open_sound_prefs(void)
 {
+    char cmd[64];
     BPTR in = Open((STRPTR)"NIL:", MODE_OLDFILE), out = Open((STRPTR)"NIL:", MODE_NEWFILE);
-    if (in && out && SystemTags((STRPTR)SOUND_PREFS, SYS_Input, in, SYS_Output, out, SYS_Asynch, TRUE, TAG_DONE) != -1) return;
+    snprintf(cmd, sizeof cmd, "\"%s\" " SOUND_SECTION, op_app_path(1));
+    if (in && out && SystemTags((STRPTR)cmd, SYS_Input, in, SYS_Output, out, SYS_Asynch, TRUE, NP_StackSize, 32768, TAG_DONE) != -1)
+        return;
     if (in) Close(in);
     if (out) Close(out);
 }

@@ -60,7 +60,7 @@
  * 0.7 (17 October 2026, Dale, 08:26: "The cog should be present on all standard screens so Workbench screen
  *   has it all the time"): the cog is always on the Workbench screen's bar (the "cog on|off" line of
  *   ENV:OpenPrefs/TitleBar is kept but read no more), and its list is OpenPrefs's sections, each running
- *   OpenPrefs SECTION (SYS:Prefs/OpenPrefs, else ROM:Prefs/OpenPrefs), then Printers, Network, OpenUp Setup
+ *   OpenPrefs SECTION (SYS:Preferences/OpenPrefs, else SYS:Prefs/OpenPrefs), then Printers, Network, OpenUp Setup
  *   and Tata when they are there, and All Prefs.... The cog alone is also on every other public screen that
  *   shows its title bar (in the public screen list, not private, SHOWTITLE), as a visitor window while the
  *   screen has a window of its own, so its owner can close it; its list opens OpenPrefs on that screen
@@ -109,8 +109,9 @@
 #include "cogplace.h"
 #include "barlogo.h"
 #include "obmsg.h"
+#include "../../Common/prefsapp.h"           /* where OpenPrefs is (SYS:Preferences) */
 
-const char version[] __attribute__((used)) = "$VER: OpenTitle 0.7 (17.10.2026) OpenPrefs, AmigaChrome Team";
+const char version[] __attribute__((used)) = "$VER: OpenTitle 0.7.1 (24.10.2026) OpenPrefs, AmigaChrome Team";
 
 struct IntuitionBase *IntuitionBase;
 struct GfxBase *GfxBase;
@@ -869,23 +870,24 @@ static const char *const cog13[13] = {
     "####.....####", "..###...###..", "..#########..", ".###########.", ".##..###..##.", ".....###.....",
 };
 
-/* The cog's list (0.7): OpenPrefs's sections (section: OpenPrefs SECTION), then the other settings programs
+/* The cog's list (0.7): OpenPrefs's sections (section: OpenPrefs SECTION; 0.7.1: by the pages' names, as
+ * OpenPrefs lists them), then the other settings programs
  * that are there (needs, or path when NULL), as in OpenUpMenu's Tools > Preferences (openamigaup
  * src/openupmenu.c). */
 static const struct { const char *label, *path, *section, *needs; } cog_items[] = {
-    { "Look",          NULL, "THEME",    NULL },
-    { "Screen mode",   NULL, "SCREENMODE", NULL },
+    { "Theme",         NULL, "THEME",    NULL },
+    { "Screen Mode",   NULL, "SCREENMODE", NULL },
     { "Windows",       NULL, "WINDOWS",  NULL },
-    { "Title bar",     NULL, "TITLEBAR", NULL },
+    { "Title Bar",     NULL, "TITLEBAR", NULL },
     { "Menus",         NULL, "MENUS",    NULL },
     { "IControl",      NULL, "ICONTROL", NULL },
     { "Dock",          NULL, "DOCK",     NULL },
     { "Sound",         NULL, "SOUND",    NULL },
-    { "Mouse and keys", NULL, "INPUT",   NULL },
+    { "Input",         NULL, "INPUT",    NULL },
     { "Gamepads",      NULL, "GAMEPADS", NULL },
-    { "Date and time", NULL, "DATETIME", NULL },
+    { "Date & Time",   NULL, "DATETIME", NULL },
     { "Serial",        NULL, "SERIAL",   NULL },
-    { "File types",    NULL, "TYPES",    NULL },
+    { "File Types",    NULL, "TYPES",    NULL },
     { "System",        NULL, "SYSTEM",   NULL },
     { "Blanker",       NULL, "BLANKER",  NULL },
     { NULL,            NULL, NULL,       NULL },                          /* a line */
@@ -908,19 +910,17 @@ static int exists(const char *path)
     struct Process *me = (struct Process *)FindTask(NULL);
     APTR was = me->pr_WindowPtr;
     BPTR l;
-    me->pr_WindowPtr = (APTR)-1;               /* no "please insert" for ROM: on the OS's own ROM */
+    me->pr_WindowPtr = (APTR)-1;               /* no "please insert volume" for a place that isn't there */
     l = Lock((STRPTR)path, ACCESS_READ);
     me->pr_WindowPtr = was;
     if (l) UnLock(l);
     return l != 0;
 }
 
-/* OpenPrefs: the disk's, else the ROM's (NULL when neither is there) */
+/* OpenPrefs: SYS:Preferences', else an older disk's SYS:Prefs one (Common/prefsapp.h); NULL when neither is there */
 static const char *prefs_app(void)
 {
-    if (exists("SYS:Prefs/OpenPrefs")) return "SYS:Prefs/OpenPrefs";
-    if (exists("ROM:Prefs/OpenPrefs")) return "ROM:Prefs/OpenPrefs";
-    return NULL;
+    return op_app_path(0);
 }
 
 /* OpenPrefs at a section, on the public screen pub (NULL: the default), as a process of its own */

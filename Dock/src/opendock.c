@@ -51,8 +51,9 @@
 #include "od_dock.h"
 #include "wbclose.h"
 #include "obmsg.h"
+#include "../../Common/prefsapp.h"           /* where OpenPrefs is (SYS:Preferences) */
 
-const char version[] __attribute__((used)) = "$VER: OpenDock 0.6.6 (17.10.2026) OpenPrefs, AmigaChrome Team";   /* 0.6.6: one dock, its port found and added under one Forbid */
+const char version[] __attribute__((used)) = "$VER: OpenDock 0.6.7 (24.10.2026) OpenPrefs, AmigaChrome Team";   /* 0.6.7: its editor is OpenPrefs DOCK, never ROM: */
 
 #define PREFS_ENV "ENV:OpenDock/Dock"
 #define PREFS_ENVARC "ENVARC:OpenDock/Dock"
@@ -1510,9 +1511,13 @@ int main(void)
                     if (!it) break;
                     switch ((ULONG)GTMENUITEM_USERDATA(it)) {
                     case M_PREFS:                   /* through OpenBench first: its editor is built in there */
-                        /* 0.6.6: with no SYS:Prefs/OpenDock, the ROM's (ROM:Prefs/OpenDock) */
-                        if (ob_open(DOCK_PREFS) <= 0)
-                            SystemTags((STRPTR)(exists(DOCK_PREFS) ? "Run >NIL: " DOCK_PREFS : "Run >NIL: ROM:Prefs/OpenDock"), TAG_DONE);
+                        /* 0.6.7: else OpenPrefs at its Dock page (SYS:Preferences; no ROM:) */
+                        if (ob_open(DOCK_PREFS) <= 0) {
+                            char cmd[80];
+                            if (exists(DOCK_PREFS)) snprintf(cmd, sizeof cmd, "Run >NIL: " DOCK_PREFS);
+                            else snprintf(cmd, sizeof cmd, "Run >NIL: \"%s\" DOCK", op_app_path(1));
+                            SystemTags((STRPTR)cmd, TAG_DONE);
+                        }
                         break;
                     case M_REMOVE: removing = 1; break;
                     case M_QUIT: quit = 1; break;
