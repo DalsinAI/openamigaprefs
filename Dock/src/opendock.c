@@ -53,7 +53,7 @@
 #include "obmsg.h"
 #include "../../Common/prefsapp.h"           /* where OpenPrefs is (SYS:Preferences) */
 
-const char version[] __attribute__((used)) = "$VER: OpenDock 0.6.9 (24.10.2026) OpenPrefs, AmigaChrome Team";   /* 0.6.9: running programs after a line; 0.6.8: one look at the tasks per check; 0.6.7: its editor is OpenPrefs DOCK, never ROM: */
+const char version[] __attribute__((used)) = "$VER: OpenDock 0.6.10 (24.10.2026) OpenPrefs, AmigaChrome Team";   /* 0.6.10: no look at the tasks while none start or end; 0.6.9: running programs after a line; 0.6.8: one look at the tasks per check; 0.6.7: its editor is OpenPrefs DOCK, never ROM: */
 
 #define PREFS_ENV "ENV:OpenDock/Dock"
 #define PREFS_ENVARC "ENVARC:OpenDock/Dock"
@@ -1499,6 +1499,54 @@ static int relayout(struct Menu *menus)
     return open_dock(menus);
 }
 
+/* 0.6.10: whether anything a check could find has changed since the last one, so the two-second check can
+ * be skipped. Exec counts each task added and removed on taskclock.resource (lib_Version 2, OpenExec's;
+ * amigachrome-guest common/include/taskclock.h), and a window opened or closed changes the window list's
+ * print (each window and its task), one walk under LockIBase. The count is read before the check looks, so a
+ * change during it is seen next time. Without the resource (OS 3.2.3's exec, or an older OpenExec) every
+ * check runs, as before. */
+struct tc_resource {                               /* taskclock.h's struct taskclock_resource, as far as needed */
+    struct Library lib;
+    UWORD pad;
+    APTR table;
+    volatile ULONG changes;                        /* lib_Version 2: tasks added and removed */
+};
+static struct tc_resource *tcres;
+static ULONG seen_changes, seen_windows;
+static int seen_valid;
+
+static ULONG windows_print(void)
+{
+    struct Task *me = FindTask(NULL);              /* the dock's own (its name pop-up comes and goes) left out */
+    ULONG h = 0, lock = LockIBase(0);
+    for (struct Screen *sc = IntuitionBase->FirstScreen; sc; sc = sc->NextScreen)
+        for (struct Window *w = sc->FirstWindow; w; w = w->NextWindow) {
+            struct Task *t = w->UserPort ? (struct Task *)w->UserPort->mp_SigTask : NULL;
+            if (t != me) h = (h << 5 | h >> 27) ^ (ULONG)w ^ (ULONG)t;
+        }
+    UnlockIBase(lock);
+    return h;
+}
+
+static int nothing_changed(void)
+{
+    ULONG ch, wp;
+    if (!tcres) {
+        Forbid();
+        tcres = (struct tc_resource *)OpenResource((STRPTR)"taskclock.resource");
+        Permit();
+        if (!tcres || tcres->lib.lib_Version < 2) { tcres = (struct tc_resource *)-1; return 0; }
+    }
+    if (tcres == (struct tc_resource *)-1) return 0;
+    ch = tcres->changes;
+    wp = windows_print();
+    if (seen_valid && ch == seen_changes && wp == seen_windows) return 1;
+    seen_changes = ch;
+    seen_windows = wp;
+    seen_valid = 1;
+    return 0;
+}
+
 /* Only while the dock is open and shows the running marks: with them off, or the dock closed, no look at the tasks. */
 static void check_running(void)
 {
@@ -1687,7 +1735,7 @@ int main(void)
             if (behind_changed()) relayout(menus);
             else if (ticks % 10 == 9 && stale_wait <= 0 && behind_stale()) { stale_wait = 30; relayout(menus); }
             if (stale_wait > 0) stale_wait--;
-            if (++ticks >= 20) { ticks = 0; check_running(); }
+            if (++ticks >= 20) { ticks = 0; if (!dock.running || !nothing_changed()) check_running(); }
             tr->tr_time.tv_secs = 0; tr->tr_time.tv_micro = 100000;
             SendIO((struct IORequest *)tr);
         }
