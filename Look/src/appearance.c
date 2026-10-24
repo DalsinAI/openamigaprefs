@@ -1107,34 +1107,33 @@ static int devices_write(void)            /* the hidden ones into the file, in t
 
 static int workbench_make(int row)
 {
-    static const char *const simple[] = { "Icon borders", "Disk gauge", "Screen title bar", "Icon label length", NULL };
-    static const char *const left[] = { "Icon borders", "Icon label length", "NewIcons", "Colour icons", "Icon colours",
-                                        "Lock pens 4 to 7", "Hidden devices", NULL };
+    static const char *const simple[] = { "Icon borders", "Disk gauge", "Screen title bar", "Icon label length",
+                                          "Labels close to the image", NULL };
+    static const char *const left[] = { "Icon borders", "Icon label length", "Labels close", "NewIcons", "Colour icons",
+                                        "Icon colours", "Lock pens 4 to 7", "Hidden devices", NULL };
     static const char *const right[] = { "Disk gauge", "Screen title", "Title update ms", "Default stack", "Drawers in lists",
                                          "Oldest first", "Keep lists in view", "Copy buffer", "Type-ahead s", NULL };
     /* Advanced: icons and the hidden devices on the left, the screen and the drawers on the right; on a 256-line
      * screen one line between the rows, so it fits */
-    int step = advanced ? (tight ? lh + 1 : lh + 2) : lh + 4, r2 = row, fw = widest(frame_labels) + 34, cw, iw, listh, cx;
-    const char *close_text;
+    int step = advanced ? (tight ? lh + 1 : lh + 2) : lh + 4, r2 = row, fw = widest(frame_labels) + 34, cw, iw, listh;
     columns(advanced ? left : simple, advanced ? right : NULL);
     if (fw > W1) fw = W1;
-    /* labels close to the image: a box after the label length, on its row, its words after it (in Advanced on a
-     * narrow column, two of them), so no page grows a row: every page still fits 640 x 256 in Topaz 8 */
-    cx = X1 + 60 + 12;
-    close_text = cx + 30 + tw("Labels close to the image") <= X1 + W1 ? "Labels close to the image" : "Labels close";
     G(CYCLE_KIND, G_WFRAME, X1, row, fw, lh, "Icon borders", PLACETEXT_LEFT, GTCY_Labels, (ULONG)frame_labels); row += step;
     if (!advanced) {
         G(CHECKBOX_KIND, G_WGAUGE, X1, row, 26, lh, "Disk gauge", PLACETEXT_LEFT, GTCB_Scaled, TRUE); row += step;
         G(CHECKBOX_KIND, G_WTITLEBAR, X1, row, 26, lh, "Screen title bar", PLACETEXT_LEFT, GTCB_Scaled, TRUE); row += step;
-        G(INTEGER_KIND, G_WLABELLEN, X1, row, 60, lh, "Icon label length", PLACETEXT_LEFT, GTIN_MaxChars, 3);
-        G(CHECKBOX_KIND, G_WLABELCLOSE, cx, row, 26, lh, close_text, PLACETEXT_RIGHT, GTCB_Scaled, TRUE); row += step;
+        G(INTEGER_KIND, G_WLABELLEN, X1, row, 60, lh, "Icon label length", PLACETEXT_LEFT, GTIN_MaxChars, 3); row += step;
+        G(CHECKBOX_KIND, G_WLABELCLOSE, X1, row, 26, lh, "Labels close to the image", PLACETEXT_LEFT, GTCB_Scaled, TRUE);
+        row += step;
         return row;
     }
     cw = W1 > 160 ? 160 : W1;
     iw = W2 > 100 ? 100 : W2;
-    listh = 4 * (fh + 1) + 4;
-    G(INTEGER_KIND, G_WLABELLEN, X1, row, 60, lh, "Icon label length", PLACETEXT_LEFT, GTIN_MaxChars, 3);
-    G(CHECKBOX_KIND, G_WLABELCLOSE, cx, row, 26, lh, close_text, PLACETEXT_RIGHT, GTCB_Scaled, TRUE); row += step;
+    /* labels close to the image (1.3) takes a row of the left column: the hidden devices' list is shorter for it
+     * (two rows on a 256-line screen, three elsewhere), so the page is no taller there */
+    listh = (tight ? 2 : 3) * (fh + 1) + 4;
+    G(INTEGER_KIND, G_WLABELLEN, X1, row, 60, lh, "Icon label length", PLACETEXT_LEFT, GTIN_MaxChars, 3); row += step;
+    G(CHECKBOX_KIND, G_WLABELCLOSE, X1, row, 26, lh, "Labels close", PLACETEXT_LEFT, GTCB_Scaled, TRUE); row += step;
     G(CHECKBOX_KIND, G_WNEWICONS, X1, row, 26, lh, "NewIcons", PLACETEXT_LEFT, GTCB_Scaled, TRUE); row += step;
     G(CHECKBOX_KIND, G_WCOLICONS, X1, row, 26, lh, "Colour icons", PLACETEXT_LEFT, GTCB_Scaled, TRUE); row += step;
     G(CYCLE_KIND, G_WPRECISION, X1, row, cw, lh, "Icon colours", PLACETEXT_LEFT, GTCY_Labels, (ULONG)precision_labels); row += step;
