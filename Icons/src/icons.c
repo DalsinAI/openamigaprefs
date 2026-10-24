@@ -108,7 +108,7 @@ static void put_back(void)
 
 /* ---- the window ------------------------------------------------------------------------------------ */
 
-enum { G_LABELS = 1, G_GAP, G_GAPTEXT, G_CELL, G_SNAP, G_ORDER, G_COLUMNS, G_FONTS, G_FONTTEXT, G_STATUS,
+enum { G_LABELS = 1, G_GAPLABEL, G_GAP, G_GAPTEXT, G_CELL, G_SNAP, G_ORDER, G_COLUMNS, G_FONTS, G_FONTTEXT, G_STATUS,
        G_SAVE, G_USE, G_TEST, G_CANCEL, G_COUNT };
 
 static const char *const labels_names[] = { "Close to the picture", "Below the picture (OS 3.2.3)", NULL };
@@ -194,7 +194,9 @@ static int gui(void)
     G(CYCLE_KIND, G_LABELS, X, row, cw, lh, "Labels", PLACETEXT_LEFT, GTCY_Labels, (ULONG)labels_names,
       GTCY_Active, ip.close ? 0 : 1);
     row += lh + 4;
-    G(SLIDER_KIND, G_GAP, X, row, 120, lh, "Label gap", PLACETEXT_LEFT, GTSL_Min, 0, GTSL_Max, WB_GAP_MAX,
+    /* the slider's own label isn't drawn in OpenPrefs's window (IControl's Verify time-out neither): a text of its own */
+    G(TEXT_KIND, G_GAPLABEL, 12, row, X - 12 - 8, lh, NULL, 0, GTTX_Text, (ULONG)"Label gap", GTTX_Justification, GTJ_RIGHT);
+    G(SLIDER_KIND, G_GAP, X, row, 120, lh, NULL, 0, GTSL_Min, 0, GTSL_Max, WB_GAP_MAX,
       GTSL_Level, ip.gap, GA_RelVerify, TRUE, GA_Immediate, TRUE, GA_Disabled, !ip.close);
     G(TEXT_KIND, G_GAPTEXT, X + 128, row, W - 12 - (X + 128), lh, NULL, 0, GTTX_Text, (ULONG)gap_text);
     row += lh + 10;
