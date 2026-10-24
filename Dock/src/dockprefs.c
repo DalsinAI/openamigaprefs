@@ -151,8 +151,8 @@ static int tell_opendock(void)
 }
 
 /* 0.5.3: the dock started when Use or Save puts settings in place and it isn't running (the dock in the
- * ROM starts at boot only when ENV:OpenDock/Dock is there). By name, so the Shell finds the ROM's
- * OpenDock (ROM:C) or a newer C:OpenDock; a second start ends at once (OpenDock 0.6.6). */
+ * ROM starts at boot only when ENV:OpenDock/Dock is there). By name, so the Shell finds C:OpenDock
+ * (OpenUp's) or the ROM's command of that name; a second start ends at once (OpenDock 0.6.6). */
 static int start_opendock(void)
 {
     BPTR in = Open((STRPTR)"NIL:", MODE_OLDFILE), out = Open((STRPTR)"NIL:", MODE_NEWFILE);

@@ -1,11 +1,12 @@
 /* C:OpenPrefs, OpenPrefs's small body (Dale, 17 October 2026, 08:24: the boot's one OpenPrefs APPLY "is
- * served by a small separate body, so boot doesn't unpack the app"). In ROM:C it is a resident command, so
- * OpenPrefs by name finds it before the path's SYS:Prefs and ROM:Prefs; OpenUp puts the same in C:.
+ * served by a small separate body, so boot doesn't unpack the app"). OpenUp puts it in C:, so OpenPrefs by
+ * name finds it before the path's SYS:Prefs; it serves OpenPrefs APPLY on OS 3.2.3's own ROM, whose User-Startup
+ * keeps the line (an open ROM's prefs task applies the same files at boot: no line there).
  *
  *   OpenPrefs APPLY        Sound's, Gamepads' and System's settings, here (op_apply.c, the editors' own
  *                          code for USE and APPLY, built with OP_APPLY and without their windows)
- *   OpenPrefs ...          anything else: the app, SYS:Prefs/OpenPrefs (the Shell's path finds SYS:Prefs
- *                          first) or else ROM:Prefs/OpenPrefs, run in this process with these arguments
+ *   OpenPrefs ...          anything else: the app, SYS:Preferences/OpenPrefs or else SYS:Prefs/OpenPrefs (an
+ *                          older disk), run in this process with these arguments
  *
  * MIT, Copyright (c) 2026 AmigaChrome Team. */
 #include <exec/types.h>
@@ -19,7 +20,7 @@
 
 static const char version[] __attribute__((used)) = "$VER: OpenPrefs " OP_VERSION " (17.10.2026) MIT, Copyright (c) 2026 AmigaChrome Team";
 
-static const char *const apps[] = { "SYS:Prefs/OpenPrefs", "ROM:Prefs/OpenPrefs" };
+static const char *const apps[] = { "SYS:Preferences/OpenPrefs", "SYS:Prefs/OpenPrefs" };
 
 static BPTR load_app(void)
 {
@@ -27,7 +28,7 @@ static BPTR load_app(void)
     APTR was = me->pr_WindowPtr;
     BPTR seg = 0, l;
     unsigned i;
-    me->pr_WindowPtr = (APTR)-1;               /* no "please insert volume" for a missing SYS: or ROM: */
+    me->pr_WindowPtr = (APTR)-1;               /* no "please insert volume" for a missing SYS: */
     for (i = 0; !seg && i < sizeof apps / sizeof apps[0]; i++)
         if ((l = Lock((STRPTR)apps[i], SHARED_LOCK))) { UnLock(l); seg = LoadSeg((STRPTR)apps[i]); }
     me->pr_WindowPtr = was;
@@ -54,7 +55,7 @@ int main(int argc, char **argv)
     __asm__ volatile ("" : : "r" (version));   /* a reference, so --gc-sections keeps $VER (without it Version found none) */
     if (argc > 0 && args && is_apply(args)) return op_apply();
     if (!(seg = load_app())) {
-        PutStr((STRPTR)"OpenPrefs: no SYS:Prefs/OpenPrefs or ROM:Prefs/OpenPrefs\n");
+        PutStr((STRPTR)"OpenPrefs: no SYS:Preferences/OpenPrefs or SYS:Prefs/OpenPrefs\n");
         return RETURN_FAIL;
     }
     rc = RunCommand(seg, 65536, (STRPTR)(args ? args : "\n"), args ? strlen(args) : 1);

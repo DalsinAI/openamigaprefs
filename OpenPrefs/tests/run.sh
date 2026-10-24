@@ -2,6 +2,7 @@
 # OpenPrefs's host checks:
 #   - the old names: OpenPrefs/build.sh's stubs are openprefs.c's old names (less OpenPrefs itself and the build
 #     names Dock, Sound, Gamepads), and every section name maps to a page;
+#   - the pages' names (opframe.c's lt_label) are the 21 the user named, each one once;
 #   - with a stove (STOVE=, default ~/AmigaChrome/stoves/os32-gcc16): the app's first $VER is OpenPrefs's, and its
 #     version is higher than every page's own $VER inside it and every editor's in this repository; the small body
 #     has APPLY's three pages and none of their windows; each stub is under 1 KB and starts with a branch.
@@ -29,6 +30,21 @@ if missing or nocase:
     print(f'FAIL sections: no name for {missing}, no page for {nocase}')
     sys.exit(1)
 print(f'ok   {len(pages)} sections, each with a name and a page')
+EOF
+# the pages' names in the list, as the user named them (salvor/Design-No-ROM-Volume-20261024.md, section 8,
+# question Q9): OpenPrefs takes them for a section too ("Date & Time", a project icon's name), so each is one
+python3 - "$HERE/src/opframe.c" <<'EOF' || fail=1
+import re, sys
+src = open(sys.argv[1]).read()
+m = re.search(r'lt_label\[LT_N\] = \{(.*?)\};', src, re.S)
+labels = re.findall(r'"([^"]*)"', m.group(1)) if m else []
+want = {"Theme", "Screen Mode", "Pointer", "Fonts", "Colours", "Backdrops", "Workbench", "File Requesters", "Windows",
+        "Title Bar", "Menus", "IControl", "Dock", "Sound", "Input", "Gamepads", "Date & Time", "Serial", "File Types",
+        "System", "Blanker"}
+if set(labels) != want or len({l.lower() for l in labels}) != len(labels):
+    print(f'FAIL page names: {labels}, missing {sorted(want - set(labels))}, not asked for {sorted(set(labels) - want)}')
+    sys.exit(1)
+print(f'ok   {len(labels)} page names, the user\'s, each one')
 EOF
 STOVE=${STOVE:-$HOME/AmigaChrome/stoves/os32-gcc16}
 if [ ! -x "$STOVE/prefix/bin/m68k-amigaos-gcc" ]; then echo "skipped the build: no stove at $STOVE"; exit $fail; fi

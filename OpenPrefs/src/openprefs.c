@@ -10,12 +10,17 @@
  *
  * SECTION: THEME (LOOK), SCREENMODE (OVERSCAN), POINTER, FONTS, COLOURS, BACKDROPS (WBPATTERN), WORKBENCH,
  * FILEREQUESTERS, WINDOWS, TITLEBAR, MENUS, ICONTROL, DOCK, SOUND, INPUT (MOUSE, KEYBOARD, KEYMAP), GAMEPADS,
- * DATETIME, SERIAL, TYPES, SYSTEM, BLANKER. Mouse and keys, Screen mode with Overscan, and IControl joined on
- * 21 October 2026 (Dale: "fold mouse and keys into a single app", "overscan should be under screenmode",
- * IControl "fold into openprefs").
+ * DATETIME, SERIAL, TYPES, SYSTEM, BLANKER; or the page's name as the list shows it ("Date & Time", "Title Bar").
+ * From Workbench, a project icon whose default tool is OpenPrefs (SYS:Preferences' plain-named icons, 24 October
+ * 2026) opens the page its SECTION tooltype names, else the page of its name.
  *
- * The old names work as they did, by the name OpenPrefs runs as (a ROM: alias of this body, a name stub in
- * SYS:Prefs, a copy): Look, OpenLook, Windows, TitleBar, Menus, OpenDock, OpenSound, OpenInput,
+ * Mouse and keys (now Input), Screen mode with Overscan, and IControl joined on 21 October 2026 (Dale: "fold
+ * mouse and keys into a single app", "overscan should be under screenmode", IControl "fold into openprefs").
+ *
+ * Its place is SYS:Preferences/OpenPrefs (SYS:Prefs/OpenPrefs on an older disk); the ROM has no copy.
+ *
+ * The old names work as they did, by the name OpenPrefs runs as (a name stub in SYS:Prefs, a copy): Look,
+ * OpenLook, Windows, TitleBar, Menus, OpenDock, OpenSound, OpenInput,
  * OpenGamepads, OpenDateTime, OpenSerial, OpenTypes and OpenSystem, from the Shell with their own arguments
  * (OpenSound USE applies Sound's settings with no window, as before) and from Workbench at their section.
  *
@@ -28,7 +33,9 @@
 #include <dos/dos.h>
 #include <dos/dosextens.h>
 #include <workbench/startup.h>
+#include <workbench/workbench.h>
 #include <proto/exec.h>
+#include <proto/icon.h>
 #include <proto/dos.h>
 #include <proto/utility.h>
 #include <string.h>
@@ -37,7 +44,7 @@
 #include "looktabs.h"
 #include "openprefs.h"
 
-static const char version[] __attribute__((used)) = "$VER: OpenPrefs " OP_VERSION " (17.10.2026) MIT, Copyright (c) 2026 AmigaChrome Team";
+static const char version[] __attribute__((used)) = "$VER: OpenPrefs " OP_VERSION " (24.10.2026) MIT, Copyright (c) 2026 AmigaChrome Team";
 
 struct Library *UtilityBase;
 
@@ -77,12 +84,36 @@ static const struct { const char *name; int page; } old_names[] = {
     { "OpenFileRequesters", LT_ASL }, { "OpenBlanker", LT_BLANKER }, { "OpenIControl", LT_ICONTROL },
 };
 
+/* A section by its word (SOUND, DATETIME) or its page's name ("Sound", "Date & Time") */
 static int section_of(const char *s)
 {
     unsigned i;
     for (i = 0; i < sizeof sections / sizeof sections[0]; i++)
         if (!Stricmp((CONST_STRPTR)s, (CONST_STRPTR)sections[i].name)) return sections[i].page;
-    return -1;
+    return lt_page_named(s);
+}
+
+/* From Workbench with a project icon (sm_ArgList[1], whose default tool is OpenPrefs: the plain-named icons in
+ * SYS:Preferences): its SECTION tooltype, else its name, picks the page; -1 for none */
+static int project_page(struct WBStartup *wb)
+{
+    struct Library *IconBase;
+    struct DiskObject *dob;
+    BPTR old;
+    int page = -1;
+    if (wb->sm_NumArgs < 2) return -1;
+    if ((IconBase = OpenLibrary((STRPTR)"icon.library", 37))) {
+        old = CurrentDir(wb->sm_ArgList[1].wa_Lock);
+        if ((dob = GetDiskObject((STRPTR)wb->sm_ArgList[1].wa_Name))) {
+            STRPTR t = FindToolType((CONST_STRPTR *)dob->do_ToolTypes, (STRPTR)"SECTION");
+            if (t) page = section_of((const char *)t);
+            FreeDiskObject(dob);
+        }
+        CurrentDir(old);
+        CloseLibrary(IconBase);
+    }
+    if (page < 0) page = section_of((const char *)FilePart((STRPTR)wb->sm_ArgList[1].wa_Name));
+    return page;
 }
 
 int op_page(int page, int argc, char **argv)
@@ -180,7 +211,9 @@ int main(int argc, char **argv)
     if (name) name = (const char *)FilePart((STRPTR)name);
     for (i = 0; name && i < sizeof old_names / sizeof old_names[0]; i++)
         if (!Stricmp((CONST_STRPTR)name, (CONST_STRPTR)old_names[i].name)) { page = old_names[i].page; lt_prog = old_names[i].name; break; }
-    if (page == N_OPENPREFS) rc = argc > 0 ? as_openprefs() : run_window(LT_LOOK, 0, NULL);
+    if (page == N_OPENPREFS && argc == 0 && argv && (i = (unsigned)project_page((struct WBStartup *)argv)) < LT_N)
+        rc = run_window((int)i, 0, NULL);
+    else if (page == N_OPENPREFS) rc = argc > 0 ? as_openprefs() : run_window(LT_LOOK, 0, NULL);
     else if (page == N_OPENLOOK) rc = as_openlook(argc, argv);
     else rc = run_window(page, argc, argv);
     lt_report();

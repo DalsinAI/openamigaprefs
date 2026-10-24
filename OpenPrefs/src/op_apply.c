@@ -6,8 +6,10 @@
  * (lt_args): Sound's levels to the ACAHI board and its files, Gamepads' settings to openinput.library (only
  * when openinput.library opens, as its line was only there with OpenInput), and the stack caps to
  * AmigaChrome's runtime; OpenSystem's "no runtime here" line is not printed at boot (its return code 5 is
- * kept out of APPLY's). In ROM: it is served by C:OpenPrefs, the small body (op_small.c), so the boot
- * doesn't unpack the app; SYS:Prefs/OpenPrefs APPLY does the same from the app.
+ * kept out of APPLY's). On an open ROM whose prefs task applies them (prefs.resource 47.101: intuition's
+ * prefs_boot.c reads the same three files at the first pass, earlier and with no program) the line goes
+ * (OpenUp, salvor/Design-No-ROM-Volume-20261024.md, section 9.3). It stays for OS 3.2.3's own ROM, as
+ * SYS:Preferences/OpenPrefs APPLY; C:OpenPrefs, the small body (op_small.c), still serves it there.
  *
  * MIT, Copyright (c) 2026 AmigaChrome Team. */
 #include <exec/types.h>

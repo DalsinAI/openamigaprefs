@@ -2,7 +2,7 @@
  * OpenSound, Windows, Look, ...): it runs OpenPrefs under its own name, so OpenPrefs opens that editor's
  * section and takes its arguments, as the editor did (OpenSound USE, SYS:Prefs/Look FROM x SAVE).
  *
- *   from the Shell     PROGDIR:OpenPrefs (else SYS:Prefs/OpenPrefs, else ROM:Prefs/OpenPrefs) by RunCommand,
+ *   from the Shell     PROGDIR:OpenPrefs (else SYS:Preferences/OpenPrefs, else SYS:Prefs/OpenPrefs) by RunCommand,
  *                      with this command's name and arguments
  *   from Workbench     the same program in a process of its own (64 KB of stack), given a copy of this
  *                      process's WBStartup message, whose first argument is this stub's name; this process
@@ -35,7 +35,7 @@ __attribute__((section(".text"))) LONG stub_start(void)
     struct ExecBase **at4 = (struct ExecBase **)4, *SysBase;
     struct Library *DOSBase;
     struct Process *me;
-    static const char *const apps[3] = { "PROGDIR:OpenPrefs", "SYS:Prefs/OpenPrefs", "ROM:Prefs/OpenPrefs" };
+    static const char *const apps[3] = { "PROGDIR:OpenPrefs", "SYS:Preferences/OpenPrefs", "SYS:Prefs/OpenPrefs" };
     struct WBStartup *wb = NULL;
     BPTR seg = 0;
     LONG rc = RETURN_FAIL;
@@ -83,7 +83,7 @@ __attribute__((section(".text"))) LONG stub_start(void)
             rc = RETURN_OK;
         } else if (home) UnLock(home);
         if (port) DeleteMsgPort(port);
-    } else if (!wb) PutStr((STRPTR)STUB_NAME ": no SYS:Prefs/OpenPrefs\n");
+    } else if (!wb) PutStr((STRPTR)STUB_NAME ": no SYS:Preferences/OpenPrefs\n");
     if (seg) UnLoadSeg(seg);
     CloseLibrary(DOSBase);
     if (wb) { Forbid(); ReplyMsg(&wb->sm_Message); }

@@ -54,9 +54,10 @@
 #include <string.h>
 #include <stdlib.h>
 #include <stdio.h>
+#include "../../Common/prefsapp.h"           /* where OpenPrefs is (SYS:Preferences) */
 
 #ifndef IN_OPENBENCH
-const char version[] __attribute__((used)) = "$VER: OpenUp-Setup 0.1.4 (17.10.2026) OpenPrefs, AmigaChrome Team";
+const char version[] __attribute__((used)) = "$VER: OpenUp-Setup 0.1.5 (24.10.2026) OpenPrefs, AmigaChrome Team";
 #endif
 
 #define USER_STARTUP "S:User-Startup"
@@ -66,7 +67,7 @@ const char version[] __attribute__((used)) = "$VER: OpenUp-Setup 0.1.4 (17.10.20
 #define OFF_LIST "ENVARC:OpenAmiga/Startup.off"
 #define DONE_FILE "ENVARC:OpenAmiga/Setup.done"
 #define PROFILE_DIR "SYS:Prefs/Presets/OpenPrefs"
-#define LOOK_TOOL "SYS:Prefs/OpenLook"           /* 0.1.2: the one-window editor takes FROM ... SAVE as Look did */
+#define OPENPREFS "SYS:Preferences/OpenPrefs"   /* 0.1.5: OpenPrefs's place (found() falls back to SYS:Prefs) */
 #define LOOK_TEMP "T:OpenUp-Setup.profile"
 #define VIEW_ENV "ENV:OpenAmiga/PrefsView"
 #define VIEW_ENVARC "ENVARC:OpenAmiga/PrefsView"
@@ -118,10 +119,12 @@ static int exists(const char *path)
     return l != 0;
 }
 
-/* An OS editor that OpenUp's RECONCILE moved to SYS:Prefs/Classic is still found there. */
+/* An OS editor that OpenUp's RECONCILE moved to SYS:Prefs/Classic is still found there; OpenPrefs is in
+ * SYS:Preferences, else (an older disk) in SYS:Prefs. */
 static const char *found(const char *path)
 {
     static char classic[96];
+    if (!strcmp(path, OPENPREFS)) { const char *app = op_app_path(0); return app ? app : path; }
     if (exists(path) || strncmp(path, "SYS:Prefs/", 10)) return path;
     snprintf(classic, sizeof classic, "SYS:Prefs/Classic/%s", path + 10);
     return exists(classic) ? classic : path;
@@ -222,7 +225,7 @@ static int apply_profile(void)
     char path[160], cmd[220], *text, *both, *o;
     const char *p;
     if (profile_sel < 0 && !by_machine) return 1;
-    if (!exists(LOOK_TOOL)) return profile_sel < 0;
+    if (!exists(found(OPENPREFS))) return profile_sel < 0;
     if (profile_sel >= 0) {
         snprintf(path, sizeof path, PROFILE_DIR "/%s.profile", profile_names[profile_sel]);
         text = read_file(path, NULL);
@@ -243,7 +246,7 @@ static int apply_profile(void)
     FreeVec(text);
     if (!write_file(LOOK_TEMP, both, strlen(both))) { FreeVec(both); return 0; }
     FreeVec(both);
-    snprintf(cmd, sizeof cmd, "\"%s\" FROM \"%s\" SAVE", LOOK_TOOL, LOOK_TEMP);
+    snprintf(cmd, sizeof cmd, "\"%s\" THEME FROM \"%s\" SAVE", found(OPENPREFS), LOOK_TEMP);
     {
         LONG rc = SystemTags((STRPTR)cmd, TAG_DONE);
         DeleteFile((STRPTR)LOOK_TEMP);
@@ -395,12 +398,12 @@ static const char *const page_titles[P_COUNT] = {
 };
 
 static const struct { int id; const char *label, *path, *args; } editors[] = {     /* 0.1.2: OpenLook's pages; every editor of ours is Open... */
-    /* 0.1.4 (W48): OpenPrefs at its section, through C:OpenPrefs (the disk's, or ROM:C's) */
-    { G_ED_LOOK, "Look...", "C:OpenPrefs", "LOOK" },
-    { G_ED_MENUS, "Menus...", "C:OpenPrefs", "MENUS" },
-    { G_ED_WINDOWS, "Windows...", "C:OpenPrefs", "WINDOWS" },
-    { G_ED_DOCK, "Dock...", "C:OpenPrefs", "DOCK" },
-    { G_ED_TYPES, "File types...", "C:OpenPrefs", "TYPES" },
+    /* 0.1.5: OpenPrefs at its section, from SYS:Preferences (else an older disk's SYS:Prefs; never ROM:) */
+    { G_ED_LOOK, "Look...", OPENPREFS, "THEME" },
+    { G_ED_MENUS, "Menus...", OPENPREFS, "MENUS" },
+    { G_ED_WINDOWS, "Windows...", OPENPREFS, "WINDOWS" },
+    { G_ED_DOCK, "Dock...", OPENPREFS, "DOCK" },
+    { G_ED_TYPES, "File types...", OPENPREFS, "TYPES" },
     { G_SCREENMODE, "Screen mode...", "SYS:Prefs/ScreenMode" },
     { G_PRINTER, "Printer...", "SYS:Prefs/Printer" },
     { G_ED_OPENPRINT, "OpenPrint...", "SYS:Utilities/OpenPrint/Printers and Queue" },  /* 0.1.3: OpenPrint's printers, as the cog's */

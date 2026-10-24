@@ -67,6 +67,7 @@
 #include "wbclose.h"
 #include "om_kbd.h"
 #include "ogt_theme.h"
+#include "../../Common/prefsapp.h"           /* where OpenPrefs is (SYS:Preferences) */
 
 static const char version[] __attribute__((used)) = "$VER: OpenMenus 0.4.5 (18.10.2026) MIT, Copyright (c) 2026 AmigaChrome Team";   /* 0.4.5: no WORKBENCH port (OpenBench): the right button opens the window's own menus */
 
@@ -1648,7 +1649,11 @@ static int rc_build(int hit)
             /* an OS editor that OpenUp's RECONCILE moved to SYS:Prefs/Classic is still offered from there */
             if (exists_file("SYS:Prefs/WBPattern")) ITEM("Backdrop picture...", A_RUN, "SYS:Prefs/WBPattern");
             else if (exists_file("SYS:Prefs/Classic/WBPattern")) ITEM("Backdrop picture...", A_RUN, "SYS:Prefs/Classic/WBPattern");
-            if (exists_file("SYS:Prefs/OpenLook")) ITEM("Look...", A_RUN, "SYS:Prefs/OpenLook");
+            {   /* OpenPrefs at its Theme page (SYS:Preferences, else an older disk's SYS:Prefs) */
+                static char look[64];
+                const char *app = op_app_path(0);
+                if (app) { snprintf(look, sizeof look, "\"%s\" THEME", app); ITEM("Look...", A_RUN, look); }
+            }
             if (exists_file("SYS:Prefs/ScreenMode")) ITEM("Screen mode...", A_RUN, "SYS:Prefs/ScreenMode");
             else if (exists_file("SYS:Prefs/Classic/ScreenMode")) ITEM("Screen mode...", A_RUN, "SYS:Prefs/Classic/ScreenMode");
             SEP();

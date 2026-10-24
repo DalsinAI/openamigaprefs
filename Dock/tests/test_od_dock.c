@@ -38,7 +38,8 @@ static void test_drop_missing(void)
     /* three programs go, then the separator that was left at the end */
     CHECK(od_drop_missing(&d, fake_exists) == 3);
     CHECK(d.n == 5 && d.b[0].kind == OD_CLI && !strcmp(d.b[2].label, "OpenView") && !strcmp(d.b[3].label, "Prefs"));
-    CHECK(d.b[d.n - 1].kind != OD_SEPARATOR && !strcmp(d.b[4].label, "Look"));
+    CHECK(d.b[d.n - 1].kind != OD_SEPARATOR && !strcmp(d.b[4].label, "Preferences")
+          && !strcmp(d.b[4].command, "SYS:Preferences/OpenPrefs"));
     CHECK(od_drop_missing(&d, fake_exists) == 0 && d.n == 5);
 }
 

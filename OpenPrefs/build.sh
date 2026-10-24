@@ -3,8 +3,8 @@
 # (m68k-amigaos-gcc, NDK 3.2) and the theme reader of an opengadtools checkout beside this one (OGT=dir).
 #   OpenPrefs/build.sh [OUT_DIR]                    (default build/os3)
 # writes
-#   OUT_DIR/OpenPrefs        the app: SYS:Prefs/OpenPrefs, ROM:Prefs/OpenPrefs
-#   OUT_DIR/OpenPrefs.small  the small body: C:OpenPrefs (APPLY at boot; anything else runs the app)
+#   OUT_DIR/OpenPrefs        the app: SYS:Preferences/OpenPrefs (SYS:Prefs/OpenPrefs on an older disk)
+#   OUT_DIR/OpenPrefs.small  the small body: C:OpenPrefs (APPLY at boot on OS 3.2.3's ROM; anything else runs the app)
 #   OUT_DIR/stubs/NAME       a name stub for each old editor's name, for SYS:Prefs on a disk (OpenUp)
 # Each page is its editor's own source, compiled with LT_OP and OpenPrefs/src/opshift.h, its main renamed
 # (as Look/build-one.sh builds OpenLook). CPU= and OPT= change -m68020 and -O2 (the ROM's: -m68040 -Os).
@@ -69,8 +69,8 @@ page "$P/IControl/src/ic_prefs.c" $ICTL
   "$OGT/lib/ogt_theme.c"
 
 # the small body: APPLY's three pages without their windows (OP_APPLY), the rest dropped by the linker
-# -resident (libnix's: each run its own data): in ROM:C it is a resident command, its seglist shared by every run
-# (measured, lab t5-prefs-one: built without it, a second OpenPrefs APPLY from ROM:C hung)
+# -resident (libnix's: each run its own data): made resident, its seglist is shared by every run
+# (measured, lab t5-prefs-one: built without it, a second OpenPrefs APPLY from a resident copy hung)
 SM="-resident -DOP_APPLY -ffunction-sections -fdata-sections -Wno-unused-function -Wno-unused-variable"   # the windows' code is unused here
 small() { f=$1; shift; "$CC" $PAGE $SM "$@" -c -o "$O/small/$(basename "$f" .c).o" "$f"; }
 small "$P/Sound/src/sound.c" -Dmain=sound_main -Dversion=sound_version
