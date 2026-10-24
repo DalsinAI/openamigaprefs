@@ -25,6 +25,14 @@ static char *slurp(const char *path, long *len)
 static od_dock d, e;
 static char buf[32768];
 
+/* a button's place by its label, or -1 */
+static int find(const od_dock *x, const char *label)
+{
+    for (int i = 0; i < x->n; i++)
+        if (!strcmp(x->b[i].label, label)) return i;
+    return -1;
+}
+
 /* a machine without Clock, Calculator or the trashcan */
 static int fake_exists(const char *path)
 {
@@ -35,26 +43,30 @@ static void test_drop_missing(void)
 {
     od_defaults(&d);
     od_starter(&d);
+    /* the starter's own length, whatever it holds now (the Open apps joined it on 10 October) */
+    int n0 = d.n;
     /* three programs go, then the separator that was left at the end */
     CHECK(od_drop_missing(&d, fake_exists) == 3);
-    CHECK(d.n == 5 && d.b[0].kind == OD_CLI && !strcmp(d.b[2].label, "OpenView") && !strcmp(d.b[3].label, "Prefs"));
-    CHECK(d.b[d.n - 1].kind != OD_SEPARATOR && !strcmp(d.b[4].label, "Preferences")
-          && !strcmp(d.b[4].command, "SYS:Preferences/OpenPrefs"));
-    CHECK(od_drop_missing(&d, fake_exists) == 0 && d.n == 5);
+    CHECK(d.n == n0 - 4 && d.b[0].kind == OD_CLI && !strcmp(d.b[2].label, "OpenView"));
+    CHECK(find(&d, "Clock") < 0 && find(&d, "Calculator") < 0 && find(&d, "Trashcan") < 0);
+    CHECK(d.b[d.n - 1].kind != OD_SEPARATOR && !strcmp(d.b[d.n - 1].label, "Preferences")
+          && !strcmp(d.b[d.n - 1].command, "SYS:Preferences/OpenPrefs") && !strcmp(d.b[d.n - 2].label, "Prefs"));
+    CHECK(od_drop_missing(&d, fake_exists) == 0 && d.n == n0 - 4);
 }
 
 static void test_own_format(void)
 {
     od_defaults(&d);
     od_starter(&d);
-    CHECK(d.n == 9 && d.b[0].kind == OD_CLI && !strcmp(d.b[0].label, "Shell") && d.b[1].kind == OD_WB);
-    CHECK(!strcmp(d.b[3].command, "SYS:Utilities/Clock") && !strcmp(d.b[4].command, "SYS:Tools/Calculator"));
-    CHECK(d.b[7].kind == OD_SEPARATOR && !strcmp(d.b[8].label, "Trashcan") && !strcmp(d.b[8].command, "SYS:Trashcan"));
+    int n0 = d.n, clock = find(&d, "Clock");
+    CHECK(n0 >= 9 && d.b[0].kind == OD_CLI && !strcmp(d.b[0].label, "Shell") && d.b[1].kind == OD_WB);
+    CHECK(clock > 2 && !strcmp(d.b[clock].command, "SYS:Utilities/Clock") && !strcmp(d.b[clock + 1].command, "SYS:Tools/Calculator"));
+    CHECK(d.b[n0 - 2].kind == OD_SEPARATOR && !strcmp(d.b[n0 - 1].label, "Trashcan") && !strcmp(d.b[n0 - 1].command, "SYS:Trashcan"));
     CHECK(!strcmp(d.b[1].label, "OpenFiles") && !strcmp(d.b[2].command, "SYS:Utilities/OpenPrint/OpenView"));
     /* ADD: once only, whatever the case, at the end */
-    CHECK(od_ensure(&d, "sys:utilities/openfiles") == 0 && d.n == 9);
-    CHECK(od_ensure(&d, "SYS:Utilities/MultiView") == 1 && d.n == 10 && !strcmp(d.b[9].label, "MultiView") && d.b[9].kind == OD_WB);
-    CHECK(od_ensure(&d, "SYS:Utilities/MultiView") == 0 && d.n == 10);
+    CHECK(od_ensure(&d, "sys:utilities/openfiles") == 0 && d.n == n0);
+    CHECK(od_ensure(&d, "SYS:Utilities/MultiView") == 1 && d.n == n0 + 1 && !strcmp(d.b[n0].label, "MultiView") && d.b[n0].kind == OD_WB);
+    CHECK(od_ensure(&d, "SYS:Utilities/MultiView") == 0 && d.n == n0 + 1);
     CHECK(d.background == OD_BG_GLASS && d.hover == 1 && d.hop == 1);
     d.place = OD_LEFT; d.size = OD_LARGE; d.labels = 1; d.running = 0; d.scale = 50; d.border = 0;
     d.background = OD_BG_CLEAR; d.hover = 0; d.hop = 0; d.opacity = 35;
@@ -68,9 +80,9 @@ static void test_own_format(void)
     CHECK(e.scale == 50 && e.border == 0);
     CHECK(e.background == OD_BG_CLEAR && e.hover == 0 && e.hop == 0 && e.opacity == 35);
     CHECK(!strcmp(e.imported, d.imported));
-    CHECK(e.n == 10 && e.b[1].kind == OD_SEPARATOR);
+    CHECK(e.n == d.n && e.b[1].kind == OD_SEPARATOR);
     CHECK(e.b[2].kind == OD_CLI && !strcmp(e.b[2].command, d.b[2].command) && !strcmp(e.b[2].dir, "RAM:") && e.b[2].stack == 20000);
-    CHECK(!strcmp(e.b[6].icon, "SYS:Prefs/Look") && !strcmp(e.b[6].label, "Look"));
+    CHECK(!strcmp(e.b[6].icon, "SYS:Prefs/Look") && !strcmp(e.b[6].label, d.b[6].label));
     CHECK(od_write(&d, buf, 40) == -1);
     od_parse(&e, "; comment\nplace nowhere\nsize huge\nfuture 7\nbutton telepathy \"x\"\nbutton wb \"Work:Thing\"\n");
     CHECK(e.place == OD_BOTTOM && e.size == OD_LARGE && e.n == 1 && !strcmp(e.b[0].label, "Thing"));
@@ -144,12 +156,13 @@ static void test_amistart(const char *dir)
     CHECK(od_sniff((unsigned char *)text, (long)strlen(text)) == 3);
     od_defaults(&d);
     od_starter(&d);
+    int n0 = d.n;
     CHECK(od_from_amistart(&d, text, "SYS:Utilities/AmiStart", &r, err, sizeof err));
-    /* after the nine it had, a separator, then the taskbar's two programs */
-    CHECK(d.n == 12 && d.b[9].kind == OD_SEPARATOR);
-    CHECK(d.b[10].kind == OD_CLI && !strcmp(d.b[10].command, "c:NewShell FROM s:Shell-amistart") && d.b[10].stack == 8192);
-    CHECK(!strcmp(d.b[10].icon, "SYS:Utilities/AmiStart/icons/Default/Shell"));
-    CHECK(d.b[11].kind == OD_WB && !strcmp(d.b[11].label, "Text Editor") && d.b[11].icon[0] == 0);
+    /* after the starter's buttons, a separator, then the taskbar's two programs */
+    CHECK(d.n == n0 + 3 && d.b[n0].kind == OD_SEPARATOR);
+    CHECK(d.b[n0 + 1].kind == OD_CLI && !strcmp(d.b[n0 + 1].command, "c:NewShell FROM s:Shell-amistart") && d.b[n0 + 1].stack == 8192);
+    CHECK(!strcmp(d.b[n0 + 1].icon, "SYS:Utilities/AmiStart/icons/Default/Shell"));
+    CHECK(d.b[n0 + 2].kind == OD_WB && !strcmp(d.b[n0 + 2].label, "Text Editor") && d.b[n0 + 2].icon[0] == 0);
     CHECK(r.added == 2 && r.skipped == 3);
     /* no taskbar programs: the start menu's */
     od_defaults(&d);
