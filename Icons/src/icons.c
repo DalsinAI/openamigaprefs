@@ -7,13 +7,14 @@
  *   - Cell size: Auto (the icons' own usual size) or a size set: the standard cell of the column grid, which every
  *     icon of that size sits on (a bigger or smaller one takes its own height, a wider one widens its column)
  *   - Snap dropped icons to the grid (on); the Clean Up order (name, kind, size or date); the desktop's columns
- *     down the left (the default) or the right
+ *     down the left (the default) or the right; the desktop's labels in the colour the backdrop's .tone asks for
+ *     (light on a dark picture, dark on a light one; the default) or the theme's
  *   - Icon text font: a button to the Fonts page, whose Workbench icon text font the labels are in
  *
  * Two variables, so icon.library (in the ROM) reads one word: ENV:Sys/IconLabels ("close", "close 3", "below") and
- * ENV:Sys/IconLayout ("cell=auto snap=on order=name columns=left"), read by OpenBench and its drawers, which follow a
- * change at once (opengadtools' workbench/wb_grid.c reads and writes both). Save writes ENV: and ENVARC: (SetVar), Use
- * ENV:, Test ENV: until Cancel puts back what was there, Cancel changes nothing else.
+ * ENV:Sys/IconLayout ("cell=auto snap=on order=name columns=left labelcolour=backdrop"), read by OpenBench and its
+ * drawers, which follow a change at once (opengadtools' workbench/wb_grid.c reads and writes both). Save writes ENV:
+ * and ENVARC: (SetVar), Use ENV:, Test ENV: until Cancel puts back what was there, Cancel changes nothing else.
  *
  * Its own page rather than a tab of Workbench's: OpenPrefs's sections are one list of pages, each with its own Save,
  * Use, Test and Cancel and no tabs inside them, and Workbench's page is already full (its paths, its devices, its
@@ -108,7 +109,7 @@ static void put_back(void)
 
 /* ---- the window ------------------------------------------------------------------------------------ */
 
-enum { G_LABELS = 1, G_GAPLABEL, G_GAP, G_GAPTEXT, G_CELL, G_SNAP, G_ORDER, G_COLUMNS, G_FONTS, G_FONTTEXT, G_STATUS,
+enum { G_LABELS = 1, G_GAPLABEL, G_GAP, G_GAPTEXT, G_CELL, G_SNAP, G_ORDER, G_COLUMNS, G_TONE, G_FONTS, G_FONTTEXT, G_STATUS,
        G_SAVE, G_USE, G_TEST, G_CANCEL, G_COUNT };
 
 static const char *const labels_names[] = { "Close to the picture", "Below the picture (OS 3.2.3)", NULL };
@@ -118,6 +119,7 @@ static const int cell_px[] = { 0, 32, 40, 48, 56, 64, 80, 96, 128 };
 #define NCELLS 9
 static const char *const order_names[] = { "Name", "Kind", "Size", "Date", NULL };
 static const char *const columns_names[] = { "Down the left", "Down the right", NULL };
+static const char *const tone_names[] = { "From the backdrop", "The theme's", NULL };
 
 static struct Window *win;
 static struct Gadget *gad[G_COUNT];
@@ -211,6 +213,11 @@ static int gui(void)
     row += lh + 4;
     G(CYCLE_KIND, G_COLUMNS, X, row, cw, lh, "Desktop columns", PLACETEXT_LEFT, GTCY_Labels, (ULONG)columns_names,
       GTCY_Active, ip.right ? 1 : 0);
+    row += lh + 4;
+    /* the desktop's labels light on a dark backdrop and dark on a light one, as its picture's .tone says (OpenUp's
+     * backdrops), or in the theme's colour */
+    G(CYCLE_KIND, G_TONE, X, row, cw, lh, "Desktop labels", PLACETEXT_LEFT, GTCY_Labels, (ULONG)tone_names,
+      GTCY_Active, ip.tone ? 0 : 1);
     row += lh + 10;
     G(TEXT_KIND, G_FONTTEXT, 12, row, W - 24, lh, NULL, 0, GTTX_Text,
       (ULONG)"The labels are in Font prefs' Workbench icon text font.");
@@ -287,6 +294,7 @@ static int gui(void)
                 case G_SNAP: ip.snap = (gg->Flags & GFLG_SELECTED) != 0; break;
                 case G_ORDER: ip.order = code < 4 ? code : 0; break;
                 case G_COLUMNS: ip.right = code == 1; break;
+                case G_TONE: ip.tone = code == 0; break;
                 case G_FONTS:                       /* the Fonts page, this one's changes kept as Use */
 #ifdef LT_ONE
                     if (LT_DIRTY) put(0, status);
@@ -336,14 +344,16 @@ static int word_of(const char *w, const char *const *list)
 }
 
 /*   Icons [LABELS close|below] [GAP n] [CELL auto|px] [SNAP on|off] [ORDER name|kind|size|date]
- *         [COLUMNS left|right] [USE] [SAVE]
+ *         [COLUMNS left|right] [LABELCOLOUR backdrop|theme] [USE] [SAVE]
  * (OpenPrefs ICONS ...): the settings given over the ones in ENV:; with USE or SAVE written without a window. */
 int main(int argc, char **argv)
 {
     static const char *const lb[] = { "close", "below", "on", "off", NULL }, *const onoff[] = { "on", "off", "yes", "no", NULL };
     static const char *const ord[] = { "name", "kind", "size", "date", NULL }, *const side[] = { "left", "right", NULL };
-    LONG args[8] = { 0, 0, 0, 0, 0, 0, 0, 0 };
-    struct RDArgs *rd = argc > 0 ? ReadArgs((STRPTR)"LABELS/K,GAP/K/N,CELL/K,SNAP/K,ORDER/K,COLUMNS/K,USE/S,SAVE/S", args, NULL) : NULL;
+    static const char *const tone[] = { "theme", "backdrop", NULL };
+    LONG args[9] = { 0, 0, 0, 0, 0, 0, 0, 0, 0 };
+    struct RDArgs *rd = argc > 0 ? ReadArgs((STRPTR)"LABELS/K,GAP/K/N,CELL/K,SNAP/K,ORDER/K,COLUMNS/K,USE/S,SAVE/S,LABELCOLOUR/K",
+                                            args, NULL) : NULL;
     char a[48], b[128];
     int rc, ha, hb, k;
     (void)argv;
@@ -364,6 +374,7 @@ int main(int argc, char **argv)
     if ((k = word_of((const char *)args[3], onoff)) >= 0) ip.snap = !(k & 1);
     if ((k = word_of((const char *)args[4], ord)) >= 0) ip.order = k;
     if ((k = word_of((const char *)args[5], side)) >= 0) ip.right = k;
+    if ((k = word_of((const char *)args[8], tone)) >= 0) ip.tone = k;
     if (args[6] || args[7]) rc = put(args[7] != 0, say_shell) ? RETURN_OK : RETURN_ERROR;
     else rc = gui();
     if (rd) FreeArgs(rd);
