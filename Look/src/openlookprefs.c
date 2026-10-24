@@ -16,6 +16,8 @@
  * 1.2 (12 October 2026): a pointer drawn on the Pointer tab, the icon frame and hidden devices on the Workbench
  * tab, and every page in 640 x 256 with Topaz 8 (Look/DESIGN.md).
  *
+ * 1.3 (24 October 2026): Labels close to the image on the Workbench tab, icon.library's ENV:Sys/IconLabels.
+ *
  * MIT, Copyright (c) 2026 AmigaChrome Team. */
 #include <exec/types.h>
 #include <intuition/intuition.h>
@@ -40,7 +42,7 @@ int titlebar_main(int argc, char **argv);
 int menus_main(int argc, char **argv);
 int appearance_main(int tab);
 
-static const char version[] __attribute__((used)) = "$VER: OpenLook 1.2 (12.10.2026) OpenPrefs, AmigaChrome Team";
+static const char version[] __attribute__((used)) = "$VER: OpenLook 1.3 (24.10.2026) OpenPrefs, AmigaChrome Team";
 
 /* The pages, numbered as Common/looktabs.h numbers them (LT_LOOK ... LT_ASL): the first four are editors of
  * their own, the rest Appearance's tabs. Each page by name, and by a second name. */
