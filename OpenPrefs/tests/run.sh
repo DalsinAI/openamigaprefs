@@ -1,7 +1,7 @@
 #!/bin/sh
 # OpenPrefs's host checks:
 #   - every section name maps to a page;
-#   - the pages' names (opframe.c's lt_label) are the 22 the user named, each one once;
+#   - the pages' names (opframe.c's lt_label) are the 23 the user named, each one once;
 #   - with a stove (STOVE=, default ~/AmigaChrome/stoves/os32-gcc16): the app's first $VER is OpenPrefs's, and its
 #     version is higher than every page's own $VER inside it and every editor's in this repository, and every
 #     page object calls the frame's lt_wait (opshift.h routes the pages' Wait and WaitPort through it, so
@@ -36,7 +36,7 @@ m = re.search(r'lt_label\[LT_N\] = \{(.*?)\};', src, re.S)
 labels = re.findall(r'"([^"]*)"', m.group(1)) if m else []
 want = {"Theme", "Screen Mode", "Pointer", "Fonts", "Colours", "Backdrops", "Workbench", "File Requesters", "Windows",
         "Title Bar", "Menus", "IControl", "Dock", "Sound", "Input", "Gamepads", "Date & Time", "Serial", "File Types",
-        "System", "Blanker", "Icons"}
+        "System", "Blanker", "Icons", "Printing"}
 if set(labels) != want or len({l.lower() for l in labels}) != len(labels):
     print(f'FAIL page names: {labels}, missing {sorted(want - set(labels))}, not asked for {sorted(set(labels) - want)}')
     sys.exit(1)
@@ -81,7 +81,7 @@ nowait=""
 for o in "$T/out/obj/app/"*.o; do
   if "$NM" "$o" | grep -q -E ' U _?(lt_wait|lt_waitport)$'; then :; else
     case $(basename "$o") in look.o|windows.o|titlebar.o|menus.o|appearance.o|dockprefs.o|sound.o|openinput.o|gamepads.o|\
-      opendatetime.o|openserial.o|opentypes.o|opensystem.o|blankerprefs.o|screenmode.o|icontrol.o) nowait="$nowait $(basename "$o")" ;;
+      opendatetime.o|openserial.o|opentypes.o|opensystem.o|blankerprefs.o|screenmode.o|icontrol.o|printing.o) nowait="$nowait $(basename "$o")" ;;
     esac
   fi
 done
