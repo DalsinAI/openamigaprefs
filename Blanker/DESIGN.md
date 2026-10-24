@@ -20,6 +20,14 @@ colour, then `SetRGB32` brings them up, frame by frame on the vertical blank.
 - **A commodity**: `CxCustom` sees every key and mouse event and resets the
   idle count; a timer counts the seconds. Exchange can disable, enable or quit
   it. Started a second time, the running one is left alone (1.1); `OpenBlanker NOW` asks it by a signal to play the show at once. (1.0 played the show at once on any second start, and a User-Startup that lists OpenBlanker twice, as Instance-32's did after an OpenUp upgrade, blanked the screen at boot.)
+- **Programs that hold it off (1.2):** a game, a film or a demo signals
+  CTRL_E to the task of the public port `OpenBlanker` (under `Forbid`, after
+  `FindPort`) every few seconds while it runs, and each signal counts as a key
+  or the mouse. SDL2.module and SDL3.module do it while SDL holds the screen
+  saver off, which SDL does by default while a program runs
+  (`SDL_DisableScreenSaver`; `SDL_HINT_VIDEO_ALLOW_SCREENSAVER` lets a program
+  allow the show). A CTRL_E during the show doesn't end it: only a key or the
+  mouse does. OpenBlanker 1.1 and older ignore the signal.
 - **Its own screen**, the Workbench's size, in a 256-colour mode
   (`BestModeID`, depth 8): AGA, or a CLUT mode on an RTG card, so the palette
   can fade the picture. A borderless window covers it: the pointer is hidden,
