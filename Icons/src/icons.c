@@ -12,8 +12,8 @@
  *
  * Two variables, so icon.library (in the ROM) reads one word: ENV:Sys/IconLabels ("close", "close 3", "below") and
  * ENV:Sys/IconLayout ("cell=auto snap=on order=name columns=left"), read by OpenBench and its drawers, which follow a
- * change at once (opengadtools' workbench/wb_grid.c reads and writes both). Save writes ENV: and ENVARC:, Use ENV:,
- * Test ENV: until Cancel puts back what was there, Cancel changes nothing else.
+ * change at once (opengadtools' workbench/wb_grid.c reads and writes both). Save writes ENV: and ENVARC: (SetVar), Use
+ * ENV:, Test ENV: until Cancel puts back what was there, Cancel changes nothing else.
  *
  * Its own page rather than a tab of Workbench's: OpenPrefs's sections are one list of pages, each with its own Save,
  * Use, Test and Cancel and no tabs inside them, and Workbench's page is already full (its paths, its devices, its
@@ -71,15 +71,16 @@ static int read_var(const char *name, char *buf, int size)
     return n > 0;
 }
 
-static int write_file(const char *path, const char *text)
+/* One variable into ENV: (and ENVARC: when save), through SetVar, which takes the file's lock as DOS does (a write
+ * of our own once failed while OpenBench, told of the other variable, was reading this one); a few tries */
+static int set_var(const char *name, const char *text, int save)
 {
-    BPTR f = Open((CONST_STRPTR)path, MODE_NEWFILE);
-    LONG n = (LONG)strlen(text);
-    int ok;
-    if (!f) return 0;
-    ok = Write(f, (APTR)text, n) == n;
-    Close(f);
-    return ok;
+    int i;
+    for (i = 0; i < 5; i++) {
+        if (SetVar((CONST_STRPTR)name, (CONST_STRPTR)text, -1, GVF_GLOBAL_ONLY | (save ? GVF_SAVE_VAR : 0))) return 1;
+        Delay(10);
+    }
+    return 0;
 }
 
 /* The settings into ENV: (and ENVARC: when save); 1 done */
@@ -87,12 +88,8 @@ static int put(int save, void (*say)(const char *))
 {
     char a[48], b[128];
     wb_iconprefs_text(&ip, a, sizeof a, b, sizeof b);
-    if (save && (!write_file("ENVARC:" LABELS, a) || !write_file("ENVARC:" LAYOUT, b))) {
-        say("Couldn't write ENVARC:Sys/IconLabels or IconLayout.");
-        return 0;
-    }
-    if (!write_file("ENV:" LABELS, a) || !write_file("ENV:" LAYOUT, b)) {
-        say("Couldn't write ENV:Sys/IconLabels or IconLayout.");
+    if (!set_var(LABELS, a, save) || !set_var(LAYOUT, b, save)) {
+        say(save ? "Couldn't write ENV: and ENVARC:Sys/IconLabels or IconLayout." : "Couldn't write ENV:Sys/IconLabels or IconLayout.");
         return 0;
     }
     return 1;
@@ -102,10 +99,10 @@ static int put(int save, void (*say)(const char *))
 static void put_back(void)
 {
     if (!tested) return;
-    if (had_labels) write_file("ENV:" LABELS, was_labels);
-    else DeleteFile((CONST_STRPTR)"ENV:" LABELS);
-    if (had_layout) write_file("ENV:" LAYOUT, was_layout);
-    else DeleteFile((CONST_STRPTR)"ENV:" LAYOUT);
+    if (had_labels) set_var(LABELS, was_labels, 0);
+    else DeleteVar((CONST_STRPTR)LABELS, GVF_GLOBAL_ONLY);
+    if (had_layout) set_var(LAYOUT, was_layout, 0);
+    else DeleteVar((CONST_STRPTR)LAYOUT, GVF_GLOBAL_ONLY);
     tested = 0;
 }
 
