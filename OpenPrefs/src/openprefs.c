@@ -68,7 +68,7 @@ static const struct { const char *name; int page; } sections[] = {
     { "FILETYPES", LT_TYPES }, { "OPENTYPES", LT_TYPES }, { "SYSTEM", LT_SYSTEM }, { "STACK", LT_SYSTEM },
     { "BLANKER", LT_BLANKER }, { "MOUSE", LT_INPUT }, { "KEYBOARD", LT_INPUT }, { "KEYS", LT_INPUT },
     { "KEYMAP", LT_INPUT }, { "SCREENMODE", LT_SCREENMODE }, { "OVERSCAN", LT_SCREENMODE }, { "DISPLAY", LT_SCREENMODE },
-    { "ICONTROL", LT_ICONTROL },
+    { "ICONTROL", LT_ICONTROL }, { "ICONS", LT_ICONS }, { "ICONLAYOUT", LT_ICONS }, { "ICONLABELS", LT_ICONS },
 };
 
 /* The old editors' names, and a name for each other section: each opens its section, and takes its own arguments */
@@ -137,6 +137,7 @@ int op_page(int page, int argc, char **argv)
     case LT_BLANKER: return blanker_main(argc, argv);
     case LT_SCREENMODE: return screenmode_main(argc, argv);
     case LT_ICONTROL: return icontrol_main(argc, argv);
+    case LT_ICONS: return icons_main(argc, argv);
     }
     return RETURN_FAIL;
 }
@@ -170,8 +171,8 @@ static int as_openprefs(void)
     if (a[1]) { FreeArgs(rd); return op_apply(); }
     if (a[2] && (page = section_of((const char *)a[2])) < 0) {
         Printf((STRPTR)"OpenPrefs: no section %s; the sections are THEME, SCREENMODE, POINTER, FONTS, COLOURS, BACKDROPS,\n"
-               "WORKBENCH, FILEREQUESTERS, WINDOWS, TITLEBAR, MENUS, ICONTROL, DOCK, SOUND, INPUT, GAMEPADS, DATETIME, SERIAL,\n"
-               "TYPES, SYSTEM, BLANKER\n", a[2]);
+               "WORKBENCH, ICONS, FILEREQUESTERS, WINDOWS, TITLEBAR, MENUS, ICONTROL, DOCK, SOUND, INPUT, GAMEPADS, DATETIME,\n"
+               "SERIAL, TYPES, SYSTEM, BLANKER\n", a[2]);
         FreeArgs(rd);
         return RETURN_ERROR;
     }

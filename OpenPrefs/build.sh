@@ -65,6 +65,9 @@ page "$P/Display/src/dp_prefs.c" $DISP
 ICTL="-I$P/Look/src -I$P/IControl/src"
 page "$P/IControl/src/icontrol.c" -Dmain=icontrol_main -Dversion=icontrol_version $ICTL
 page "$P/IControl/src/ic_prefs.c" $ICTL
+# the Icons page (2.3) and the two variables' words, opengadtools' workbench/wb_grid.c (OpenBench reads them with it)
+page "$P/Icons/src/icons.c" -Dmain=icons_main -Dversion=icons_version -I"$OGT/workbench"
+"$CC" $FRAME -I"$OGT/workbench" -c -o "$O/app/wb_grid.o" "$OGT/workbench/wb_grid.c"
 # the frame and the program, not moved: openprefs.c first, so its $VER is the file's first
 "$CC" $FRAME -o "$OUT/OpenPrefs" "$HERE/src/openprefs.c" "$HERE/src/op_apply.c" "$HERE/src/opframe.c" "$O"/app/*.o \
   "$OGT/lib/ogt_theme.c"

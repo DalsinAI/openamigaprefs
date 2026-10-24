@@ -305,6 +305,9 @@ tab's Use (ENV:), Save (ENV: and ENVARC:), Test and Cancel as workbench.prefs
 does, and a file is written only when it would change. Ticked, each label's
 top is 2 pixels under the lowest row of its picture that isn't empty, and the
 icon's box (Clean Up, snapping) is shorter by as much.
+Since OpenPrefs 2.3 (24 October 2026) the setting is on OpenPrefs' Icons
+page, with the gap and the icons' layout, and close is the default; in
+OpenPrefs the Workbench page has no box for it. OpenLook built alone keeps it.
 
 **640 x 256.** Every page now fits a PAL High Res screen with Topaz 8. On a
 screen under 400 lines:

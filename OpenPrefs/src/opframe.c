@@ -1,7 +1,7 @@
 /* opframe.c: OpenPrefs's frame, the one window every page goes into (Common/looktabs.h with LT_OP).
  *
  * The sections stand down the left, one row each, the open one filled, in four groups: the look (Theme,
- * Screen Mode, Pointer, Fonts, Colours, Backdrops, Workbench, File Requesters), the desktop (Windows, Title
+ * Screen Mode, Pointer, Fonts, Colours, Backdrops, Workbench, Icons, File Requesters), the desktop (Windows, Title
  * Bar, Menus, IControl, Dock), sound and input (Sound, Input, Gamepads) and the rest (Date & Time,
  * Serial, File Types, System, Blanker). Each page stands lt_dx to the right of them, as it was laid out alone (opshift.h moves it), with
  * its own Save, Use, Test and Cancel along its foot. On a screen too narrow for the list beside the widest
@@ -58,7 +58,7 @@ const char *lt_prog = "OpenPrefs";         /* the name it runs as, for the Shell
 static const char *const lt_label[LT_N] = { "Theme", "Windows", "Title Bar", "Menus", "Pointer", "Fonts", "Colours",
                                             "Backdrops", "Workbench", "File Requesters", "Dock", "Sound",
                                             "Input", "Gamepads", "Date & Time", "Serial", "File Types", "System",
-                                            "Blanker", "Screen Mode", "IControl" };
+                                            "Blanker", "Screen Mode", "IControl", "Icons" };
 
 /* A page by its name, its letters in either case; -1 for none */
 int lt_page_named(const char *name)
@@ -70,11 +70,11 @@ int lt_page_named(const char *name)
 }
 /* the order down the list, and the row after which a group ends */
 static const UBYTE lt_order[LT_N] = { LT_LOOK, LT_SCREENMODE, LT_POINTER, LT_FONTS, LT_COLOURS, LT_BACKDROPS, LT_WORKBENCH,
-                                      LT_ASL,
+                                      LT_ICONS, LT_ASL,
                                       LT_WINDOWS, LT_TITLEBAR, LT_MENUS, LT_ICONTROL, LT_DOCK,
                                       LT_SOUND, LT_INPUT, LT_GAMEPADS,
                                       LT_DATETIME, LT_SERIAL, LT_TYPES, LT_SYSTEM, LT_BLANKER };
-static const UBYTE lt_group_end[LT_N] = { 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0 };
+static const UBYTE lt_group_end[LT_N] = { 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0 };
 #define LT_GAP 4                           /* between the groups */
 #define LT_LX 8                            /* the list's left edge in the window */
 #define LT_LIST_MIN 760                    /* a screen at least this wide has the list beside the page */

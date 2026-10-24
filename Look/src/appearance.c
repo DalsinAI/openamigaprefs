@@ -1019,6 +1019,14 @@ static int dev_hidden[48], ndevs;
  * workbench.prefs does: Use writes ENV:, Save ENV: and ENVARC:, Test ENV: until it goes back. */
 #define LABELS_ENV "ENV:Sys/IconLabels"
 #define LABELS_ENVARC "ENVARC:Sys/IconLabels"
+/* In OpenPrefs (LT_OP) the labels' place, their gap and the icons' layout are the Icons page's (Icons/src/icons.c,
+ * 24 October 2026): this page shows no box for them and never writes the variable, which would lose its gap. OpenLook
+ * built alone keeps the box. With no variable the labels are close (icon.library's default since then). */
+#ifdef LT_OP
+#define WB_LABELS 0
+#else
+#define WB_LABELS 1
+#endif
 static int lbl_close, lbl_start;           /* as edited; as the tab found it */
 static int lbl_before, lbl_before_had;     /* ENV: before a Test, and whether it had the file */
 static int lbl_touched;                    /* a Test wrote ENV: */
@@ -1123,8 +1131,10 @@ static int workbench_make(int row)
         G(CHECKBOX_KIND, G_WGAUGE, X1, row, 26, lh, "Disk gauge", PLACETEXT_LEFT, GTCB_Scaled, TRUE); row += step;
         G(CHECKBOX_KIND, G_WTITLEBAR, X1, row, 26, lh, "Screen title bar", PLACETEXT_LEFT, GTCB_Scaled, TRUE); row += step;
         G(INTEGER_KIND, G_WLABELLEN, X1, row, 60, lh, "Icon label length", PLACETEXT_LEFT, GTIN_MaxChars, 3); row += step;
-        G(CHECKBOX_KIND, G_WLABELCLOSE, X1, row, 26, lh, "Labels close to the image", PLACETEXT_LEFT, GTCB_Scaled, TRUE);
-        row += step;
+        if (WB_LABELS) {
+            G(CHECKBOX_KIND, G_WLABELCLOSE, X1, row, 26, lh, "Labels close to the image", PLACETEXT_LEFT, GTCB_Scaled, TRUE);
+            row += step;
+        }
         return row;
     }
     cw = W1 > 160 ? 160 : W1;
@@ -1133,7 +1143,7 @@ static int workbench_make(int row)
      * (two rows on a 256-line screen, three elsewhere), so the page is no taller there */
     listh = (tight ? 2 : 3) * (fh + 1) + 4;
     G(INTEGER_KIND, G_WLABELLEN, X1, row, 60, lh, "Icon label length", PLACETEXT_LEFT, GTIN_MaxChars, 3); row += step;
-    G(CHECKBOX_KIND, G_WLABELCLOSE, X1, row, 26, lh, "Labels close", PLACETEXT_LEFT, GTCB_Scaled, TRUE); row += step;
+    if (WB_LABELS) { G(CHECKBOX_KIND, G_WLABELCLOSE, X1, row, 26, lh, "Labels close", PLACETEXT_LEFT, GTCB_Scaled, TRUE); row += step; }
     G(CHECKBOX_KIND, G_WNEWICONS, X1, row, 26, lh, "NewIcons", PLACETEXT_LEFT, GTCB_Scaled, TRUE); row += step;
     G(CHECKBOX_KIND, G_WCOLICONS, X1, row, 26, lh, "Colour icons", PLACETEXT_LEFT, GTCB_Scaled, TRUE); row += step;
     G(CYCLE_KIND, G_WPRECISION, X1, row, cw, lh, "Icon colours", PLACETEXT_LEFT, GTCY_Labels, (ULONG)precision_labels); row += step;
@@ -1315,7 +1325,7 @@ static void page_open(void)                /* the page's own state from the file
         devices_read();
         lbl_close = labels_read(LABELS_ENV);
         if (lbl_close < 0) lbl_close = labels_read(LABELS_ENVARC);   /* nothing in ENV: what was last saved */
-        if (lbl_close < 0) lbl_close = 0;
+        if (lbl_close < 0) lbl_close = 1;          /* none: close, icon.library's default */
         lbl_start = lbl_close;
         lbl_touched = 0;
         break;
@@ -1401,7 +1411,7 @@ static int keep(int save)
     int ok = 1, dirty;
     page_typed();
     test_until = 0;
-    if (ap == AP_WORKBENCH && !damaged) {          /* icon.library's labels setting, beside workbench.prefs */
+    if (WB_LABELS && ap == AP_WORKBENCH && !damaged) {     /* icon.library's labels setting, beside workbench.prefs */
         if (lbl_close != lbl_start || lbl_touched) labels_write(LABELS_ENV, lbl_close);
         if (save) labels_write(LABELS_ENVARC, lbl_close);
         lbl_start = lbl_close;
@@ -1422,7 +1432,7 @@ static void test(void)
     if (damaged) return;
     if (!test_until) before_had = pf_load(&before, env) == 1;      /* ENV: as it was before the first Test */
     if (pf_differs(&cur, env)) { pf_save(&cur, env); env_touched = 1; }
-    if (ap == AP_WORKBENCH) {
+    if (WB_LABELS && ap == AP_WORKBENCH) {
         if (!lbl_touched) {
             lbl_before = labels_read(LABELS_ENV);
             lbl_before_had = lbl_before >= 0;
