@@ -30,6 +30,7 @@
 #include <proto/intuition.h>
 #include <proto/gadtools.h>
 #include <proto/graphics.h>
+#include <proto/utility.h>
 
 #include <string.h>
 #include <stdio.h>
@@ -326,12 +327,26 @@ out:
     return rc;
 }
 
+/* A word from a list, case aside: its index, or -1 */
+static int word_of(const char *w, const char *const *list)
+{
+    int i;
+    for (i = 0; w && list[i]; i++)
+        if (!Stricmp((CONST_STRPTR)w, (CONST_STRPTR)list[i])) return i;
+    return -1;
+}
+
+/*   Icons [LABELS close|below] [GAP n] [CELL auto|px] [SNAP on|off] [ORDER name|kind|size|date]
+ *         [COLUMNS left|right] [USE] [SAVE]
+ * (OpenPrefs ICONS ...): the settings given over the ones in ENV:; with USE or SAVE written without a window. */
 int main(int argc, char **argv)
 {
-    LONG args[2] = { 0, 0 };
-    struct RDArgs *rd = argc > 0 ? ReadArgs((STRPTR)"USE/S,SAVE/S", args, NULL) : NULL;
+    static const char *const lb[] = { "close", "below", "on", "off", NULL }, *const onoff[] = { "on", "off", "yes", "no", NULL };
+    static const char *const ord[] = { "name", "kind", "size", "date", NULL }, *const side[] = { "left", "right", NULL };
+    LONG args[8] = { 0, 0, 0, 0, 0, 0, 0, 0 };
+    struct RDArgs *rd = argc > 0 ? ReadArgs((STRPTR)"LABELS/K,GAP/K/N,CELL/K,SNAP/K,ORDER/K,COLUMNS/K,USE/S,SAVE/S", args, NULL) : NULL;
     char a[48], b[128];
-    int rc, ha, hb;
+    int rc, ha, hb, k;
     (void)argv;
     (void)version;
     win = NULL;                             /* built into OpenPrefs, the statics outlive a run */
@@ -340,7 +355,17 @@ int main(int argc, char **argv)
     ha = read_var(LABELS, a, sizeof a);
     hb = read_var(LAYOUT, b, sizeof b);
     wb_iconprefs_parse(&ip, ha ? a : NULL, hb ? b : NULL);
-    if (args[0] || args[1]) rc = put(args[1] != 0, say_shell) ? RETURN_OK : RETURN_ERROR;
+    if ((k = word_of((const char *)args[0], lb)) >= 0) ip.close = !(k & 1);
+    if (args[1]) { k = (int)*(LONG *)args[1]; if (k >= 0 && k <= WB_GAP_MAX) ip.gap = k; }
+    if (args[2]) {
+        int px = 0;
+        if (Stricmp((CONST_STRPTR)args[2], (CONST_STRPTR)"auto")) StrToLong((CONST_STRPTR)args[2], (LONG *)&px);
+        if (px == 0 || (px >= WB_CELL_MIN && px <= WB_CELL_MAX)) ip.cell = px;
+    }
+    if ((k = word_of((const char *)args[3], onoff)) >= 0) ip.snap = !(k & 1);
+    if ((k = word_of((const char *)args[4], ord)) >= 0) ip.order = k;
+    if ((k = word_of((const char *)args[5], side)) >= 0) ip.right = k;
+    if (args[6] || args[7]) rc = put(args[7] != 0, say_shell) ? RETURN_OK : RETURN_ERROR;
     else rc = gui();
     if (rd) FreeArgs(rd);
     return rc;
