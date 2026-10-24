@@ -10,7 +10,7 @@ and stays in `SYS:Prefs` to run again. MIT, Copyright (c) 2026 AmigaChrome Team.
 | --- | --- |
 | 1. Welcome | What this machine is (`ENV:OpenUp/Summary` from `OpenUpTool DETECT`, or the CPU and FPU when that is missing). **Simple** or **Advanced**. "Don't show this at start again" |
 | 2. Your desktop | The desktop profiles in `SYS:Prefs/Presets/OpenPrefs` (Modern, Lite 68040, Classic 3.2, and any added), each with its own line saying what it is for. "Choose by machine at every start". In Advanced, one button each for Look, Menus, Windows, Dock and File types (greyed when that editor isn't installed) |
-| 3. Screen, printer and network (Advanced) | Screen mode, Printer, OpenPrint (`SYS:Utilities/OpenPrint/Printers and Queue`), Network (`SYS:Tools/Commodities/OpenSocketControl`), Fonts: the editors themselves |
+| 3. Screen, printer and network (Advanced) | Screen mode, OpenPrint (`SYS:Utilities/OpenPrint/Printers and Queue`), Network (`SYS:Tools/Commodities/OpenSocketControl`), Fonts: the editors themselves (Printer went in 0.1.6) |
 | 4. What starts with the machine (Advanced) | Every line in OpenUp's marked block in `S:User-Startup`, in plain words ("The theme on windows and gadgets (OpenLook)"), each with a switch |
 | 5. All set | Finish |
 
@@ -75,6 +75,16 @@ Printers and Queue (`SYS:Utilities/OpenPrint/Printers and Queue`) and
 OpenSocketControl (`SYS:Tools/Commodities/OpenSocketControl`). The same
 code is OpenBench's built-in OpenUp-Setup, so it changes there with
 OpenBench's next build.
+
+## 0.1.6 (24 October 2026)
+
+Page 3 has no **Printer...** button. Printing is OpenPrint's now (the plan
+"Retiring the legacy printing, in favour of OpenPrint", PR 5): the
+OpenPrinter part archives the OS's Printer, PrinterGfx and PrinterPS
+editors, so the button would only have been greyed. **OpenPrint...** is the
+page's printing button; its other three are Screen mode, Network and Fonts,
+two to a row. Paper settings are going to an OpenPrefs Printing page.
+OpenBench's built-in OpenUp-Setup changes with OpenBench's next build.
 
 ## Next
 
