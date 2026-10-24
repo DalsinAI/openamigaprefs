@@ -25,6 +25,11 @@
  *                    to show it; Ctrl-C quits, Ctrl-F reads the settings
  *                    again and quits when the speaker is switched off)
  *
+ * 0.1.6 (the user, 24 October 2026, 21:39: "remove the percentage from volume and improve spacing on the
+ * sys icon tray"): the speaker alone on the bar, its level only in the levels it opens (and the cross when
+ * muted), with the same room each side as OpenTitle 0.7.3's tray icons (TRAY_PAD); on the screen's title bar
+ * the row ends at the screen's depth gadget, as OpenTitle's does (bar_end()).
+ *
  * 0.1.3 (the Team, 11 October 2026: the speaker's "55%" was seen in a white
  * box on the black bar): on the screen's title bar it is always painted in
  * the bar's own colour, never the bar pen's white. When reading the bar's
@@ -69,7 +74,7 @@
 #include "barpaint.h"
 #include "../../Common/prefsapp.h"           /* where OpenPrefs is (SYS:Preferences) */
 
-const char version[] __attribute__((used)) = "$VER: OpenSpeaker 0.1.5 (24.10.2026) OpenPrefs, AmigaChrome Team";
+const char version[] __attribute__((used)) = "$VER: OpenSpeaker 0.1.6 (24.10.2026) OpenPrefs, AmigaChrome Team";
 
 struct IntuitionBase *IntuitionBase;
 struct Library *CyberGfxBase;
@@ -80,6 +85,8 @@ struct Library *GadToolsBase, *LayersBase, *CxBase;
 #define TRAY_PARENT "ENV:OpenMenus"
 #define TRAY_DIR  "ENV:OpenMenus/Tray"        /* the tray: a file per program on the menu bar's end, "width order" */
 #define TRAY_MINE "ENV:OpenMenus/Tray/Speaker"
+#define TRAY_PAD  6                           /* 0.1.6: the room each tray icon has on each side (as OpenTitle 0.7.3) */
+#define SPEAKER_W 14                          /* 0.1.6: the speaker's own width */
 #define MY_ORDER  0                           /* lower is nearer the bar's end: OpenTitle's cog (-5) is rightmost, then the speaker, the clock (10) left of it */
 #define SOUND_SECTION "SOUND"                /* 0.1.5: OpenPrefs at its Sound page (SYS:Preferences/OpenPrefs: prefsapp.h) */
 #define NM_WHEEL_UP   0x7A                   /* the mouse wheel, as NewMouse and OS 3.2 send it */
@@ -173,7 +180,6 @@ static void draw_speaker(void)
 {
     struct RastPort *rp;
     LONG fg;
-    char t[8];
     WORD cy, x, h;
     if (!spk) return;
     rp = spk->RPort;
@@ -181,7 +187,7 @@ static void draw_speaker(void)
     SetAPen(rp, fg);
     h = sh;                                                      /* the bar's rows: the line under them isn't ours */
     cy = h / 2;
-    x = 5;
+    x = TRAY_PAD;                                                /* 0.1.6: the speaker alone, SPEAKER_W wide */
     RectFill(rp, x, cy - 1, x + 2, cy + 1);                       /* the speaker: its box and cone */
     for (int i = 0; i < 4; i++) { Move(rp, x + 3 + i, cy - 1 - i); Draw(rp, x + 3 + i, cy + 1 + i); }
     if (level() == 0) {                                          /* muted, or nothing: a cross */
@@ -191,11 +197,6 @@ static void draw_speaker(void)
         Move(rp, x + 9, cy - 1); Draw(rp, x + 10, cy); Draw(rp, x + 9, cy + 1);
         if (level() > 50) { Move(rp, x + 12, cy - 3); Draw(rp, x + 13, cy - 2); Draw(rp, x + 13, cy + 2); Draw(rp, x + 12, cy + 3); }
     }
-    if (cur.muted) strcpy(t, "Mute");
-    else snprintf(t, sizeof t, "%d%%", cur.volume);
-    SetDrMd(rp, JAM1);
-    Move(rp, x + 17, (h - rp->TxHeight) / 2 + rp->TxBaseline);
-    Text(rp, (STRPTR)t, strlen(t));
 }
 
 /* OpenMenus' settings: where the bar is (the screen's title bar when OpenMenus doesn't run or is off) */
@@ -271,21 +272,29 @@ static int tray_before(int *count)
     return sum;
 }
 
+/* 0.1.6: where the tray's row ends on the screen's title bar: the screen's depth gadget, its own width and
+ * 2 pixels, as OpenTitle 0.7.3 has it; 2 bar heights when it isn't found */
+static WORD bar_end(void)
+{
+    struct Gadget *g;
+    for (g = scr->FirstGadget; g; g = g->NextGadget)
+        if ((g->GadgetType & GTYP_SYSTYPEMASK) == GTYP_SDEPTH && g->Width > 0 && g->Width < 3 * scr->BarHeight)
+            return g->Width + 2;
+    return 2 * scr->BarHeight;
+}
+
 /* where the speaker goes: the bar's far end (OpenMenus keeps 2 bar heights for the screen's depth gadget) */
 static void place(void)
 {
-    struct RastPort rp;
     WORD bh = scr->BarHeight + 1;
     int n, off = tray_before(&n);            /* after any program with a lower order than ours */
-    InitRastPort(&rp);
-    SetFont(&rp, dri->dri_Font);
-    sw = 5 + 17 + TextLength(&rp, (STRPTR)"100%", 4) + 6;
+    sw = TRAY_PAD + SPEAKER_W + TRAY_PAD;    /* 0.1.6: no level beside it */
     switch (bar_edge) {
     case OM_BAR_BOTTOM: sh = bh; sx = scr->Width - sw - off; sy = scr->Height - bh; break;
     case OM_BAR_LEFT:   sh = bh; sx = 0; sy = scr->Height - bh * (n + 1); break;
     case OM_BAR_RIGHT:  sh = bh; sx = scr->Width - sw; sy = scr->Height - bh * (n + 1); break;
     case OM_BAR_TOP:    sh = bh; sx = scr->Width - 2 * scr->BarHeight - sw - off; sy = 0; break;
-    default:            sh = scr->BarHeight; sx = scr->Width - 2 * scr->BarHeight - sw - off; sy = 0; break;   /* in the title bar, above its line */
+    default:            sh = scr->BarHeight; sx = scr->Width - bar_end() - sw - off; sy = 0; break;   /* in the title bar, above its line */
     }
     hx0 = sx; hy0 = sy; hx1 = sx + sw; hy1 = sy + sh;
 }

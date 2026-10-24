@@ -57,6 +57,10 @@
  * colours are read from the screen's bar, Common/barpaint.h), and are
  * centred in the bar.
  *
+ * 0.7.3 (24 October 2026, the user, 21:39: "improve spacing on the sys icon tray"): every tray icon has the same
+ *   room each side (TRAY_PAD, 6 pixels), so the gaps between the clock, the network, the taskspace's icons, the
+ *   speaker and the cog are even; on the screen's title bar the row ends at the screen's depth gadget (its own
+ *   width and 2 pixels, bar_end()), not 2 bar heights from the edge.
  * 0.7 (17 October 2026, Dale, 08:26: "The cog should be present on all standard screens so Workbench screen
  *   has it all the time"): the cog is always on the Workbench screen's bar (the "cog on|off" line of
  *   ENV:OpenPrefs/TitleBar is kept but read no more), and its list is OpenPrefs's sections, each running
@@ -112,7 +116,7 @@
 #include "obmsg.h"
 #include "../../Common/prefsapp.h"           /* where OpenPrefs is (SYS:Preferences) */
 
-const char version[] __attribute__((used)) = "$VER: OpenTitle 0.7.2 (24.10.2026) OpenPrefs, AmigaChrome Team";
+const char version[] __attribute__((used)) = "$VER: OpenTitle 0.7.3 (24.10.2026) OpenPrefs, AmigaChrome Team";
 
 struct IntuitionBase *IntuitionBase;
 struct GfxBase *GfxBase;
@@ -666,6 +670,20 @@ static void draw_clock(int force)
     Text(rp, (STRPTR)t, strlen(t));
 }
 
+/* 0.7.3: the room each tray icon has on each side, so the gaps between them are even */
+#define TRAY_PAD 6
+
+/* 0.7.3: where the tray's row ends on the screen's title bar: the screen's depth gadget, its own width and
+ * 2 pixels (2 bar heights before, which left a wide gap after the cog); 2 bar heights when it isn't found */
+static WORD bar_end(void)
+{
+    struct Gadget *g;
+    for (g = scr->FirstGadget; g; g = g->NextGadget)
+        if ((g->GadgetType & GTYP_SYSTYPEMASK) == GTYP_SDEPTH && g->Width > 0 && g->Width < 3 * scr->BarHeight)
+            return g->Width + 2;
+    return 2 * scr->BarHeight;
+}
+
 /* where the clock goes: left of the tray programs nearer the bar's end */
 static void place(void)
 {
@@ -677,7 +695,7 @@ static void place(void)
     case OM_BAR_LEFT:   ch = bh; cx = 0; cy = scr->Height - bh * (n + 1); break;
     case OM_BAR_RIGHT:  ch = bh; cx = scr->Width - cw; cy = scr->Height - bh * (n + 1); break;
     case OM_BAR_TOP:    ch = bh; cx = scr->Width - 2 * scr->BarHeight - cw - off; cy = 0; break;
-    default:            ch = scr->BarHeight; cx = scr->Width - 2 * scr->BarHeight - cw - off; cy = 0; break;
+    default:            ch = scr->BarHeight; cx = scr->Width - bar_end() - cw - off; cy = 0; break;
     }
 }
 
@@ -754,7 +772,7 @@ static void net_poll(void)
     wifi_state = wifi_poll();
 }
 
-static WORD net_width(void) { return (wifi_state >= 0 ? 2 : 1) * 20 + 4; }
+static WORD net_width(void) { return (wifi_state >= 0 ? 2 : 1) * (16 + TRAY_PAD) + TRAY_PAD; }   /* 16-pixel icons */
 
 static void net_place(void)
 {
@@ -766,7 +784,7 @@ static void net_place(void)
     case OM_BAR_LEFT:   nh = bh; nx = 0; ny = scr->Height - bh * (n + 1); break;
     case OM_BAR_RIGHT:  nh = bh; nx = scr->Width - nw; ny = scr->Height - bh * (n + 1); break;
     case OM_BAR_TOP:    nh = bh; nx = scr->Width - 2 * scr->BarHeight - nw - off; ny = 0; break;
-    default:            nh = scr->BarHeight; nx = scr->Width - 2 * scr->BarHeight - nw - off; ny = 0; break;
+    default:            nh = scr->BarHeight; nx = scr->Width - bar_end() - nw - off; ny = 0; break;
     }
 }
 
@@ -814,8 +832,8 @@ static void draw_net(int force)
     bar_paint(net_w, 0, 0, nw, nh);
     SetAPen(rp, bar_text());
     cy = (nh - (bar_edge == OM_BAR_TITLE ? 1 : 0)) / 2;
-    draw_lan(rp, 2, cy, lan_state);
-    if (wifi_state >= 0) draw_wifi(rp, 22, cy, wifi_state, wifi_signal);
+    draw_lan(rp, TRAY_PAD, cy, lan_state);
+    if (wifi_state >= 0) draw_wifi(rp, TRAY_PAD + 16 + TRAY_PAD, cy, wifi_state, wifi_signal);
 }
 
 static struct Window *net_window(WORD x, WORD y, WORD w, WORD h)
@@ -1016,13 +1034,13 @@ static void cog_place(void)
 {
     WORD bh = scr->BarHeight + 1;
     int n, off = tray_before("Cog", COG_ORDER, &n);
-    gw = cog_size() + 10;
+    gw = cog_size() + 2 * TRAY_PAD;
     switch (bar_edge) {
     case OM_BAR_BOTTOM: gh = bh; gx = scr->Width - gw - off; gy = scr->Height - bh; break;
     case OM_BAR_LEFT:   gh = bh; gx = 0; gy = scr->Height - bh * (n + 1); break;
     case OM_BAR_RIGHT:  gh = bh; gx = scr->Width - gw; gy = scr->Height - bh * (n + 1); break;
     case OM_BAR_TOP:    gh = bh; gx = scr->Width - 2 * scr->BarHeight - gw - off; gy = 0; break;
-    default:            gh = scr->BarHeight; gx = scr->Width - 2 * scr->BarHeight - gw - off; gy = 0; break;
+    default:            gh = scr->BarHeight; gx = scr->Width - bar_end() - gw - off; gy = 0; break;
     }
 }
 
@@ -1300,13 +1318,13 @@ static void ts_place(struct ts_icon *t)
 {
     WORD bh = scr->BarHeight + 1;
     int n, off = tray_before(t->name, t->order, &n);
-    t->bw = t->w + 10;
+    t->bw = t->w + 2 * TRAY_PAD;
     switch (bar_edge) {
     case OM_BAR_BOTTOM: t->bh = bh; t->x = scr->Width - t->bw - off; t->y = scr->Height - bh; break;
     case OM_BAR_LEFT:   t->bh = bh; t->x = 0; t->y = scr->Height - bh * (n + 1); break;
     case OM_BAR_RIGHT:  t->bh = bh; t->x = scr->Width - t->bw; t->y = scr->Height - bh * (n + 1); break;
     case OM_BAR_TOP:    t->bh = bh; t->x = scr->Width - 2 * scr->BarHeight - t->bw - off; t->y = 0; break;
-    default:            t->bh = scr->BarHeight; t->x = scr->Width - 2 * scr->BarHeight - t->bw - off; t->y = 0; break;
+    default:            t->bh = scr->BarHeight; t->x = scr->Width - bar_end() - t->bw - off; t->y = 0; break;
     }
 }
 
@@ -1668,7 +1686,7 @@ static void os_poll(int on)
         for (i = 0; i < OS_MAX; i++) { if (os_cog[i].s == seen[j]) break; if (!os_cog[i].s && f < 0) f = i; }
         if (i < OS_MAX || f < 0 || !(s = LockPubScreen((STRPTR)names[j]))) continue;
         if (s == seen[j] && os_used(s, NULL)) {
-            WORD bh = s->BarHeight, gw = (bh - 2 >= 13 ? 13 : bh - 2 >= 11 ? 11 : 9) + 10;
+            WORD bh = s->BarHeight, gw = (bh - 2 >= 13 ? 13 : bh - 2 >= 11 ? 11 : 9) + 2 * TRAY_PAD;
             os_cog[f].w = OpenWindowTags(NULL, WA_PubScreen, (ULONG)s, WA_Left, s->Width - 2 * bh - gw, WA_Top, 0,
                                          WA_Width, gw, WA_Height, bh, WA_Borderless, TRUE, WA_Activate, FALSE,
                                          WA_RMBTrap, TRUE, WA_SmartRefresh, TRUE, WA_IDCMP, IDCMP_MOUSEBUTTONS | IDCMP_REFRESHWINDOW,
