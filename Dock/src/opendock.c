@@ -1089,6 +1089,25 @@ static void dot(struct RastPort *rp, int cx, int cy)
     }
 }
 
+/* 0.6.9: the line before the running programs, in the dot's colour, so it shows on a see-through shelf too
+ * (a settings separator is drawn into the shelf in its own faint colour) */
+static void run_line(struct RastPort *rp, int x0, int y0, int x1, int y1)
+{
+    int w = x1 - x0 + 1, h = y1 - y0 + 1;
+    if (w <= 0 || h <= 0) return;
+    if (card) {
+        ULONG *px = AllocVec(w * h * 4, MEMF_ANY);
+        if (!px) return;
+        ReadPixelArray(px, 0, 0, w * 4, rp, x0, y0, w, h, RECTFMT_ARGB);
+        for (int k = 0; k < w * h; k++) px[k] = blend(px[k], dot_c, 200);
+        WritePixelArray(px, 0, 0, w * 4, rp, x0, y0, w, h, RECTFMT_ARGB);
+        FreeVec(px);
+    } else {
+        SetAPen(rp, dot_pen >= 0 ? dot_pen : 1);
+        RectFill(rp, x0, y0, x1, y1);
+    }
+}
+
 /* Everything, into the drawing, with button lift (if any) raised by lift pixels. */
 static void render(int lifted, int lift)
 {
@@ -1108,6 +1127,13 @@ static void render(int lifted, int lift)
         od_button *b = &dock.b[i];
         /* the drawing has no layer to clip it: a dock longer than the screen stops at its edge */
         if (pos + s > (standing ? H : W) - endpad) break;
+        if (b->kind == OD_SEPARATOR && i == npin && nextra) {
+            /* 0.6.9: the running programs' line, two pixels wide, inset as a separator is */
+            int inset = apad + (standing ? cellw : cellh) / 8;
+            if (inset < 3) inset = 3;
+            if (standing) run_line(rp, x0 + inset, pos + s / 2 - 1, x1 - inset, pos + s / 2);
+            else run_line(rp, pos + s / 2 - 1, y0 + inset, pos + s / 2, y1 - inset);
+        }
         if (b->kind != OD_SEPARATOR) {
             struct Rectangle r = { 0, 0, 0, 0 };
             int iw = 0, ih = 0, dx = 0, dy = 0;
