@@ -14,6 +14,13 @@
  * startup that lists OpenBlanker twice blanked the screen at boot); started
  * again with NOW, it plays the show at once.
  *
+ * A program that wants the screen left alone (a game, a film, a demo) holds
+ * the show off by signalling CTRL_E to the task of the public port named
+ * "OpenBlanker", under Forbid, every few seconds while it runs (1.2): each
+ * one counts as a key or the mouse. SDL2.module and SDL3.module do it while
+ * SDL holds the screen saver off, which SDL does by default. A CTRL_E during
+ * the show doesn't end it; only a key or the mouse does.
+ *
  * MIT, Copyright (c) 2026 AmigaChrome Team. */
 #include <exec/types.h>
 #include <exec/memory.h>
@@ -37,7 +44,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-static const char version[] __attribute__((used)) = "$VER: OpenBlanker 1.1.1 (10.10.2026) MIT, Copyright (c) 2026 AmigaChrome Team";
+static const char version[] __attribute__((used)) = "$VER: OpenBlanker 1.2 (24.10.2026) MIT, Copyright (c) 2026 AmigaChrome Team";
 
 struct IntuitionBase *IntuitionBase;
 struct GfxBase *GfxBase;
@@ -46,7 +53,7 @@ struct Library *CxBase, *OpenFontTextBase;
 static struct Task *me;
 static volatile ULONG idle_ticks;      /* seconds since the last key or mouse */
 static volatile int showing, woken, on = 1;
-#define SIG_WAKE SIGBREAKF_CTRL_E
+#define SIG_WAKE SIGBREAKF_CTRL_E     /* the show: a key or the mouse; otherwise a program holding it off (1.2) */
 #define SIG_PLAY SIGBREAKF_CTRL_D     /* a second OpenBlanker NOW asks the running one to play the show */
 #define PORT_NAME "OpenBlanker"
 
@@ -381,6 +388,7 @@ int main(int argc, char **argv)
         CxMsg *m;
         if (got & SIGBREAKF_CTRL_C) quit = 1;
         if (got & SIGBREAKF_CTRL_F) timeout = timeout_setting(0);    /* the settings changed */
+        if (got & SIG_WAKE) idle_ticks = 0;    /* a program holds the show off (1.2) */
         if ((got & SIG_PLAY) && on) play();
         while ((m = (CxMsg *)GetMsg(port))) {
             ULONG type = CxMsgType(m), id = CxMsgID(m);
