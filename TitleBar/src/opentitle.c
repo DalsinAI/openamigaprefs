@@ -674,7 +674,7 @@ static void draw_clock(int force)
 #define TRAY_PAD 6
 
 /* 0.7.3: where the tray's row ends on the screen's title bar: the screen's depth gadget, its own width and
- * 2 pixels (2 bar heights before, which left a wide gap after the cog); 2 bar heights when it isn't found */
+ * 2 pixels (2 bar heights before, which left a wide gap after the cog), or the width the bar draws it at */
 static WORD bar_end(void)
 {
     struct Gadget *g;
@@ -684,7 +684,9 @@ static WORD bar_end(void)
             LONG x = g->LeftEdge + ((g->Flags & GFLG_RELRIGHT) ? scr->Width - 1 : 0), end = scr->Width - x;
             if (end > 0 && end < 3 * scr->BarHeight) return (WORD)end + 2;
         }
-    return 2 * scr->BarHeight;
+    /* no such gadget: the open ROM's Intuition draws the depth gadget into the bar itself, 23 pixels wide on a
+     * hires screen and 17 on a lores one, as OS 3.2's SDEPTHIMAGE is */
+    return ((scr->Flags & SCREENHIRES) ? 23 : 17) + 2;
 }
 
 /* where the clock goes: left of the tray programs nearer the bar's end */
