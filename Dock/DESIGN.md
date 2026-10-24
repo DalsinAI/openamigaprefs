@@ -128,6 +128,9 @@ rounded rectangle tinted to the look, through which the desktop shows.
   0.6.8: one look at exec's task lists and one walk of the Shells per check,
   for all the buttons together (it was a FindTask, and a walk of the Shells,
   for each button); none at all while the marks are off or the dock is closed.
+  0.6.10: on OpenExec (taskclock.resource 2, which counts the tasks added and
+  removed), the two-second check is skipped while that count and the window
+  list are as they were; on OS 3.2.3's exec every check runs, as before.
 - Icons dropped on the dock (it is an AppWindow) are added at the end and
   kept, as AmiDock does.
 - The menu, opened with the right mouse button while the dock is active,
