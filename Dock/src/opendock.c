@@ -53,7 +53,7 @@
 #include "obmsg.h"
 #include "../../Common/prefsapp.h"           /* where OpenPrefs is (SYS:Preferences) */
 
-const char version[] __attribute__((used)) = "$VER: OpenDock 0.6.8 (24.10.2026) OpenPrefs, AmigaChrome Team";   /* 0.6.8: one look at the tasks per check; 0.6.7: its editor is OpenPrefs DOCK, never ROM: */
+const char version[] __attribute__((used)) = "$VER: OpenDock 0.6.9 (24.10.2026) OpenPrefs, AmigaChrome Team";   /* 0.6.9: running programs after a line; 0.6.8: one look at the tasks per check; 0.6.7: its editor is OpenPrefs DOCK, never ROM: */
 
 #define PREFS_ENV "ENV:OpenDock/Dock"
 #define PREFS_ENVARC "ENVARC:OpenDock/Dock"
@@ -71,6 +71,16 @@ struct Library *IconBase, *WorkbenchBase, *CyberGfxBase;
 static od_dock dock;
 static struct DiskObject *icons[OD_MAX];
 static struct Task *running[OD_MAX];               /* compared, never followed */
+/* 0.6.9 (the user, 24 October 2026, 21:40: "a 'running icon' is attached to the dock, similar to Ubuntu's dock,
+ * separated by a line"): a program with a window and no button of its own gets one while it runs, after a
+ * separator, with the running dot; a click brings its window to the front. They are never kept in the settings:
+ * dock.b[0 .. npin-1] are the settings' buttons, the rest these. */
+static int npin;
+static struct Menu *the_menus;                     /* the dock's menus, for a relayout from the running check */
+#define RUN_EXTRA 12                               /* running programs shown at most */
+typedef struct { struct Task *task; char name[48]; char path[200]; } run_extra;
+static run_extra extra[RUN_EXTRA];                 /* the running programs shown, in the order their buttons are */
+static int nextra;
 static struct Window *win;
 static struct Screen *scr;
 static int cellw, cellh, along, standing, pressed = -1, removing;
@@ -134,13 +144,18 @@ static void load(void)
     if (!text) text = read_file(PREFS_ENVARC);
     if (text) { od_parse(&dock, text); FreeVec(text); }
     else { od_defaults(&dock); od_starter(&dock); od_drop_missing(&dock, exists); }   /* as the editor does */
+    npin = dock.n;                                 /* 0.6.9: no running programs' buttons until the next check */
+    nextra = 0;
 }
 
 /* A change made on the dock itself (an icon dropped, one removed) is kept, as AmiDock does. */
 static void keep(void)
 {
     static char text[32768];
-    int n = od_write(&dock, text, sizeof text);
+    int all = dock.n, n;
+    dock.n = npin;                                 /* 0.6.9: the running programs' buttons are never kept */
+    n = od_write(&dock, text, sizeof text);
+    dock.n = all;
     if (n > 0 && write_file(PREFS_ENV, text, n)) write_file(PREFS_ENVARC, text, n);
 }
 
@@ -403,10 +418,10 @@ static void find_running_all(struct Task **found)
     static char want[OD_MAX][108];
     int nseen = 0, left = 0;
     LONG i, max;
-    for (int k = 0; k < dock.n; k++) {
+    for (int k = 0; k < dock.n; k++) found[k] = NULL;
+    for (int k = 0; k < npin; k++) {
         const od_button *b = &dock.b[k];
         char prog[256];
-        found[k] = NULL;
         want[k][0] = 0;
         if (b->kind == OD_SEPARATOR || b->kind == OD_AREXX) continue;
         program_of(b, prog, sizeof prog);
@@ -426,7 +441,7 @@ static void find_running_all(struct Task **found)
     for (int s = 0; s < nseen && left; s++) {
         const char *tn = seen[s]->tc_Node.ln_Name;
         if (!tn) continue;
-        for (int k = 0; k < dock.n; k++)
+        for (int k = 0; k < npin; k++)
             if (want[k][0] && !found[k] && !strcmp(tn, want[k])) { found[k] = seen[s]; left--; }
     }
     max = left ? MaxCli() : 0;
@@ -440,7 +455,7 @@ static void find_running_all(struct Task **found)
             int n = bs[0] < sizeof cn - 1 ? bs[0] : sizeof cn - 1;
             memcpy(cn, bs + 1, n); cn[n] = 0;
             f = (const char *)FilePart((STRPTR)cn);
-            for (int k = 0; k < dock.n; k++)
+            for (int k = 0; k < npin; k++)
                 if (want[k][0] && !found[k] && same_name(f, want[k])) { found[k] = (struct Task *)p; left--; }
         }
     }
@@ -461,6 +476,86 @@ static int to_front(struct Task *t)
     WindowToFront(w);
     ActivateWindow(w);
     return 1;
+}
+
+/* ---- 0.6.9: running programs with no button of their own ------------------------------------------ */
+
+/* Where a running program's icon may be: its Shell command's own path, else the drawers Workbench's
+ * programs are in; else its name alone, which gives the default icon for a program. */
+static void extra_path(const char *name, const char *cmd, char *out, int size)
+{
+    static const char *const dirs[] = { "SYS:Utilities/", "SYS:Tools/", "SYS:Tools/Commodities/", "SYS:System/",
+                                        "SYS:Preferences/", "SYS:Prefs/", "SYS:", NULL };
+    char p[240];
+    if (cmd[0] && (strchr(cmd, ':') || strchr(cmd, '/'))) { strlcpy(out, cmd, size); return; }
+    for (int i = 0; dirs[i]; i++) {
+        snprintf(p, sizeof p, "%s%s.info", dirs[i], name);
+        if (exists(p)) { snprintf(out, size, "%s%s", dirs[i], name); return; }
+    }
+    strlcpy(out, name, size);
+}
+
+/* The programs with a window of their own: a window with a border that isn't a backdrop, on any screen, by its
+ * task (one each). Not the dock's own, nor the desktop's (the task of the Workbench screen's backdrop window:
+ * its drawers are the desktop). The windows are read under Intuition's lock, the tasks' names after, under
+ * a Forbid and only for tasks still in exec's lists, as find_running_all() reads them. A Shell's window is
+ * its console handler's: it shows as the Shell. */
+static int scan_extra(run_extra *out)
+{
+    static struct Task *wt[RUN_SEEN], *seen[RUN_SEEN];
+    struct Task *me = FindTask(NULL), *desk = NULL;
+    int nw = 0, nseen = 0, n = 0;
+    ULONG lock = LockIBase(0);
+    for (struct Screen *sc = IntuitionBase->FirstScreen; sc; sc = sc->NextScreen)
+        for (struct Window *w = sc->FirstWindow; w; w = w->NextWindow) {
+            struct Task *t = w->UserPort ? w->UserPort->mp_SigTask : NULL;
+            int k;
+            if (!t) continue;
+            if (sc == scr && (w->Flags & WFLG_BACKDROP)) { desk = t; continue; }
+            if ((w->Flags & (WFLG_BACKDROP | WFLG_BORDERLESS)) || t == me) continue;   /* bars, trays, a game's own screen */
+            for (k = 0; k < nw && wt[k] != t; k++) ;
+            if (k == nw && nw < RUN_SEEN) wt[nw++] = t;
+        }
+    UnlockIBase(lock);
+    Forbid();
+    Disable();
+    seen[nseen++] = SysBase->ThisTask;
+    for (struct Node *nd = SysBase->TaskReady.lh_Head; nd->ln_Succ && nseen < RUN_SEEN; nd = nd->ln_Succ)
+        seen[nseen++] = (struct Task *)nd;
+    for (struct Node *nd = SysBase->TaskWait.lh_Head; nd->ln_Succ && nseen < RUN_SEEN; nd = nd->ln_Succ)
+        seen[nseen++] = (struct Task *)nd;
+    Enable();
+    for (int k = 0; k < nw && n < RUN_EXTRA; k++) {
+        struct Task *t = wt[k];
+        const char *nm = NULL;
+        int live = 0;
+        if (t == desk) continue;
+        for (int j = 0; j < nseen && !live; j++) live = seen[j] == t;
+        if (!live) continue;
+        out[n].task = t;
+        out[n].path[0] = 0;
+        if (t->tc_Node.ln_Type == NT_PROCESS) {
+            struct Process *pr = (struct Process *)t;
+            struct CommandLineInterface *cli = pr->pr_CLI ? (struct CommandLineInterface *)BADDR(pr->pr_CLI) : NULL;
+            if (cli && cli->cli_Module && cli->cli_CommandName) {
+                UBYTE *bs = (UBYTE *)BADDR(cli->cli_CommandName);
+                int len = bs[0] < sizeof out[n].path - 1 ? bs[0] : sizeof out[n].path - 1;
+                memcpy(out[n].path, bs + 1, len);
+                out[n].path[len] = 0;
+                nm = (const char *)FilePart((STRPTR)out[n].path);
+            }
+        }
+        if (!nm || !nm[0]) nm = t->tc_Node.ln_Name ? t->tc_Node.ln_Name : "";
+        strlcpy(out[n].name, nm, sizeof out[n].name);
+        if (!out[n].name[0] || same_name(out[n].name, "CON") || same_name(out[n].name, "RAW") ||
+            same_name(out[n].name, "con-handler") || same_name(out[n].name, "Console Handler")) {
+            strlcpy(out[n].name, "Shell", sizeof out[n].name);
+            strlcpy(out[n].path, "SYS:System/Shell", sizeof out[n].path);
+        }
+        n++;
+    }
+    Permit();
+    return n;
 }
 
 static void start(const od_button *b)
@@ -1382,19 +1477,63 @@ static int relayout(struct Menu *menus)
 static void check_running(void)
 {
     static struct Task *found[OD_MAX];
-    int changed = 0;
-    if (dock.running && win) find_running_all(found);
-    else memset(found, 0, sizeof found);
-    for (int i = 0; i < dock.n; i++) {
+    static run_extra now[RUN_EXTRA];
+    int changed = 0, n = 0, same, base;
+    if (dock.running && win) {
+        find_running_all(found);
+        /* 0.6.9: the programs with a window, less those that have a button of their own (theirs has the dot) */
+        n = scan_extra(now);
+        {
+            int m = 0;
+            for (int i = 0; i < n; i++) {
+                int pinned = 0;
+                for (int k = 0; k < npin && !pinned; k++) pinned = found[k] == now[i].task;
+                if (!pinned) { if (m != i) now[m] = now[i]; m++; }
+            }
+            n = m;
+        }
+        if (n > OD_MAX - npin - 1) n = OD_MAX - npin - 1 > 0 ? OD_MAX - npin - 1 : 0;
+    } else memset(found, 0, sizeof found);
+    same = n == nextra;
+    for (int i = 0; same && i < n; i++) same = now[i].task == extra[i].task && !strcmp(now[i].name, extra[i].name);
+    if (!same) {
+        /* their buttons again, after a line, and the dock laid out for them */
+        for (int i = 0; i < n; i++) {
+            int had = -1;
+            for (int j = 0; j < nextra && had < 0; j++) if (!strcmp(extra[j].name, now[i].name)) had = j;
+            if (had >= 0) strlcpy(now[i].path, extra[had].path, sizeof now[i].path);
+            else { char cmd[200]; strlcpy(cmd, now[i].path, sizeof cmd); extra_path(now[i].name, cmd, now[i].path, sizeof now[i].path); }
+        }
+        memcpy(extra, now, n * sizeof now[0]);
+        nextra = n;
+        dock.n = npin;
+        if (n && npin) { memset(&dock.b[dock.n], 0, sizeof dock.b[0]); dock.b[dock.n++].kind = OD_SEPARATOR; }
+        for (int i = 0; i < n; i++) {
+            od_button *b = &dock.b[dock.n++];
+            memset(b, 0, sizeof *b);
+            b->kind = OD_WB;
+            b->stack = 4096;
+            strlcpy(b->command, extra[i].path, sizeof b->command);
+            strlcpy(b->label, extra[i].name, sizeof b->label);
+        }
+        if (win) { free_icons(); relayout(the_menus); }
+        changed = 1;
+    }
+    for (int i = 0; i < npin; i++) {
         if ((found[i] != NULL) != (running[i] != NULL)) changed = 1;
         running[i] = found[i];
     }
+    base = npin + (npin && nextra ? 1 : 0);
+    for (int i = npin; i < dock.n; i++) running[i] = NULL;
+    for (int i = 0; i < nextra && base + i < dock.n; i++) running[base + i] = extra[i].task;
     if (changed && win) draw();
 }
 
 /* An icon dropped on the dock: a Workbench button for it at the end. */
 static void dropped(struct AppMessage *am)
 {
+    dock.n = npin;                                 /* 0.6.9: after the settings' buttons, not the running programs' */
+    nextra = 0;
     for (LONG i = 0; i < am->am_NumArgs; i++) {
         char path[256];
         od_button *b;
@@ -1409,16 +1548,21 @@ static void dropped(struct AppMessage *am)
         strlcpy(b->label, (const char *)FilePart((STRPTR)path), sizeof b->label);   /* a label is short: cut to fit */
         if (!b->label[0]) strlcpy(b->label, path, sizeof b->label);
     }
+    npin = dock.n;
     keep();
 }
 
 static void remove_button(int i)
 {
+    if (i >= npin) return;                         /* 0.6.9: a running program's button goes when it ends */
+    dock.n = npin;
+    nextra = 0;
     memmove(&dock.b[i], &dock.b[i + 1], (dock.n - i - 1) * sizeof dock.b[0]);
     dock.n--;
     /* a separator left at an end, or beside another, goes too */
     while (dock.n && dock.b[dock.n - 1].kind == OD_SEPARATOR) dock.n--;
     while (dock.n && dock.b[0].kind == OD_SEPARATOR) { memmove(&dock.b[0], &dock.b[1], (dock.n - 1) * sizeof dock.b[0]); dock.n--; }
+    npin = dock.n;
     keep();
 }
 
@@ -1466,6 +1610,7 @@ int main(void)
     if ((vi = GetVisualInfoA(scr, NULL)) && (menus = CreateMenus(newmenus, TAG_DONE)))
         LayoutMenus(menus, vi, GTMN_NewLookMenus, TRUE, TAG_DONE);
     if (WorkbenchBase) appport = CreateMsgPort();
+    the_menus = menus;
     if (!open_dock(menus)) { rc = RETURN_FAIL; goto out; }
     if ((tport = CreateMsgPort()) && (tr = (struct timerequest *)CreateIORequest(tport, sizeof *tr)))
         timer = !OpenDevice((STRPTR)TIMERNAME, UNIT_VBLANK, (struct IORequest *)tr, 0);
@@ -1486,6 +1631,7 @@ int main(void)
             close_dock();
             free_icons();
             if (menus) { FreeMenus(menus); menus = NULL; }
+            the_menus = NULL;
             if (vi) { FreeVisualInfo(vi); vi = NULL; }
             if (scr) { UnlockPubScreen(NULL, scr); scr = NULL; }
             wb_down = 1;
@@ -1498,6 +1644,7 @@ int main(void)
         if (wb_down == 2 && (scr = LockPubScreen((STRPTR)"Workbench"))) {
             if ((vi = GetVisualInfoA(scr, NULL)) && (menus = CreateMenus(newmenus, TAG_DONE)))
                 LayoutMenus(menus, vi, GTMN_NewLookMenus, TRUE, TAG_DONE);
+            the_menus = menus;
             if (open_dock(menus)) { wb_down = 0; check_running(); }
             else {                                 /* the screen isn't ready yet: try again */
                 close_dock();
@@ -1539,6 +1686,7 @@ int main(void)
                 if (was >= 0) draw();
                 if (i >= 0 && i == was) {
                     if (removing) { removing = 0; remove_button(i); free_icons(); relayout(menus); check_running(); }
+                    else if (i >= npin) { if (running[i]) to_front(running[i]); }   /* 0.6.9: a running program's: to the front */
                     else if (!(running[i] && to_front(running[i]))) { start(&dock.b[i]); hop(i); }
                 }
             } else if (cls == IDCMP_MENUPICK) {
