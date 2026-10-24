@@ -71,8 +71,8 @@ static int read_var(const char *name, char *buf, int size)
     return n > 0;
 }
 
-/* One variable into ENV: (and ENVARC: when save), through SetVar, which takes the file's lock as DOS does (a write
- * of our own once failed while OpenBench, told of the other variable, was reading this one); a few tries */
+/* One variable into ENV: (and ENVARC: when save), through SetVar as DOS writes variables; a few tries (in the lab a
+ * plain write once failed, one Use soon after another, while OpenBench and its drawers were reading the variables) */
 static int set_var(const char *name, const char *text, int save)
 {
     int i;
