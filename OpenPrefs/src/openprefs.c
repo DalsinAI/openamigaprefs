@@ -19,7 +19,8 @@
  *
  * Its place is SYS:Preferences/OpenPrefs (SYS:Prefs/OpenPrefs on an older disk); the ROM has no copy.
  *
- * The old names work as they did, by the name OpenPrefs runs as (a name stub in SYS:Prefs, a copy): Look,
+ * The old names work as they did, by the name OpenPrefs runs as (a copy under that name; the stubs OpenUp
+ * put in SYS:Prefs are archived since 24 October 2026): Look,
  * OpenLook, Windows, TitleBar, Menus, OpenDock, OpenSound, OpenInput,
  * OpenGamepads, OpenDateTime, OpenSerial, OpenTypes and OpenSystem, from the Shell with their own arguments
  * (OpenSound USE applies Sound's settings with no window, as before) and from Workbench at their section.

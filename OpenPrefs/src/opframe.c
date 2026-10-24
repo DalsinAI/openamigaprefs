@@ -326,10 +326,44 @@ void lt_detach(struct Window *win, struct Gadget *glist)
     lt_rp = NULL;
 }
 
+/* Ctrl-C (OpenBench's Quit sends it to the programs it started; Break): OpenPrefs ends, as its close gadget
+ * ends it. A page waits for its window with Wait or WaitPort (opshift.h makes both these); on Ctrl-C a
+ * close-window message goes on the window's port once, which the page reads as its own, puts its settings
+ * back and ends, and no page opens after it. The message has no reply port: ReplyMsg marks it free. */
+static int lt_broken;
+static struct IntuiMessage lt_close_msg;
+
+ULONG lt_wait(ULONG sigs)
+{
+    ULONG got = Wait(sigs | SIGBREAKF_CTRL_C);
+    if ((got & SIGBREAKF_CTRL_C) && !(sigs & SIGBREAKF_CTRL_C) && lt_win) {
+        got &= ~SIGBREAKF_CTRL_C;
+        if (!lt_broken) {
+            lt_broken = 1;
+            memset(&lt_close_msg, 0, sizeof lt_close_msg);
+            lt_close_msg.ExecMessage.mn_Node.ln_Type = NT_MESSAGE;
+            lt_close_msg.ExecMessage.mn_Length = sizeof lt_close_msg;
+            lt_close_msg.Class = IDCMP_CLOSEWINDOW;
+            lt_close_msg.IDCMPWindow = lt_win;
+            PutMsg(lt_win->UserPort, &lt_close_msg.ExecMessage);
+        }
+        got |= 1UL << lt_win->UserPort->mp_SigBit;
+    }
+    return got;
+}
+
+struct Message *lt_waitport(struct MsgPort *port)
+{
+    while (port->mp_MsgList.lh_Head->ln_Succ == NULL)
+        lt_wait(1UL << port->mp_SigBit);
+    return (struct Message *)port->mp_MsgList.lh_Head;
+}
+
 void lt_close(struct Window *win, struct Gadget *glist)
 {
     if (!win) return;
-    if (lt_next < 0 && lt_refused_now) {      /* a Save went to ENV: only: the page again, saying so */
+    if (lt_broken) lt_next = -1;              /* Ctrl-C: no page after this one */
+    if (lt_next < 0 && lt_refused_now && !lt_broken) {      /* a Save went to ENV: only: the page again, saying so */
         lt_next = lt_me;
         snprintf(lt_note, sizeof lt_note, "Not saved: used for now (ENV: only), as SYS: has no preferences folders.");
     }

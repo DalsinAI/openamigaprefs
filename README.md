@@ -6,16 +6,19 @@ files wherever the OS already has one.
 
 ![The Workbench screen with the Windows editor open, and the title bar's settings cog listing the editors](docs/screenshot.png)
 
-Since 17 October 2026 the editors below are **one program with one icon, OpenPrefs** (`SYS:Prefs/OpenPrefs`, and
-`ROM:Prefs/OpenPrefs` in the OpenKick ROM): one window with the sections down the left and the page on the right
+Since 17 October 2026 the editors below are **one program with one icon, OpenPrefs**, in `SYS:Preferences` since 24
+October (`SYS:Prefs/OpenPrefs` on an older disk; the OpenKick ROM no longer carries it): one window with the sections
+down the left and the page on the right
 (a cycle gadget of sections on a 640-wide screen), each section the editor it was. The old names (`Look`,
 `OpenLook`, `Windows`, `TitleBar`, `Menus`, `OpenDock`, `OpenSound`, `OpenInput`, `OpenGamepads`, `OpenDateTime`,
-`OpenSerial`, `OpenTypes`, `OpenSystem`) open their sections and take their arguments as before; `OpenPrefs APPLY`
-at boot is served by a small body, `C:OpenPrefs`. Since 21 October every section has a name and an icon in
-SYS:Prefs: the old names, and `OpenScreenMode`, `OpenPointer`, `OpenFonts`, `OpenColours`, `OpenBackdrops`,
-`OpenWorkbench`, `OpenFileRequesters`, `OpenBlanker` and `OpenIControl` for the sections no editor had a name for.
-Names that are OS 3.2.3's own editors (`Pointer`, `Sound`, `Serial`, `Workbench`, `IControl`) are left to them. See [docs/combined-prefs](docs/combined-prefs/DESIGN.md), its
-revision of 17 October.
+`OpenSerial`, `OpenTypes`, `OpenSystem`) still open their sections when OpenPrefs runs under them. Since 24 October
+the pages have the user's names (Theme, Screen Mode, Title Bar, Input, Date & Time, File Types...), OpenPrefs takes
+them for a section, and `SYS:Preferences` has a plain-named project icon per page (OpenUp's), which opens that page
+by its name or its `SECTION=` tooltype. An open ROM applies Sound's levels, the gamepad patch and the stack caps at
+boot itself (intuition's prefs task); on OS 3.2.3's own ROM OpenUp's User-Startup runs
+`SYS:Preferences/OpenPrefs APPLY`. The small body (`C:OpenPrefs`) and the old names' stubs are no longer built.
+OpenPrefs ends on Ctrl-C (OpenBench's Quit). See [docs/combined-prefs](docs/combined-prefs/DESIGN.md), its revision
+of 17 October, and `salvor/Design-No-ROM-Volume-20261024.md`, section 8.
 
 | Editor | What it sets | State |
 | --- | --- | --- |

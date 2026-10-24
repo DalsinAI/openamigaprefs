@@ -1,21 +1,17 @@
 #!/bin/sh
 # OpenPrefs's host checks:
-#   - the old names: OpenPrefs/build.sh's stubs are openprefs.c's old names (less OpenPrefs itself and the build
-#     names Dock, Sound, Gamepads), and every section name maps to a page;
+#   - every section name maps to a page;
 #   - the pages' names (opframe.c's lt_label) are the 21 the user named, each one once;
 #   - with a stove (STOVE=, default ~/AmigaChrome/stoves/os32-gcc16): the app's first $VER is OpenPrefs's, and its
-#     version is higher than every page's own $VER inside it and every editor's in this repository; the small body
-#     has APPLY's three pages and none of their windows; each stub is under 1 KB and starts with a branch.
+#     version is higher than every page's own $VER inside it and every editor's in this repository, and every
+#     page object calls the frame's lt_wait (opshift.h routes the pages' Wait and WaitPort through it, so
+#     Ctrl-C ends OpenPrefs: OpenBench's Quit).
 #   sh OpenPrefs/tests/run.sh
 # MIT, Copyright (c) 2026 AmigaChrome Team.
 set -eu
 HERE=$(cd "$(dirname "$0")/.." && pwd)
 P=$HERE/..
 fail=0
-names=$(sed -n '/old_names\[\] = {/,/^};/p' "$HERE/src/openprefs.c" | grep -o '{ "[A-Za-z]*"' | sed 's/{ "//; s/"//' |
-        grep -v -x -e OpenPrefs -e Dock -e Sound -e Gamepads | sort | tr '\n' ' ')
-stubs=$(sed -n 's/^for n in \(.*\); do$/\1/p' "$HERE/build.sh" | tr ' ' '\n' | sort | tr '\n' ' ')
-if [ "$names" = "$stubs" ]; then echo "ok   the stubs are the old names: $stubs"; else echo "FAIL stubs [$stubs] names [$names]"; fail=1; fi
 python3 - "$HERE/src/openprefs.c" "$P/Common/looktabs.h" <<'EOF' || fail=1
 import re, sys
 src = open(sys.argv[1]).read()
@@ -77,23 +73,17 @@ for root, _, fs in os.walk(repo):
                         'OpenDock-Prefs', 'OpenSound', 'OpenInput', 'Gamepads', 'OpenDateTime', 'OpenSerial', 'OpenTypes', 'OpenSystem'):
                     print(f'FAIL {name} {ver} ({f}) is not older than OpenPrefs {top}'); bad = 1
 print(f'ok   OpenPrefs {".".join(map(str, top))} is the first $VER and the highest' if not bad else 'FAIL versions')
-small = open(os.path.join(out, 'OpenPrefs.small'), 'rb').read()
-syms = set(re.findall(rb'_?([a-z_]+_main|gui_once|lt_open)\x00', small))
-for want in (b'sound_main', b'gamepads_main', b'system_main'):
-    if want not in syms:
-        print(f'FAIL the small body has no {want.decode()}'); bad = 1
-for no in (b'gui_once', b'lt_open', b'look_main'):
-    if no in syms:
-        print(f'FAIL the small body has {no.decode()} (a window)'); bad = 1
-if not bad:
-    print(f'ok   the small body: {len(small)} bytes, APPLY\'s three pages and no window')
-for s in sorted(os.listdir(os.path.join(out, 'stubs'))):
-    d = open(os.path.join(out, 'stubs', s), 'rb').read()
-    i = d.index(b'\x00\x00\x03\xe9') + 8           # HUNK_CODE, its size: the first code word
-    if len(d) > 1024 or d[i] != 0x60:
-        print(f'FAIL stub {s}: {len(d)} bytes, first word {d[i:i + 2].hex()}'); bad = 1
-if not bad:
-    print(f'ok   {len(os.listdir(os.path.join(out, "stubs")))} stubs, each under 1 KB and starting with a branch')
 sys.exit(bad)
 EOF
+# every page that waits does so through the frame (Ctrl-C): its object refers to lt_wait or lt_waitport
+NM="$STOVE/prefix/bin/m68k-amigaos-nm"
+nowait=""
+for o in "$T/out/obj/app/"*.o; do
+  if "$NM" "$o" | grep -q -E ' U _?(lt_wait|lt_waitport)$'; then :; else
+    case $(basename "$o") in look.o|windows.o|titlebar.o|menus.o|appearance.o|dockprefs.o|sound.o|openinput.o|gamepads.o|\
+      opendatetime.o|openserial.o|opentypes.o|opensystem.o|blankerprefs.o|screenmode.o|icontrol.o) nowait="$nowait $(basename "$o")" ;;
+    esac
+  fi
+done
+if [ -z "$nowait" ]; then echo "ok   every page waits through the frame (Ctrl-C ends OpenPrefs)"; else echo "FAIL pages that wait on their own:$nowait"; fail=1; fi
 exit $fail

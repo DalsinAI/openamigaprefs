@@ -9,7 +9,9 @@
  *   - LockPubScreen(NULL) is the screen OpenPrefs was asked for (PUBSCREEN), else the default;
  *   - Open, CreateDir and PutDiskObject on ENV: and ENVARC: make the folders a save needs first (Dale,
  *     17 October 2026, 09:42; opframe.c lt_ready);
- *   - GT_GetIMsg tells the frame when the page's own gadgets or keys were used (lt_dirty).
+ *   - GT_GetIMsg tells the frame when the page's own gadgets or keys were used (lt_dirty);
+ *   - Wait and WaitPort wake on Ctrl-C too (OpenBench's Quit, Break): the frame puts a close-window message on
+ *     the window's port (opframe.c lt_wait), so the page ends as its close gadget ends it and OpenPrefs quits.
  *
  * The protos are included here first, so each page's own #include of them is empty, and the calls are
  * redefined on the NDK's inline __X_base forms.
@@ -151,5 +153,13 @@ static inline __attribute__((unused)) struct IntuiMessage *lt_getimsg(struct Msg
 }
 #undef GT_GetIMsg
 #define GT_GetIMsg(p) lt_getimsg(p)
+
+/* ---- Ctrl-C ends OpenPrefs: the page's waits take it ---- */
+ULONG lt_wait(ULONG sigs);
+struct Message *lt_waitport(struct MsgPort *port);
+#undef Wait
+#define Wait(s) lt_wait(s)
+#undef WaitPort
+#define WaitPort(p) lt_waitport(p)
 
 #endif /* OPSHIFT_H */

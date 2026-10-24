@@ -3,7 +3,7 @@
 #ifndef OPENPREFS_H
 #define OPENPREFS_H
 
-#define OP_VERSION "2.1"                   /* higher than every editor it replaces (OpenLook 1.2, Windows 0.6.5, ...) */
+#define OP_VERSION "2.2"                   /* higher than every editor it replaces (OpenLook 1.2, Windows 0.6.5, ...) */
 
 int look_main(int argc, char **argv);
 int windows_main(int argc, char **argv);

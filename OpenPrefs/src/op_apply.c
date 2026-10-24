@@ -9,7 +9,7 @@
  * kept out of APPLY's). On an open ROM whose prefs task applies them (prefs.resource 47.101: intuition's
  * prefs_boot.c reads the same three files at the first pass, earlier and with no program) the line goes
  * (OpenUp, salvor/Design-No-ROM-Volume-20261024.md, section 9.3). It stays for OS 3.2.3's own ROM, as
- * SYS:Preferences/OpenPrefs APPLY; C:OpenPrefs, the small body (op_small.c), still serves it there.
+ * SYS:Preferences/OpenPrefs APPLY, by its full path (the small body, C:OpenPrefs, is no longer built).
  *
  * MIT, Copyright (c) 2026 AmigaChrome Team. */
 #include <exec/types.h>
