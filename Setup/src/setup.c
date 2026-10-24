@@ -57,7 +57,7 @@
 #include "../../Common/prefsapp.h"           /* where OpenPrefs is (SYS:Preferences) */
 
 #ifndef IN_OPENBENCH
-const char version[] __attribute__((used)) = "$VER: OpenUp-Setup 0.1.5 (24.10.2026) OpenPrefs, AmigaChrome Team";
+const char version[] __attribute__((used)) = "$VER: OpenUp-Setup 0.1.6 (24.10.2026) OpenPrefs, AmigaChrome Team";
 #endif
 
 #define USER_STARTUP "S:User-Startup"
@@ -388,7 +388,7 @@ enum { P_WELCOME, P_DESKTOP, P_DEVICES, P_STARTUP, P_DONE, P_COUNT };
 enum {
     G_NOSHOW, G_VIEW,
     G_PROFILES, G_BYMACHINE, G_ED_LOOK, G_ED_MENUS, G_ED_WINDOWS, G_ED_DOCK, G_ED_TYPES,
-    G_SCREENMODE, G_PRINTER, G_NETWORK, G_FONTS, G_ED_OPENPRINT,
+    G_SCREENMODE, G_NETWORK, G_FONTS, G_ED_OPENPRINT,
     G_LINES, G_SWITCH,
     G_BACK, G_NEXT, G_FINISH, G_CANCEL, G_COUNT
 };
@@ -405,7 +405,7 @@ static const struct { int id; const char *label, *path, *args; } editors[] = {  
     { G_ED_DOCK, "Dock...", OPENPREFS, "DOCK" },
     { G_ED_TYPES, "File types...", OPENPREFS, "TYPES" },
     { G_SCREENMODE, "Screen mode...", "SYS:Prefs/ScreenMode" },
-    { G_PRINTER, "Printer...", "SYS:Prefs/Printer" },
+    /* 0.1.6: no Printer...: printing is OpenPrint's (the OpenPrinter part archives the OS's Printer editor) */
     { G_ED_OPENPRINT, "OpenPrint...", "SYS:Utilities/OpenPrint/Printers and Queue" },  /* 0.1.3: OpenPrint's printers, as the cog's */
     { G_NETWORK, "Network...", "SYS:Tools/Commodities/OpenSocketControl" },  /* 0.1.3: OpenSocket's settings, as the cog's */
     { G_FONTS, "Fonts...", "SYS:Prefs/Font" },
@@ -598,7 +598,7 @@ static int gui(void)
           (cw + 8) / 3 - 8, lh, editors[i].label, 0, GA_Disabled, !exists(found(editors[i].path)));
 
     g = CreateContext(&page_glist[P_DEVICES]);
-    for (i = 5; i < 10; i++)
+    for (i = 5; i < (int)(sizeof editors / sizeof editors[0]); i++)
         G(BUTTON_KIND, editors[i].id, cx + ((i - 5) % 2) * (cw / 2), row + 3 * (fh + 2) + ((i - 5) / 2) * (lh + 6),
           cw / 2 - 8, lh, editors[i].label, 0, GA_Disabled, !exists(found(editors[i].path)));
 
