@@ -679,8 +679,11 @@ static WORD bar_end(void)
 {
     struct Gadget *g;
     for (g = scr->FirstGadget; g; g = g->NextGadget)
-        if ((g->GadgetType & GTYP_SYSTYPEMASK) == GTYP_SDEPTH && g->Width > 0 && g->Width < 3 * scr->BarHeight)
-            return g->Width + 2;
+        if ((g->GadgetType & GTYP_SYSTYPEMASK) == GTYP_SDEPTH) {
+            /* its left edge, as openframes reads it: from the right edge when GFLG_RELRIGHT */
+            LONG x = g->LeftEdge + ((g->Flags & GFLG_RELRIGHT) ? scr->Width - 1 : 0), end = scr->Width - x;
+            if (end > 0 && end < 3 * scr->BarHeight) return (WORD)end + 2;
+        }
     return 2 * scr->BarHeight;
 }
 
