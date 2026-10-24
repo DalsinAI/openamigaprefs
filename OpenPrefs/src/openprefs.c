@@ -8,9 +8,9 @@
  *   OpenPrefs APPLY                                     at boot: what OpenSound USE, OpenGamepads USE (when
  *                                                       openinput.library is there) and OpenSystem APPLY did
  *
- * SECTION: THEME (LOOK), SCREENMODE (OVERSCAN), POINTER, FONTS, COLOURS, BACKDROPS (WBPATTERN), WORKBENCH,
+ * SECTION: THEME (LOOK), SCREENMODE (OVERSCAN), POINTER, FONTS, COLOURS, BACKDROPS (WBPATTERN), WORKBENCH, ICONS,
  * FILEREQUESTERS, WINDOWS, TITLEBAR, MENUS, ICONTROL, DOCK, SOUND, INPUT (MOUSE, KEYBOARD, KEYMAP), GAMEPADS,
- * DATETIME, SERIAL, TYPES, SYSTEM, BLANKER; or the page's name as the list shows it ("Date & Time", "Title Bar").
+ * DATETIME, SERIAL, PRINTING (PRINTER, PAPER), TYPES, SYSTEM, BLANKER; or the page's name as the list shows it ("Date & Time", "Title Bar").
  * From Workbench, a project icon whose default tool is OpenPrefs (SYS:Preferences' plain-named icons, 24 October
  * 2026) opens the page its SECTION tooltype names, else the page of its name.
  *
@@ -69,6 +69,7 @@ static const struct { const char *name; int page; } sections[] = {
     { "BLANKER", LT_BLANKER }, { "MOUSE", LT_INPUT }, { "KEYBOARD", LT_INPUT }, { "KEYS", LT_INPUT },
     { "KEYMAP", LT_INPUT }, { "SCREENMODE", LT_SCREENMODE }, { "OVERSCAN", LT_SCREENMODE }, { "DISPLAY", LT_SCREENMODE },
     { "ICONTROL", LT_ICONTROL }, { "ICONS", LT_ICONS }, { "ICONLAYOUT", LT_ICONS }, { "ICONLABELS", LT_ICONS },
+    { "PRINTING", LT_PRINTING }, { "PRINTER", LT_PRINTING }, { "PAPER", LT_PRINTING },
 };
 
 /* The old editors' names, and a name for each other section: each opens its section, and takes its own arguments */
@@ -138,6 +139,7 @@ int op_page(int page, int argc, char **argv)
     case LT_SCREENMODE: return screenmode_main(argc, argv);
     case LT_ICONTROL: return icontrol_main(argc, argv);
     case LT_ICONS: return icons_main(argc, argv);
+    case LT_PRINTING: return printing_main(argc, argv);
     }
     return RETURN_FAIL;
 }
@@ -172,7 +174,7 @@ static int as_openprefs(void)
     if (a[2] && (page = section_of((const char *)a[2])) < 0) {
         Printf((STRPTR)"OpenPrefs: no section %s; the sections are THEME, SCREENMODE, POINTER, FONTS, COLOURS, BACKDROPS,\n"
                "WORKBENCH, ICONS, FILEREQUESTERS, WINDOWS, TITLEBAR, MENUS, ICONTROL, DOCK, SOUND, INPUT, GAMEPADS, DATETIME,\n"
-               "SERIAL, TYPES, SYSTEM, BLANKER\n", a[2]);
+               "SERIAL, PRINTING, TYPES, SYSTEM, BLANKER\n", a[2]);
         FreeArgs(rd);
         return RETURN_ERROR;
     }

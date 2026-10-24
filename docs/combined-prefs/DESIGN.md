@@ -13,6 +13,17 @@ The team was asked to design new preferences editors that combine similar settin
 - Everything runs on a real 68040 with FPU and no OpenGPU. Rows a machine can't use are left out, not greyed.
 - Dale took the five decisions on 6 October 2026, listed at the end.
 
+## Revision, 24 October 2026: Printing
+
+**Status:** the user's decisions of 24 October 2026 (15:02 and 15:3x: retire the legacy printing in favour of OpenPrint, and put the paper settings on an OpenPrefs "Printing" page), written (`Printing/src/printing.c` and `pr_prefs.c`, `PRINTING`, OpenPrefs 2.4; host tests in `Printing/tests/`). Not built yet. Where this section and the older ones disagree, this one wins.
+
+- A **Printing** section in the last group, after Serial: the paper size (A4 first, then the other sizes printer.prefs can hold), lines a page, the left and right margins in columns, pictures horizontal (OpenPrint turns the page to landscape) or vertical (turned onto an upright page), and the density (1 to 7; OpenPrint's driver prints pictures at 72 to 1200 dots to the inch). It shows which driver and port printer.prefs names, and doesn't change them. Save, Use and Cancel; no Test, as a test would print.
+- It replaces the paper parts of the OS's Printer and PrinterGfx editors, which openamigaup's OpenPrinter part archives. Unit 0's `ENV:Sys/printer.prefs` (PTXT) and `printergfx.prefs` (PGFX) are read and written with Look's PREF reader (`pf_iff.c`); every other chunk and byte (the driver, the port, PUNT, PDEV, pitch, spacing, quality, shading) is kept as the file has it. A file is written only where its bytes change.
+- With no file, it makes the one the OpenPrinter part makes (OpenPrint's driver on `oapspool.device`) when OpenPrint's driver is in `DEVS:Printers`, else printer.device's no-file state (the generic driver on the parallel port); and only when a setting in that file changes. The OpenPrinter part writes the files only where there are none, so the page's settings survive an update.
+- `OpenPrefs PRINTING PAPER A4 LINES 66 LEFT 5 RIGHT 75 PICTURES HORIZONTAL DENSITY 2 USE` sets them from the Shell.
+
+The sections are now 23.
+
 ## Revision, 24 October 2026: Icons
 
 **Status:** the user's request of 24 October 2026, 15:37 ("a page or tab in Preferences for this"), written (`Icons/src/icons.c`, `ICONS`, OpenPrefs 2.3). Where this section and the older ones disagree, this one wins.
