@@ -91,6 +91,7 @@
 #include <exec/io.h>
 #include <dos/dostags.h>
 #include <devices/timer.h>
+#include <dos/notify.h>
 #include <workbench/workbench.h>
 #include <proto/wb.h>
 
@@ -111,7 +112,7 @@
 #include "obmsg.h"
 #include "../../Common/prefsapp.h"           /* where OpenPrefs is (SYS:Preferences) */
 
-const char version[] __attribute__((used)) = "$VER: OpenTitle 0.7.1 (24.10.2026) OpenPrefs, AmigaChrome Team";
+const char version[] __attribute__((used)) = "$VER: OpenTitle 0.7.2 (24.10.2026) OpenPrefs, AmigaChrome Team";
 
 struct IntuitionBase *IntuitionBase;
 struct GfxBase *GfxBase;
@@ -195,18 +196,64 @@ static void read_prefs(void)
     if (t) FreeVec(t);
 }
 
+/* ---- the tray and OpenMenus' settings, read when they change (0.7.2) --------------------------
+ * Every 2 s OpenTitle places its windows, and each place read ENV:OpenMenus/Tray afresh, every file
+ * in it, four times a pass, and ENV:OpenMenus/Menus once (Team 4's OpenMonitor Calls view, 24 Oct
+ * 2026). Now both are read once and again only when a DOS notification says they changed, or when
+ * OpenTitle changes the tray itself. Without the notifications they are read every time, as before. */
+#define TRAY_MAX 24
+static struct { char name[32]; int w, order; } tray_tab[TRAY_MAX];
+static int tray_n, tray_ok, edge_ok, edge_bar;
+static struct NotifyRequest tray_nr, menus_nr;
+static BYTE watch_sig = -1;
+static int tray_watched, menus_watched;
+
+static void watch_start(void)
+{
+    struct Task *me = FindTask(NULL);
+    if ((watch_sig = AllocSignal(-1)) < 0) return;
+    tray_nr.nr_Name = (STRPTR)TRAY_DIR;
+    tray_nr.nr_Flags = NRF_SEND_SIGNAL;
+    tray_nr.nr_stuff.nr_Signal.nr_Task = me;
+    tray_nr.nr_stuff.nr_Signal.nr_SignalNum = watch_sig;
+    tray_watched = StartNotify(&tray_nr) != 0;
+    menus_nr.nr_Name = (STRPTR)MENUS_ENV;
+    menus_nr.nr_Flags = NRF_SEND_SIGNAL;
+    menus_nr.nr_stuff.nr_Signal.nr_Task = me;
+    menus_nr.nr_stuff.nr_Signal.nr_SignalNum = watch_sig;
+    menus_watched = StartNotify(&menus_nr) != 0;
+}
+
+static void watch_stop(void)
+{
+    if (tray_watched) EndNotify(&tray_nr);
+    if (menus_watched) EndNotify(&menus_nr);
+    tray_watched = menus_watched = 0;
+    if (watch_sig >= 0) FreeSignal(watch_sig);
+    watch_sig = -1;
+}
+
+static ULONG watch_mask(void) { return watch_sig >= 0 ? 1UL << watch_sig : 0; }
+
+/* a notification came: what it covers is read again when next asked for */
+static void watch_changed(void) { tray_ok = 0; edge_ok = 0; }
+
 static int read_bar_edge(void)
 {
-    om_prefs p;
-    char *t;
     struct MsgPort *port;
     Forbid();
     port = FindPort((STRPTR)"OpenMenus");
     Permit();
     if (!port) return OM_BAR_TITLE;
-    om_defaults(&p);
-    if ((t = read_file(MENUS_ENV, NULL))) { om_parse(&p, t); FreeVec(t); }
-    return p.enabled ? p.bar : OM_BAR_TITLE;
+    if (!edge_ok || !menus_watched) {
+        om_prefs p;
+        char *t;
+        om_defaults(&p);
+        if ((t = read_file(MENUS_ENV, NULL))) { om_parse(&p, t); FreeVec(t); }
+        edge_bar = p.enabled ? p.bar : OM_BAR_TITLE;
+        edge_ok = 1;
+    }
+    return edge_bar;
 }
 
 static void tell_openmenus(void)
@@ -237,32 +284,50 @@ static void tray(const char *name, int width, int order)
         snprintf(path, sizeof path, TRAY_DIR "/%s", name);
         DeleteFile((STRPTR)path);
     }
+    tray_ok = 0;
     tell_openmenus();
 }
 
-/* the room the tray programs nearer the bar's end take, and how many they are */
-static int tray_before(const char *mine, int my_order, int *count)
+/* the tray's files, "width order" each, into tray_tab (0.7.2: once, and again when they change) */
+static void tray_load(void)
 {
     struct FileInfoBlock *fib = AllocDosObject(DOS_FIB, NULL);
     BPTR lock = Lock((STRPTR)TRAY_DIR, ACCESS_READ);
-    int sum = 0;
-    *count = 0;
+    tray_n = 0;
     if (fib && lock && Examine(lock, fib)) {
-        while (ExNext(lock, fib)) {
+        while (ExNext(lock, fib) && tray_n < TRAY_MAX) {
             char path[sizeof TRAY_DIR "/" + sizeof fib->fib_FileName], *t;
             int w = 0, order = 0;
             const char *name = (const char *)fib->fib_FileName;
-            if (fib->fib_DirEntryType > 0 || !strcmp(name, mine)) continue;
+            if (fib->fib_DirEntryType > 0 || strlen(name) >= sizeof tray_tab[0].name) continue;
             snprintf(path, sizeof path, TRAY_DIR "/%s", name);
             if (!(t = read_file(path, NULL))) continue;
             if (sscanf(t, "%d %d", &w, &order) < 1) w = 0;
             FreeVec(t);
             if (w <= 0 || w > 400) continue;
-            if (order < my_order || (order == my_order && strcmp(name, mine) < 0)) { sum += w; (*count)++; }
+            strcpy(tray_tab[tray_n].name, name);
+            tray_tab[tray_n].w = w;
+            tray_tab[tray_n].order = order;
+            tray_n++;
         }
     }
     if (lock) UnLock(lock);
     if (fib) FreeDosObject(DOS_FIB, fib);
+    tray_ok = 1;
+}
+
+/* the room the tray programs nearer the bar's end take, and how many they are */
+static int tray_before(const char *mine, int my_order, int *count)
+{
+    int i, sum = 0;
+    *count = 0;
+    if (!tray_ok || !tray_watched) tray_load();
+    for (i = 0; i < tray_n; i++) {
+        const char *name = tray_tab[i].name;
+        int order = tray_tab[i].order;
+        if (!strcmp(name, mine)) continue;
+        if (order < my_order || (order == my_order && strcmp(name, mine) < 0)) { sum += tray_tab[i].w; (*count)++; }
+    }
     return sum;
 }
 
@@ -1837,6 +1902,7 @@ int main(void)
 
     read_prefs();
     apply_title();
+    watch_start();
     if (!open_all()) quit = 1;
     while (!quit) {
         ULONG sig, ms;
@@ -1847,7 +1913,7 @@ int main(void)
             tr->tr_node.io_Command = TR_ADDREQUEST; tr->tr_time.tv_secs = 0; tr->tr_time.tv_micro = ms * 1000;
             SendIO((struct IORequest *)tr);
             sig = Wait(SIGBREAKF_CTRL_C | SIGBREAKF_CTRL_F | (1UL << tport->mp_SigBit) | (1UL << port->mp_SigBit)
-                       | (ts_reply ? 1UL << ts_reply->mp_SigBit : 0) | window_sigs() | wbc_sigmask());
+                       | (ts_reply ? 1UL << ts_reply->mp_SigBit : 0) | window_sigs() | wbc_sigmask() | watch_mask());
             /* Only a request that came back by itself counts as time waited. An
              * aborted one comes back too, and its reply sets the timer port's
              * signal after Wait() has returned; WaitIO() takes the reply but leaves
@@ -1864,10 +1930,11 @@ int main(void)
             }
         } else {
             Delay(TICKS_PER_SECOND / 2);
-            sig = SetSignal(0, SIGBREAKF_CTRL_C | SIGBREAKF_CTRL_F);
+            sig = SetSignal(0, SIGBREAKF_CTRL_C | SIGBREAKF_CTRL_F | watch_mask());
             waited += 500;
         }
         if (sig & SIGBREAKF_CTRL_C) break;
+        if (sig & watch_mask()) watch_changed();
         /* Workbench is shutting down (Font prefs' Use, a screen mode): no window, no lock on its screen until it is back */
         switch (wbc_take()) {
         case WBC_CLOSE: close_all(); wb_down = 1; wbc_closed(); break;
@@ -1974,6 +2041,7 @@ int main(void)
     DeleteMsgPort(port);
     if (ts_reply && !ts_out) DeleteMsgPort(ts_reply);   /* a program that never replied keeps it: better a leak than a crash */
 out:
+    watch_stop();
     if (timer) CloseDevice((struct IORequest *)tr);
     if (tr) DeleteIORequest((struct IORequest *)tr);
     if (tport) DeleteMsgPort(tport);
