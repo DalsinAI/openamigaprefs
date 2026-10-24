@@ -51,7 +51,7 @@
 #include <exec/types.h>
 enum { LT_LOOK, LT_WINDOWS, LT_TITLEBAR, LT_MENUS, LT_POINTER, LT_FONTS, LT_COLOURS, LT_BACKDROPS, LT_WORKBENCH,
        LT_ASL, LT_DOCK, LT_SOUND, LT_INPUT, LT_GAMEPADS, LT_DATETIME, LT_SERIAL, LT_TYPES, LT_SYSTEM, LT_BLANKER,
-       LT_SCREENMODE, LT_ICONTROL, LT_N };
+       LT_SCREENMODE, LT_ICONTROL, LT_ICONS, LT_N };
 #define LT_ID 900
 #define LT_CYCLE (LT_ID + 64)              /* the sections as a cycle gadget (a narrow screen) */
 #define LT_IS(id) (((id) >= LT_ID && (id) < LT_ID + LT_N) || (id) == LT_CYCLE)

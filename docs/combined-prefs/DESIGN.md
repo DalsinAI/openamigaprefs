@@ -13,6 +13,16 @@ The team was asked to design new preferences editors that combine similar settin
 - Everything runs on a real 68040 with FPU and no OpenGPU. Rows a machine can't use are left out, not greyed.
 - Dale took the five decisions on 6 October 2026, listed at the end.
 
+## Revision, 24 October 2026: Icons
+
+**Status:** the user's request of 24 October 2026, 15:37 ("a page or tab in Preferences for this"), written (`Icons/src/icons.c`, `ICONS`, OpenPrefs 2.3). Where this section and the older ones disagree, this one wins.
+
+- A new **Icons** section in the look group, after Workbench: where labels go (close to the picture, the default, or below the picture's whole box as OS 3.2.3), the label gap (0 to 8 pixels, 2 by default), the column grid's standard cell (Auto, from the icons, or a size), whether icons let go of on the desktop snap to the grid (on), the desktop's Clean Up order (name, kind, size or date), whether the desktop's columns fill down the left (the default) or the right, and a button to the Fonts page, whose Workbench icon text font the labels are in. Save, Use, Test and Cancel as on the other pages.
+- A page of its own rather than a tab of Workbench's: OpenPrefs's sections are one list of pages, each with its own Save, Use, Test and Cancel and no tabs inside them, and Workbench's page is full. The Workbench page's "Labels close" box goes; OpenLook built alone keeps it.
+- Two variables: `ENV:Sys/IconLabels` (icon.library's: `close`, `close 3`, `below`; no variable is `close`) and `ENV:Sys/IconLayout` (`cell=auto snap=on order=name columns=left`), read and written with opengadtools' `workbench/wb_grid.c`. OpenBench reads the desktop and its drawers again when either changes.
+
+The sections are now 22.
+
 ## Revision, 21 October 2026: Mouse and keys, Screen mode with Overscan, IControl
 
 **Status:** Dale's decisions of 21 October 2026, written (Display/, IControl/; host tests in their tests/). Where this section and the older ones disagree, this one wins.
