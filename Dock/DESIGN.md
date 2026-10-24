@@ -125,6 +125,9 @@ rounded rectangle tinted to the look, through which the desktop shows.
 - A small dot under an icon shows that its program is running, as on the
   Mac. This is checked every 2 seconds. A program counts as running when a process of
   its name exists (Workbench names it so) or a Shell has it as its command.
+  0.6.8: one look at exec's task lists and one walk of the Shells per check,
+  for all the buttons together (it was a FindTask, and a walk of the Shells,
+  for each button); none at all while the marks are off or the dock is closed.
 - Icons dropped on the dock (it is an AppWindow) are added at the end and
   kept, as AmiDock does.
 - The menu, opened with the right mouse button while the dock is active,
