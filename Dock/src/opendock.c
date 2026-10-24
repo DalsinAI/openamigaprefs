@@ -53,7 +53,7 @@
 #include "obmsg.h"
 #include "../../Common/prefsapp.h"           /* where OpenPrefs is (SYS:Preferences) */
 
-const char version[] __attribute__((used)) = "$VER: OpenDock 0.6.7 (24.10.2026) OpenPrefs, AmigaChrome Team";   /* 0.6.7: its editor is OpenPrefs DOCK, never ROM: */
+const char version[] __attribute__((used)) = "$VER: OpenDock 0.6.8 (24.10.2026) OpenPrefs, AmigaChrome Team";   /* 0.6.8: one look at the tasks per check; 0.6.7: its editor is OpenPrefs DOCK, never ROM: */
 
 #define PREFS_ENV "ENV:OpenDock/Dock"
 #define PREFS_ENVARC "ENVARC:OpenDock/Dock"
@@ -384,34 +384,67 @@ static int same_name(const char *a, const char *b)
     return *a == *b;
 }
 
-/* The task running a button's program: a process of its name (Workbench
- * names it so), or a Shell running it as its command. NULL when none. */
-static struct Task *find_running(const od_button *b)
+/* The tasks running the buttons' programs, all the buttons at once: for each, a
+ * process of its name (Workbench names it so), or a Shell running it as its
+ * command; NULL when none.
+ *
+ * 0.6.8: one look at exec's task lists and one walk of the Shells for every
+ * check, however many buttons there are. Each button had a FindTask and, when
+ * that found nothing, a walk of every Shell: Team 4's OpenMonitor counted
+ * twelve FindTasks every two seconds on a dock of twelve (24 Oct 2026). The
+ * task lists change in interrupts (a Signal moves a task from waiting to
+ * ready), so their tasks are copied with interrupts off, pointers only; the
+ * names are compared after, under the Forbid, which no task can end in. */
+#define RUN_SEEN 128                               /* tasks looked at in one check */
+
+static void find_running_all(struct Task **found)
 {
-    char prog[256];
-    const char *name;
-    struct Task *t;
+    static struct Task *seen[RUN_SEEN];
+    static char want[OD_MAX][108];
+    int nseen = 0, left = 0;
     LONG i, max;
-    if (b->kind == OD_SEPARATOR || b->kind == OD_AREXX) return NULL;
-    program_of(b, prog, sizeof prog);
-    name = (const char *)FilePart((STRPTR)prog);
-    if (!*name) return NULL;
+    for (int k = 0; k < dock.n; k++) {
+        const od_button *b = &dock.b[k];
+        char prog[256];
+        found[k] = NULL;
+        want[k][0] = 0;
+        if (b->kind == OD_SEPARATOR || b->kind == OD_AREXX) continue;
+        program_of(b, prog, sizeof prog);
+        strncpy(want[k], (const char *)FilePart((STRPTR)prog), sizeof want[k] - 1);
+        want[k][sizeof want[k] - 1] = 0;
+        if (want[k][0]) left++;
+    }
+    if (!left) return;
     Forbid();
-    t = FindTask((STRPTR)name);
-    max = t ? 0 : MaxCli();
-    for (i = 1; i <= max && !t; i++) {
+    Disable();
+    seen[nseen++] = SysBase->ThisTask;             /* FindTask's own task too: this one */
+    for (struct Node *nd = SysBase->TaskReady.lh_Head; nd->ln_Succ && nseen < RUN_SEEN; nd = nd->ln_Succ)
+        seen[nseen++] = (struct Task *)nd;
+    for (struct Node *nd = SysBase->TaskWait.lh_Head; nd->ln_Succ && nseen < RUN_SEEN; nd = nd->ln_Succ)
+        seen[nseen++] = (struct Task *)nd;
+    Enable();
+    for (int s = 0; s < nseen && left; s++) {
+        const char *tn = seen[s]->tc_Node.ln_Name;
+        if (!tn) continue;
+        for (int k = 0; k < dock.n; k++)
+            if (want[k][0] && !found[k] && !strcmp(tn, want[k])) { found[k] = seen[s]; left--; }
+    }
+    max = left ? MaxCli() : 0;
+    for (i = 1; i <= max && left; i++) {
         struct Process *p = FindCliProc(i);
         struct CommandLineInterface *cli = p ? (struct CommandLineInterface *)BADDR(p->pr_CLI) : NULL;
         if (cli && cli->cli_Module && cli->cli_CommandName) {
             UBYTE *bs = (UBYTE *)BADDR(cli->cli_CommandName);
             char cn[108];
+            const char *f;
             int n = bs[0] < sizeof cn - 1 ? bs[0] : sizeof cn - 1;
             memcpy(cn, bs + 1, n); cn[n] = 0;
-            if (same_name((const char *)FilePart((STRPTR)cn), name)) t = (struct Task *)p;
+            f = (const char *)FilePart((STRPTR)cn);
+            for (int k = 0; k < dock.n; k++)
+                if (want[k][0] && !found[k] && same_name(f, want[k])) { found[k] = (struct Task *)p; left--; }
         }
     }
     Permit();
-    return t;
 }
 
 /* Brings the task's frontmost window and its screen to the front. */
@@ -1345,13 +1378,16 @@ static int relayout(struct Menu *menus)
     return open_dock(menus);
 }
 
+/* Only while the dock is open and shows the running marks: with them off, or the dock closed, no look at the tasks. */
 static void check_running(void)
 {
+    static struct Task *found[OD_MAX];
     int changed = 0;
+    if (dock.running && win) find_running_all(found);
+    else memset(found, 0, sizeof found);
     for (int i = 0; i < dock.n; i++) {
-        struct Task *t = dock.running ? find_running(&dock.b[i]) : NULL;
-        if ((t != NULL) != (running[i] != NULL)) changed = 1;
-        running[i] = t;
+        if ((found[i] != NULL) != (running[i] != NULL)) changed = 1;
+        running[i] = found[i];
     }
     if (changed && win) draw();
 }
