@@ -43,7 +43,9 @@ ten seconds of a change, as lines of `"program:title" left top width height`.
 The program is the task's name, or the command a Shell runs. A window with
 no IDCMP port, such as a console, is known as `window:<title>`. The title is
 cut at its first digit, bracket or quote, so a title that shows a count or a
-file name still matches. Workbench's own windows are left to Workbench, which has Snapshot, unless
+file name still matches (0.9.2: the title the window opened with, whatever it
+shows later). Up to 128 places are kept (64 before 0.9.2), written the one
+used longest ago first. Workbench's own windows (and, 0.9.2, OpenBench's) are left to Workbench, which has Snapshot, unless
 "Workbench drawers too" is on (0.3, Dale 6 Oct 2026 for a 1920x1080
 Workbench). Then each drawer is kept as `Workbench:<drawer>` and reopens
 where it was left; the root window is never moved. Tested on a scratch
@@ -63,6 +65,8 @@ patch whichever starts first.
   and `WA_Height` when it can be sized and the size is within its limits, in
   front of the program's own tags, and the same corner and size in a copy of
   its `NewWindow`. The program's own tags and `NewWindow` are not changed.
+  (0.9.2: in front of a copy of the program's tags without its own corner and
+  size; below.)
 - The window is keyed as the once-a-second look keys it: the program (its
   task, or the command a Shell runs) and its title up to the first digit or
   bracket. A window opened without IDCMP is looked up by its task first (the
@@ -71,7 +75,7 @@ patch whichever starts first.
   placed before it opens is never moved again by the look.
 - The patch never waits. It reads the places with `AttemptSemaphoreShared`;
   when OpenWindows is changing them that instant, the window opens as asked
-  and the look places it, as before.
+  and the look places it, as before. (0.9.2: under `Forbid()`; below.)
 - It places nothing while the commodity is disabled in Exchange, for
   OpenWindows' own windows, or with Places off. Switching Places off takes
   the patch out.
@@ -81,7 +85,105 @@ patch whichever starts first.
   so in the Shell.
 - The once-a-second look stays for windows the patch could not place (a
   public screen it couldn't lock, a window sized by its inner size, which is
-  moved but not sized).
+  moved but not sized). (0.9.2: the look moves nothing; below.)
+
+**Placed before they open, every time (OpenWindows 0.9.2, 24 October
+2026).** The user: "OpenWindows: we need to make sure it reads the saved
+position before it renders the window. Right now it jumps from one location
+to another." Reproduced in a lab copy of Instance-32 (the open ROM,
+OpenWindows 0.9.1, OpenBench 0.1.29 and its own `WindowPlaces`), with every
+distinct frame of the RTG screen read back to back while each window opened:
+
+| Window | 0.9.1: its first frame, then | Why |
+| --- | --- | --- |
+| The Shell: NewShell with the Shell icon's WINDOW, and the dock's Shell | 0,0 640 x 130, then within the second at its kept place, 145,523 853 x 421 | the CON: handler gives `WA_Left` and `WA_Top` (and its size) in its tags. The patch put its own in front, and OpenIntuition reads a tag's last, so the program's won |
+| The Shell on the next ROM (guest #472: a CON: window with no size is asked for by `WA_InnerWidth` and `WA_InnerHeight`) | 0,0 at 80 x 24, then 0.8 s later moved and sized | the same, and a window asked for by its inner size was only moved by the patch; the look sized it |
+| A test program opening with tags, or with a NewWindow and tags | where it asked, then moved | the same |
+| A NewWindow alone; an ExtNewWindow with no tag list | at its place (no jump) | the patch's copy of the NewWindow; its tags read after the Extension's |
+| An OpenBench drawer (Work), with "Workbench drawers too" off | where OpenBench left it, then at a place OpenWindows kept for it long before | OpenBench marks its windows `WFLG_WBENCHWINDOW` up to two seconds after they open. A look before that took the drawer for a program's window and moved it to that place; a look after it took it for Workbench's and kept nothing, so the user's later moves (OpenBench keeps them itself) were undone each time |
+| An ASL requester (RequestFile) | where ASL put it, then at its kept place | ASL opens the window with no title and gives it one after: the patch looked for `RequestFile:`, the look kept and placed `RequestFile:Probe file` |
+| OpenMonitor, OpenCalc, Pointer prefs | at their places (no jump) | their tags give no corner of their own |
+
+Not causes on Instance-32: nothing patched the calls after OpenWindows
+(a probe found OpenWindows' code on top of both), and Places and the
+commodity were on. Found on the way: the file held 64 places and was full,
+and a new key took the place of the first in the file rather than the one
+used longest ago, so `CON:AmigaShell` (third in the file) went after three new
+windows; and the look held the places' semaphore across its moves and its
+file writes, when the patch opened a window as asked (not seen in the lab).
+
+What 0.9.2 does:
+- **The program's tags in a copy, without its corner.** The patch's
+  `WA_Left` and `WA_Top` (and `WA_Width` and `WA_Height` when the size is
+  ours) come first, then a copy of the program's tag list, flattened (`TAG_MORE`,
+  `TAG_SKIP`, `TAG_IGNORE`), without the program's own `WA_Left` and `WA_Top`
+  (and `WA_Width`, `WA_Height`, `WA_InnerWidth`, `WA_InnerHeight` when the
+  size is ours). An ExtNewWindow's Extension is copied the same way. So the
+  patch's are the only placing tags, whether Intuition reads a tag's first or
+  its last. The program's own tags and NewWindow are not changed. The copies
+  are made on the opening task with `AllocVec` and freed after the call; a list
+  of over 512 tags, or no memory, and the window opens as asked.
+- **A window asked for by its inner size is sized too**, by its whole kept
+  size, when it has a size gadget and the size is within its limits (the
+  Shell's CON: window from guest #472, ReAction's windows). One with no size
+  gadget is moved and keeps its own size. A place kept for the Shell still
+  wins over the 80 x 24 of guest #472.
+- **The look moves nothing.** It notes each new window and keeps a place when
+  a window is moved or sized. A window the patch didn't see open (a system
+  requester OpenIntuition opens inside itself, a window open before
+  OpenWindows started) stays where it opened. `drawer` still sizes
+  Workbench's drawers after they open.
+- **A window is known by the title it opened with.** The patch notes each
+  window it saw open, and the look keys it by that title for as long as it is
+  open (`src/places.c`, `place_key`). An ASL requester of RequestFile is
+  `RequestFile:` whatever title it shows. A place 0.9.1 kept under a later
+  title isn't found: such a window opens as asked once, and its place is kept
+  again when it is moved. A window that closes and another that opens in its
+  memory before the next look are told apart by the patch's note.
+- **OpenBench's windows are Workbench's**, from the moment they open: placed
+  and kept only with "Workbench drawers too" (`places.drawers on`), and
+  otherwise left to OpenBench, which keeps its drawers' places itself.
+- **The places are read under `Forbid()`**, and the look changes them only
+  under `Forbid()` (a few bytes copied), so the patch never waits and never
+  misses them. The semaphore is gone.
+- **128 places, written the one used longest ago first**, read back in that
+  order, so a new key takes the place used longest ago, across restarts too.
+- **A window with no drag bar and an empty title is never placed**: such a
+  popup was `window:` and took the place kept for another.
+- **The look's log**: with `SetEnv OpenWindowsLog <file>` (read at the start
+  and at Ctrl-F), the look adds a line for each new window ("placed before it
+  opened", "no place kept", "not seen opening, left where it opened") and for
+  each place kept.
+- The cog's window (0.8.1) gets its corner the same way.
+- `src/places.c` is pure C; `tests/test_places.c` runs it on the host: the keys,
+  `fit_place`, the table, and each opener above, read by an Intuition that
+  takes a tag's last (as OpenIntuition does) and by one that takes a tag's
+  first. 0.9.1's tags fail the first and pass the second.
+
+Lab (24 October 2026; a copy of Instance-32 on its ROM, and on a ROM of
+every main with guest #472; every distinct RTG frame from before the window
+opened). With 0.9.2 each window's first
+frame is at its kept place and no later frame moves it: a test program by tags, by a
+NewWindow, a NewWindow and tags, an ExtNewWindow, by inner size, with no
+IDCMP and with no size gadget; the Shell from NewShell with the icon's
+WINDOW, with no size (#151's icon) and from the dock; OpenMonitor; OpenCalc;
+Pointer prefs; the ASL requester; the Work drawer with "Workbench drawers
+too" on (at OpenWindows' place, where OpenBench asked for another) and off (at
+OpenBench's own, not moved). The look's log has "placed before it opened"
+for each, and no moves. A Shell moved to 300,200 700 x 400 and closed was in
+`ENV:` and `ENVARC:` within ten seconds and reopened there, from NewShell and
+from the dock.
+
+![The Shell on the next ROM: 0.9.1's first frame at 0,0, the same window 0.8 s later at its place; 0.9.2's first frame at its place](docs/placed-before-open.png)
+
+Not yet:
+- OpenBench's drawers have a sizing gadget of their own, added after they
+  open, so with "Workbench drawers too" they are placed but opened at
+  OpenBench's size.
+- Tested on the open ROM only, not on OS 3.2.3's own Intuition; the host
+  tests read the tags both ways.
+- A title cut at its first digit still gives drawers such as `DH1:` and
+  `DH2:` one key.
 
 **Double-click to front (OpenWindows 0.4, 8 October 2026).** The user asked
 for "double click to bring windows forward" as part of the Open tools, on by
