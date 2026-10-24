@@ -57,6 +57,8 @@
  * colours are read from the screen's bar, Common/barpaint.h), and are
  * centred in the bar.
  *
+ * 0.7.4 (25 October 2026, the user, 00:12: "perhaps m68k/x64 since its running on" one): the cores read
+ *   "+ 10 (m68k/x64)", 68k code on the host's x86-64 cores, from the board's ISAS (Common/barlogo.h).
  * 0.7.3 (24 October 2026, the user, 21:39: "improve spacing on the sys icon tray"): every tray icon has the same
  *   room each side (TRAY_PAD, 6 pixels), so the gaps between the clock, the network, the taskspace's icons, the
  *   speaker and the cog are even; on the screen's title bar the row ends at the screen's depth gadget (its own
@@ -116,7 +118,7 @@
 #include "obmsg.h"
 #include "../../Common/prefsapp.h"           /* where OpenPrefs is (SYS:Preferences) */
 
-const char version[] __attribute__((used)) = "$VER: OpenTitle 0.7.3 (24.10.2026) OpenPrefs, AmigaChrome Team";
+const char version[] __attribute__((used)) = "$VER: OpenTitle 0.7.4 (25.10.2026) OpenPrefs, AmigaChrome Team";
 
 struct IntuitionBase *IntuitionBase;
 struct GfxBase *GfxBase;

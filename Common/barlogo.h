@@ -10,9 +10,12 @@
  *
  * What the cores are. The CPU cores board (AmigaChrome Team $DA15, product 7, the ACSV block with CLASS 2) gives its cores
  * in UNITS ($24) and the instruction sets they run in ISAS ($28): bit 0 m68k (always: every core runs 68k code),
- * bit 1 x86-64, bit 2 ARM64 (docs/architecture/CORES_BOARD.md in AmigaChrome, section 0a). The title reads
- * "CPU = 1 (m68k) + 8 (m68k)", or "+ 8 (m68k, x86-64)" when the host also runs native jobs on them (the Team:
- * "the screen menu should indicate what the cores are, + 8 (m68k) x86 or whatever").
+ * bit 1 x86-64, bit 2 ARM64 when the host also runs native jobs on them, and since AmigaChrome's runtime of 25
+ * October 2026 what the cores themselves are: bit 8 the host's x86-64 CPUs, bit 9 its ARM64 ones
+ * (docs/architecture/CORES_BOARD.md in AmigaChrome, section 0a). The title reads "CPU = 1 (m68k) + 10 (m68k/x64)":
+ * 68k code on ten x86-64 cores (the user, 25 October 2026: "perhaps m68k/x64 since its running on" one, "so lets do
+ * that blend"), "m68k/arm64" on the Pi, and "m68k" when the board doesn't say (an older runtime without native
+ * jobs).
  *
  * MIT, Copyright (c) 2026 AmigaChrome Team. */
 #ifndef BARLOGO_H
@@ -74,11 +77,13 @@ static inline char *barlogo_pad(struct Screen *s, char *buf)
     return buf;
 }
 
-/* "m68k", "m68k, x86-64", "m68k, arm64" or "m68k, x86-64, arm64" for the board's ISAS register. */
+/* "m68k/x64", "m68k/arm64" or "m68k" for the board's ISAS register: what the cores are (bits 8 and 9), else the
+ * native jobs they take (bits 1 and 2), which name the host's CPUs too. */
 static inline const char *barlogo_isas(ULONG isas)
 {
-    static const char *const names[4] = { "m68k", "m68k, x86-64", "m68k, arm64", "m68k, x86-64, arm64" };
-    return names[(isas >> 1) & 3];
+    if (isas & 0x102) return "m68k/x64";
+    if (isas & 0x204) return "m68k/arm64";
+    return "m68k";
 }
 
 #endif
