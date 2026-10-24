@@ -291,6 +291,21 @@ left as the file has them. Medium with DH1: hidden, set on the tab, wrote the
 OS editor's file for the same settings byte for byte, and the OS editor read
 it back as Medium with DH1: hidden.
 
+**Labels close to the image (1.3, 24 October 2026).** The user's solid OS
+list: a label sits well below its icon's picture, because icon pictures have
+empty rows at the bottom. The Workbench tab has a box under Icon label length:
+**Labels close to the image** in Simple, **Labels close** in Advanced, where
+the hidden devices' list is shorter for it (two rows on a 256-line screen,
+three elsewhere), so the page is no taller there. It is icon.library's
+setting, not Workbench's, so every program that draws or measures icons
+through icon.library follows it, and OpenBench's desktop and drawers too:
+`ENV:Sys/IconLabels`, `close` or `below` (amigachrome-guest
+`libraries/openicon/README.md`, "Labels close to the image"). It goes with the
+tab's Use (ENV:), Save (ENV: and ENVARC:), Test and Cancel as workbench.prefs
+does, and a file is written only when it would change. Ticked, each label's
+top is 2 pixels under the lowest row of its picture that isn't empty, and the
+icon's box (Clean Up, snapping) is shorter by as much.
+
 **640 x 256.** Every page now fits a PAL High Res screen with Topaz 8. On a
 screen under 400 lines:
 - Theme, Advanced: no preview (Simple has it, and Test shows the theme

@@ -95,7 +95,7 @@ enum {
     G_BFOR, G_BUSE, G_BPATH, G_BPICK, G_BPLACE, G_BREMAP, G_BDITHER, G_BMATCH,
     /* Workbench */
     G_WFRAME, G_WGAUGE, G_WTITLEBAR, G_WLABELLEN, G_WNEWICONS, G_WCOLICONS, G_WPRECISION, G_WLOCKPENS, G_WHIDDEN,
-    G_WSTACK, G_WDRAWERS, G_WOLDFIRST, G_WBOUND, G_WDELAY, G_WCOPYBUF, G_WRESTART, G_WTITLE,
+    G_WSTACK, G_WDRAWERS, G_WOLDFIRST, G_WBOUND, G_WDELAY, G_WCOPYBUF, G_WRESTART, G_WTITLE, G_WLABELCLOSE,
     /* File requesters */
     G_ASORT, G_ADRAWERS, G_AORDER, G_APLACE, G_ALEFT, G_ATOP, G_ASIZE, G_AWIDTH, G_AHEIGHT, G_AOVERRIDE,
     G_COUNT
@@ -1013,6 +1013,39 @@ static struct names devs;
 static char dev_name[48][34];
 static int dev_hidden[48], ndevs;
 
+/* Labels close to the image (the user's solid OS list, 24 October 2026): icon.library's own setting, not
+ * Workbench's, so every program that draws icons through icon.library follows it: ENV:Sys/IconLabels, "close" or
+ * "below" (OpenIcon's README, "labels close to the image"). It goes with this tab's Use, Save, Test and Cancel as
+ * workbench.prefs does: Use writes ENV:, Save ENV: and ENVARC:, Test ENV: until it goes back. */
+#define LABELS_ENV "ENV:Sys/IconLabels"
+#define LABELS_ENVARC "ENVARC:Sys/IconLabels"
+static int lbl_close, lbl_start;           /* as edited; as the tab found it */
+static int lbl_before, lbl_before_had;     /* ENV: before a Test, and whether it had the file */
+static int lbl_touched;                    /* a Test wrote ENV: */
+
+/* The file's setting: 1 close, 0 below; -1 when there is no file. */
+static int labels_read(const char *path)
+{
+    char buf[16], *t = buf;
+    BPTR f = Open((CONST_STRPTR)path, MODE_OLDFILE);
+    LONG n = 0;
+    int k;
+    if (!f) return -1;
+    n = Read(f, buf, sizeof buf - 1);
+    Close(f);
+    buf[n > 0 ? n : 0] = 0;
+    while (*t == ' ' || *t == '\t') t++;
+    for (k = 0; t[k] && t[k] != ' ' && t[k] != '\t' && t[k] != '\n' && t[k] != '\r'; k++)
+        if (t[k] >= 'A' && t[k] <= 'Z') t[k] += 32;
+    return (k == 5 && !strncmp(t, "close", 5)) || (k == 2 && !strncmp(t, "on", 2));
+}
+
+/* Written only when the file would change. */
+static void labels_write(const char *path, int close)
+{
+    if (labels_read(path) != close) write_text(path, close ? "close\n" : "below\n");
+}
+
 static void devices_label(void)
 {
     int k;
@@ -1074,9 +1107,10 @@ static int devices_write(void)            /* the hidden ones into the file, in t
 
 static int workbench_make(int row)
 {
-    static const char *const simple[] = { "Icon borders", "Disk gauge", "Screen title bar", "Icon label length", NULL };
-    static const char *const left[] = { "Icon borders", "Icon label length", "NewIcons", "Colour icons", "Icon colours",
-                                        "Lock pens 4 to 7", "Hidden devices", NULL };
+    static const char *const simple[] = { "Icon borders", "Disk gauge", "Screen title bar", "Icon label length",
+                                          "Labels close to the image", NULL };
+    static const char *const left[] = { "Icon borders", "Icon label length", "Labels close", "NewIcons", "Colour icons",
+                                        "Icon colours", "Lock pens 4 to 7", "Hidden devices", NULL };
     static const char *const right[] = { "Disk gauge", "Screen title", "Title update ms", "Default stack", "Drawers in lists",
                                          "Oldest first", "Keep lists in view", "Copy buffer", "Type-ahead s", NULL };
     /* Advanced: icons and the hidden devices on the left, the screen and the drawers on the right; on a 256-line
@@ -1089,12 +1123,17 @@ static int workbench_make(int row)
         G(CHECKBOX_KIND, G_WGAUGE, X1, row, 26, lh, "Disk gauge", PLACETEXT_LEFT, GTCB_Scaled, TRUE); row += step;
         G(CHECKBOX_KIND, G_WTITLEBAR, X1, row, 26, lh, "Screen title bar", PLACETEXT_LEFT, GTCB_Scaled, TRUE); row += step;
         G(INTEGER_KIND, G_WLABELLEN, X1, row, 60, lh, "Icon label length", PLACETEXT_LEFT, GTIN_MaxChars, 3); row += step;
+        G(CHECKBOX_KIND, G_WLABELCLOSE, X1, row, 26, lh, "Labels close to the image", PLACETEXT_LEFT, GTCB_Scaled, TRUE);
+        row += step;
         return row;
     }
     cw = W1 > 160 ? 160 : W1;
     iw = W2 > 100 ? 100 : W2;
-    listh = 4 * (fh + 1) + 4;
+    /* labels close to the image (1.3) takes a row of the left column: the hidden devices' list is shorter for it
+     * (two rows on a 256-line screen, three elsewhere), so the page is no taller there */
+    listh = (tight ? 2 : 3) * (fh + 1) + 4;
     G(INTEGER_KIND, G_WLABELLEN, X1, row, 60, lh, "Icon label length", PLACETEXT_LEFT, GTIN_MaxChars, 3); row += step;
+    G(CHECKBOX_KIND, G_WLABELCLOSE, X1, row, 26, lh, "Labels close", PLACETEXT_LEFT, GTCB_Scaled, TRUE); row += step;
     G(CHECKBOX_KIND, G_WNEWICONS, X1, row, 26, lh, "NewIcons", PLACETEXT_LEFT, GTCB_Scaled, TRUE); row += step;
     G(CHECKBOX_KIND, G_WCOLICONS, X1, row, 26, lh, "Colour icons", PLACETEXT_LEFT, GTCB_Scaled, TRUE); row += step;
     G(CYCLE_KIND, G_WPRECISION, X1, row, cw, lh, "Icon colours", PLACETEXT_LEFT, GTCY_Labels, (ULONG)precision_labels); row += step;
@@ -1122,6 +1161,7 @@ static void workbench_show(void)
     SET(G_WGAUGE, GTCB_Checked, !wbn.nogauge, GA_Disabled, damaged);
     SET(G_WTITLEBAR, GTCB_Checked, !wbn.notitlebar, GA_Disabled, damaged);
     SETINT(G_WLABELLEN, wbn.maxname, damaged);
+    SET(G_WLABELCLOSE, GTCB_Checked, lbl_close, GA_Disabled, damaged);
     SET(G_WNEWICONS, GTCB_Checked, wbn.newicons, GA_Disabled, damaged);
     SET(G_WCOLICONS, GTCB_Checked, wbn.coloricons, GA_Disabled, damaged);
     SET(G_WPRECISION, GTCY_Active, prec, GA_Disabled, damaged);
@@ -1153,6 +1193,11 @@ static void workbench_handle(int id, UWORD code, struct Gadget *gg)
     case G_WGAUGE: wbn.nogauge = !sel; break;
     case G_WTITLEBAR: wbn.notitlebar = !sel; break;
     case G_WLABELLEN: wbn.maxname = clamp(num, 4, 999); break;
+    case G_WLABELCLOSE:
+        lbl_close = sel;
+        status(sel ? "Each label 2 pixels under its icon's picture: shown as icons are read again."
+                   : "Each label under its icon's whole box, as OS 3.2.");
+        return;
     case G_WNEWICONS: wbn.newicons = sel; break;
     case G_WCOLICONS: wbn.coloricons = sel; break;
     case G_WPRECISION: if (code < 4) wbn.precision = precision_values[code]; break;
@@ -1268,6 +1313,11 @@ static void page_open(void)                /* the page's own state from the file
         memcpy(own_emboss, wbn.emboss, sizeof own_emboss);   /* "Its own" in the list only for a frame the sizes don't name */
         frame_labels[4] = pf_wbnc_frame(&wbn) < 0 ? "Its own" : NULL;
         devices_read();
+        lbl_close = labels_read(LABELS_ENV);
+        if (lbl_close < 0) lbl_close = labels_read(LABELS_ENVARC);   /* nothing in ENV: what was last saved */
+        if (lbl_close < 0) lbl_close = 0;
+        lbl_start = lbl_close;
+        lbl_touched = 0;
         break;
     case AP_ASL: pf_asl_get(&cur, &asl); break;
     }
@@ -1351,6 +1401,12 @@ static int keep(int save)
     int ok = 1, dirty;
     page_typed();
     test_until = 0;
+    if (ap == AP_WORKBENCH && !damaged) {          /* icon.library's labels setting, beside workbench.prefs */
+        if (lbl_close != lbl_start || lbl_touched) labels_write(LABELS_ENV, lbl_close);
+        if (save) labels_write(LABELS_ENVARC, lbl_close);
+        lbl_start = lbl_close;
+        lbl_touched = 0;
+    }
     if (damaged) return 0;
     dirty = !pf_same(&cur, &start);
     if ((dirty || env_touched) && pf_differs(&cur, p->env)) ok = pf_save(&cur, p->env);
@@ -1366,6 +1422,14 @@ static void test(void)
     if (damaged) return;
     if (!test_until) before_had = pf_load(&before, env) == 1;      /* ENV: as it was before the first Test */
     if (pf_differs(&cur, env)) { pf_save(&cur, env); env_touched = 1; }
+    if (ap == AP_WORKBENCH) {
+        if (!lbl_touched) {
+            lbl_before = labels_read(LABELS_ENV);
+            lbl_before_had = lbl_before >= 0;
+        }
+        labels_write(LABELS_ENV, lbl_close);
+        lbl_touched = 1;
+    }
     test_until = now_seconds() + TEST_SECONDS;
     status("Testing: back in 15 s unless you choose Use or Save.");
 }
@@ -1378,6 +1442,11 @@ static void put_back(void)                 /* what a Test changed, as it was */
         else DeleteFile((CONST_STRPTR)env);
     }
     if (ap == AP_COLOURS) colours_restore();
+    if (ap == AP_WORKBENCH && lbl_touched) {
+        if (lbl_before_had) labels_write(LABELS_ENV, lbl_before);
+        else DeleteFile((CONST_STRPTR)LABELS_ENV);
+        lbl_touched = 0;
+    }
     env_touched = 0;
     test_until = 0;
 }
