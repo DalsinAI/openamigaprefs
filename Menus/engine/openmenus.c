@@ -69,7 +69,7 @@
 #include "ogt_theme.h"
 #include "../../Common/prefsapp.h"           /* where OpenPrefs is (SYS:Preferences) */
 
-static const char version[] __attribute__((used)) = "$VER: OpenMenus 0.4.5 (18.10.2026) MIT, Copyright (c) 2026 AmigaChrome Team";   /* 0.4.5: no WORKBENCH port (OpenBench): the right button opens the window's own menus */
+static const char version[] __attribute__((used)) = "$VER: OpenMenus 0.4.6 (25.10.2026) MIT, Copyright (c) 2026 AmigaChrome Team";   /* 0.4.6: built -fno-late-combine-instructions (Menus/engine/build.sh: GCC 16.2.0-open3 stored wbclose.h's "OpenWBNotify" one byte late, so the semaphore was named ""); 0.4.5: no WORKBENCH port (OpenBench): the right button opens the window's own menus */
 
 #define PREFS_ENV "ENV:OpenMenus/Menus"
 #define TRAY_DIR "ENV:OpenMenus/Tray"     /* one file per tray program: "width order" (OpenSpeaker, the clock) */
@@ -1765,7 +1765,7 @@ out:
 /* ---- the commodity ----------------------------------------------------------------------------- */
 
 static struct NewBroker nb = {
-    NB_VERSION, (STRPTR)"OpenMenus", (STRPTR)"OpenMenus 0.4.5", (STRPTR)"The Open family's own menus",
+    NB_VERSION, (STRPTR)"OpenMenus", (STRPTR)"OpenMenus 0.4.6", (STRPTR)"The Open family's own menus",
     NBU_UNIQUE | NBU_NOTIFY, 0, 0, NULL, 0
 };
 

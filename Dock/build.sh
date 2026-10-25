@@ -12,6 +12,9 @@ STOVE=${STOVE:-$HOME/AmigaChrome/stoves/os32}
 CC=${CC:-"$STOVE/prefix/bin/m68k-amigaos-gcc"}
 OUT=${1:-$HERE/build/os3}
 FLAGS="-noixemul ${CPU:--m68040} $SPECS -std=gnu99 -Wall -Werror ${OPT:--O2} -fno-delete-null-pointer-checks -fno-common -I$HERE/src -I$HERE/../Common"
+# OpenAmigaGCC 16.2.0-open3's late-combine pass can store a copy one place late (GCC PR 123853; Common/wbclose.h's
+# strcpy of "OpenWBNotify" came out so): off until open4 (openamigagcc #29), on a compiler that knows the option.
+if "$CC" -fno-late-combine-instructions -S -o /dev/null -x c /dev/null 2>/dev/null; then FLAGS="$FLAGS -fno-late-combine-instructions"; fi
 mkdir -p "$OUT"
 "$CC" $FLAGS -o "$OUT/OpenDock" "$HERE/src/opendock.c" "$HERE/src/od_dock.c"
 "$CC" $FLAGS -o "$OUT/Dock" "$HERE/src/dockprefs.c" "$HERE/src/od_dock.c"

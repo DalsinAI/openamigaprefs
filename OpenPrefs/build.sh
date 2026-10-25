@@ -20,6 +20,9 @@ OUT=${1:-$HERE/build/os3}
 O=$OUT/obj
 mkdir -p "$O/app"
 BASE="-noixemul ${CPU:--m68020} -std=gnu99 -Wall -Werror ${OPT:--O2} -fno-delete-null-pointer-checks -fno-common"
+# OpenAmigaGCC 16.2.0-open3's late-combine pass can store a copy one place late (GCC PR 123853; Common/wbclose.h's
+# strcpy of "OpenWBNotify" came out so): off until open4 (openamigagcc #29), on a compiler that knows the option.
+if "$CC" -fno-late-combine-instructions -S -o /dev/null -x c /dev/null 2>/dev/null; then BASE="$BASE -fno-late-combine-instructions"; fi
 FRAME="$BASE -DLT_OP -DLT_ONE -I$P/Common -I$HERE/src -I$OGT/lib"
 # GCC 16 warns of truncation in the editors' bounded copies (snprintf, strncpy): warnings, not errors, here.
 # GCC 6.5 (the os32 stove) has neither warning and refuses -Wno-error= for one it doesn't know.

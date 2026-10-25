@@ -13,6 +13,10 @@ STOVE=${STOVE:-$HOME/AmigaChrome/stoves/os32}
 CC="$STOVE/prefix/bin/m68k-amigaos-gcc"
 OUT=${1:-$HERE/build/os3}
 mkdir -p "$OUT"
-"$CC" -noixemul ${CPU:--m68040} $SPECS -std=gnu99 -Wall -Werror ${OPT:--O2} -fno-delete-null-pointer-checks -fno-common -o "$OUT/Windows" "$HERE/src/windows.c"
-"$CC" -noixemul ${CPU:--m68040} $SPECS -std=gnu99 -Wall -Werror ${OPT:--O2} -fno-delete-null-pointer-checks -fno-common -o "$OUT/OpenWindows" "$HERE/src/openwindows.c" "$HERE/src/gestures.c" "$HERE/src/places.c"
+# OpenAmigaGCC 16.2.0-open3's late-combine pass can store a copy one place late (GCC PR 123853; Common/wbclose.h's
+# strcpy of "OpenWBNotify" came out so): off until open4 (openamigagcc #29), on a compiler that knows the option.
+LATE=""
+if "$CC" -fno-late-combine-instructions -S -o /dev/null -x c /dev/null 2>/dev/null; then LATE="-fno-late-combine-instructions"; fi
+"$CC" -noixemul ${CPU:--m68040} $SPECS -std=gnu99 -Wall -Werror ${OPT:--O2} -fno-delete-null-pointer-checks -fno-common $LATE -o "$OUT/Windows" "$HERE/src/windows.c"
+"$CC" -noixemul ${CPU:--m68040} $SPECS -std=gnu99 -Wall -Werror ${OPT:--O2} -fno-delete-null-pointer-checks -fno-common $LATE -o "$OUT/OpenWindows" "$HERE/src/openwindows.c" "$HERE/src/gestures.c" "$HERE/src/places.c"
 echo "$OUT/Windows ($(wc -c < "$OUT/Windows") bytes), $OUT/OpenWindows ($(wc -c < "$OUT/OpenWindows") bytes)"

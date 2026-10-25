@@ -16,6 +16,9 @@ OGT=${OGT:-$P/../opengadtools}
 OUT=${1:-$HERE/build/os3}
 mkdir -p "$OUT/one"
 CF="-noixemul -m68040 $SPECS -std=gnu99 -Wall -Werror -O2 -fno-delete-null-pointer-checks -fno-common -DLT_ONE -I$OGT/lib -I$P/Common"
+# OpenAmigaGCC 16.2.0-open3's late-combine pass can store a copy one place late (GCC PR 123853; Common/wbclose.h's
+# strcpy of "OpenWBNotify" came out so): off until open4 (openamigagcc #29), on a compiler that knows the option.
+if "$CC" -fno-late-combine-instructions -S -o /dev/null -x c /dev/null 2>/dev/null; then CF="$CF -fno-late-combine-instructions"; fi
 "$CC" $CF -Dmain=look_main -Dversion=look_version -c -o "$OUT/one/look.o" "$HERE/src/look.c"
 "$CC" $CF -Dmain=windows_main -Dversion=windows_version -c -o "$OUT/one/windows.o" "$P/Windows/src/windows.c"
 "$CC" $CF -Dmain=titlebar_main -Dversion=titlebar_version -I"$P/TitleBar/src" -I"$P/TitleBar/include" -c -o "$OUT/one/titlebar.o" "$P/TitleBar/src/titlebar.c"
