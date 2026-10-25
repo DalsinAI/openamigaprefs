@@ -3,11 +3,11 @@
 #ifndef OPENPREFS_H
 #define OPENPREFS_H
 
-#define OP_VERSION "2.5"                   /* higher than every editor it replaces (OpenLook 1.2, Windows 0.6.5, ...) */
+#define OP_VERSION "2.6"                   /* higher than every editor it replaces (OpenLook 1.2, Windows 0.6.5, ...) */
 
 int look_main(int argc, char **argv);
 int windows_main(int argc, char **argv);
-int titlebar_main(int argc, char **argv);
+int titlebar_main(int argc, char **argv); /* (2.6) the see-through bar's switch */
 int menus_main(int argc, char **argv);
 int appearance_main(int tab);
 int dock_main(int argc, char **argv);

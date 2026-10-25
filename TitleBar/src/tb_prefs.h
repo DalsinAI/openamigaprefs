@@ -9,6 +9,10 @@
  *   cog on|off             a cog at the bar's far end, right of OpenSpeaker:
  *                          a click lists the settings editors
  *   border.black on|off    the display's border around the screen black
+ *   seethrough on|off      (OpenTitle 0.7.5) the bar's background see-through until the pointer is on it,
+ *                          where the screen can (an RTG screen the compositor draws); on by default
+ *   seethrough.opacity N   how solid its background is at rest, 10 to 100 percent; 40 by default (no
+ *                          switch in the editor: for trying other levels)
  *
  * MIT, Copyright (c) 2026 AmigaChrome Team. */
 #ifndef TB_PREFS_H
@@ -16,20 +20,26 @@
 
 #include <string.h>
 #include <stdio.h>
+#include <stdlib.h>
 
 #define TB_ENV    "ENV:OpenPrefs/TitleBar"
 #define TB_ENVARC "ENVARC:OpenPrefs/TitleBar"
 #define TB_PORT   "OpenTitle"                 /* OpenTitle's public port: Ctrl-F to its task reads the settings again */
 #define TB_TOOL   "SYS:C/OpenTitle"
 
+#define TB_SEE_OPACITY 40                     /* the see-through bar's background at rest, in percent */
+
 typedef struct {
     int logo, memory, clock, date, network, cog, border_black;
+    int seethrough, see_opacity;              /* 0.7.5: the see-through bar, and its background's opacity at rest (%) */
 } tb_prefs;
 
 static __attribute__((unused)) void tb_defaults(tb_prefs *p)
 {
     p->logo = p->memory = p->clock = p->date = p->network = p->cog = 1;
     p->border_black = 0;
+    p->seethrough = 1;
+    p->see_opacity = TB_SEE_OPACITY;
 }
 
 /* text is changed (lines are cut); NULL gives the defaults, and a line that
@@ -52,6 +62,11 @@ static __attribute__((unused)) void tb_parse(tb_prefs *p, char *text)
         else if (!strcmp(line, "network")) p->network = !strncmp(v, "on", 2);
         else if (!strcmp(line, "cog")) p->cog = !strncmp(v, "on", 2);
         else if (!strcmp(line, "border.black")) p->border_black = !strncmp(v, "on", 2);
+        else if (!strcmp(line, "seethrough")) p->seethrough = !strncmp(v, "on", 2);
+        else if (!strcmp(line, "seethrough.opacity")) {
+            int n = atoi(v);
+            if (n > 0) p->see_opacity = n < 10 ? 10 : n > 100 ? 100 : n;     /* not a number: the default stays */
+        }
     }
 }
 
@@ -59,9 +74,10 @@ static __attribute__((unused)) int tb_text(const tb_prefs *p, char *out, int siz
 {
     static const char *const oo[2] = { "off", "on" };
     return snprintf(out, size, "; OpenPrefs Title bar 0.2: what OpenTitle shows\n"
-                    "logo %s\nmemory %s\nclock %s\nclock.date %s\nnetwork %s\ncog %s\nborder.black %s\n",
+                    "logo %s\nmemory %s\nclock %s\nclock.date %s\nnetwork %s\ncog %s\nborder.black %s\n"
+                    "seethrough %s\nseethrough.opacity %d\n",
                     oo[!!p->logo], oo[!!p->memory], oo[!!p->clock], oo[!!p->date], oo[!!p->network], oo[!!p->cog],
-                    oo[!!p->border_black]);
+                    oo[!!p->border_black], oo[!!p->seethrough], p->see_opacity);
 }
 
 #endif

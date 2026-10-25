@@ -57,6 +57,13 @@
  * colours are read from the screen's bar, Common/barpaint.h), and are
  * centred in the bar.
  *
+ * 0.7.5 (25 October 2026, the user, 24 October, 21:25: "make the title bar translucent until moused over then it goes
+ *   its blue colour"): the see-through bar, as far as OpenTitle can take it. Where the screen can (composited by
+ *   OpenLayers, 32-bit, something behind the bar to see, and Intuition taking the bar's opacity: TB_ICTRL_BAROPACITY,
+ *   proposed to Team 4, not in Intuition yet), the bar's background rests at seethrough.opacity (40%) and goes solid
+ *   while the pointer is on the bar or a menu is open (tb_fade.h: 150 ms in, 300 ms out after 300 ms); OpenTitle's
+ *   own bar windows keep their glyphs opaque and let the bar show round them. Elsewhere, and everywhere until
+ *   Intuition takes it, the bar is solid as before. The seethrough line of ENV:OpenPrefs/TitleBar switches it.
  * 0.7.4 (25 October 2026, the user, 00:12: "perhaps m68k/x64 since its running on" one): the cores read
  *   "+ 10 (m68k/x64)", 68k code on the host's x86-64 cores, from the board's ISAS (Common/barlogo.h).
  * 0.7.3 (24 October 2026, the user, 21:39: "improve spacing on the sys icon tray"): every tray icon has the same
@@ -100,12 +107,15 @@
 #include <dos/notify.h>
 #include <workbench/workbench.h>
 #include <proto/wb.h>
+#include <devices/inputevent.h>
+#include <proto/input.h>
 
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
 
 #include "tb_prefs.h"
+#include "tb_fade.h"
 #include "om_prefs.h"
 #include "logo.h"
 #include "logo_big.h"
@@ -118,7 +128,7 @@
 #include "obmsg.h"
 #include "../../Common/prefsapp.h"           /* where OpenPrefs is (SYS:Preferences) */
 
-const char version[] __attribute__((used)) = "$VER: OpenTitle 0.7.4 (25.10.2026) OpenPrefs, AmigaChrome Team";
+const char version[] __attribute__((used)) = "$VER: OpenTitle 0.7.5 (25.10.2026) OpenPrefs, AmigaChrome Team";
 
 struct IntuitionBase *IntuitionBase;
 struct GfxBase *GfxBase;
@@ -520,7 +530,14 @@ static int bar_ours(struct Window *o)
     return o == logo_w || o == clock_w || o == net_w || o == pop_w || o == cog_w || o == menu_w || ts_is(o);
 }
 
-static int bar_sample_now(void) { return bp_sample(scr, bar_edge == OM_BAR_TITLE, bar_ours); }
+/* 0.7.5: the see-through bar's state (the rest of it is before close_all) */
+static int see_live;                           /* the bar is see-through now: the screen can, and the setting is on */
+static int see_level = 255;                    /* the bar's background opacity as last given to Intuition */
+static int see_tray_bg = -1;                   /* the alpha of our bar windows' background: 0, or 255 while solid */
+
+/* 0.7.5: read only while the bar is solid; see-through, the screen shows it mixed with what is behind it, and the
+ * colours read last stay (a theme changed then is seen once the bar is solid again) */
+static int bar_sample_now(void) { return see_live && see_level != 255 ? 0 : bp_sample(scr, bar_edge == OM_BAR_TITLE, bar_ours); }
 
 /* the pen for text and glyphs on the bar: light on a dark bar, dark on a light one */
 static LONG bar_text(void) { return bp_text_pen(scr, dri->dri_Pens[BARDETAILPEN]); }
@@ -529,6 +546,59 @@ static LONG bar_text(void) { return bp_text_pen(scr, dri->dri_Pens[BARDETAILPEN]
 static void bar_paint(struct Window *win, WORD x, WORD y, WORD pw, WORD ph)
 {
     bp_paint(win, dri->dri_Pens[BARBLOCKPEN], x, y, pw, ph);
+}
+
+/* ---- 0.7.5: our bar windows on the see-through bar ---------------------------------------------
+ * Each bar window (the logo, the clock, the network icons, the cog, the taskspace's icons) is drawn as before, in the
+ * bar's colours, and then, while the bar is see-through, keyed: a pixel in its row's bar colour (bp_paint's) takes
+ * see_tray_bg, any other (text, glyphs, the logo, a lit edge) is opaque. The window's layer has OpenLayers'
+ * LAYERLOOK_ALPHA, so its own alpha counts. see_tray_bg is 0 while the bar is less than solid: the bar itself
+ * shows round the glyphs, at whatever opacity it has; and 255 once it is solid, so the window covers the bar as
+ * before (a title long enough to run under the tray stays hidden). Pens and RECTFMT_ARGB leave an OpenRTG 32-bit
+ * pixel's alpha 0, so the alpha goes in with RECTFMT_RAW, the bitmap's own pixels, which keeps it. */
+#ifndef RECTFMT_RAW
+#define RECTFMT_RAW 5                          /* CyberGraphX 43: the bitmap's own pixel format */
+#endif
+#define SEE_LOOK_ALPHA 8UL                     /* openamigagfx include/graphics/openlayers.h: LAYERLOOK_ALPHA */
+
+/* OpenLayers 47.101 and up: SetLayerLook(layer, what, value) (-258, openamigagfx include/graphics/openlayers.h); ~0
+ * for a classic layer. Only once see_screen() has found OpenLayers. A6 saved by hand, as OpenWindows does. */
+static ULONG layer_look(struct Layer *l, ULONG what, ULONG value)
+{
+    register struct Library *a1 __asm("a1") = LayersBase;
+    register struct Layer *a0 __asm("a0") = l;
+    register ULONG d0 __asm("d0") = what, d1 __asm("d1") = value;
+    __asm__ volatile("move.l %%a6,-(%%sp)\n\tmove.l %%a1,%%a6\n\tjsr -258(%%a6)\n\tmove.l (%%sp)+,%%a6"
+                     : "+r"(d0), "+r"(d1), "+r"(a0), "+r"(a1) : : "cc", "memory");
+    return d0;
+}
+
+static void see_key(struct Window *w)
+{
+    ULONG *px, *p, bga;
+    WORD x, y, ww, wh;
+    if (!see_live || !w) return;
+    ww = w->Width;
+    wh = w->Height;
+    if (ww <= 0 || wh <= 0 || !(px = AllocVec((ULONG)ww * wh * 4, MEMF_ANY))) return;
+    bga = (ULONG)(see_tray_bg & 255) << 24;
+    ReadPixelArray(px, 0, 0, ww * 4, w->RPort, 0, 0, ww, wh, RECTFMT_ARGB);
+    for (y = 0, p = px; y < wh; y++) {
+        ULONG bg = bp_row_kept(w->TopEdge + y, 0) & 0xffffffUL;
+        for (x = 0; x < ww; x++, p++) {
+            ULONG c = *p & 0xffffffUL;
+            *p = c | (c == bg ? bga : 0xff000000UL);
+        }
+    }
+    WritePixelArray(px, 0, 0, ww * 4, w->RPort, 0, 0, ww, wh, RECTFMT_RAW);
+    FreeVec(px);
+}
+
+/* a bar window just opened: its own alpha counts while the bar is see-through (it is keyed as it is drawn) */
+static struct Window *see_new(struct Window *w)
+{
+    if (w && see_live) layer_look(w->WLayer, SEE_LOOK_ALPHA, 1);
+    return w;
 }
 
 /* ---- the logo -------------------------------------------------------------------------------- */
@@ -616,7 +686,7 @@ static void draw_logo(void)
     struct RastPort *rp;
     WORD x, y, oy;
     if (!logo_w) return;
-    if (draw_logo_big()) return;
+    if (draw_logo_big()) { see_key(logo_w); return; }
     rp = logo_w->RPort;
     bar_paint(logo_w, 0, 0, logo_w->Width, logo_w->Height);
     /* the picture as it is (16 x 16, rows 4 to 12 used), its used rows centred in the bar's colour rows */
@@ -628,6 +698,7 @@ static void draw_logo(void)
             SetAPen(rp, pen_for((ULONG)c));
             WritePixel(rp, 1 + x, oy + y);
         }
+    see_key(logo_w);
 }
 
 /* ---- the clock ------------------------------------------------------------------------------- */
@@ -670,6 +741,7 @@ static void draw_clock(int force)
     w = TextLength(rp, (STRPTR)t, strlen(t));
     Move(rp, cw - 6 - w, (h - rp->TxHeight) / 2 + rp->TxBaseline);
     Text(rp, (STRPTR)t, strlen(t));
+    see_key(clock_w);
 }
 
 /* 0.7.3: the room each tray icon has on each side, so the gaps between them are even */
@@ -841,6 +913,7 @@ static void draw_net(int force)
     cy = (nh - (bar_edge == OM_BAR_TITLE ? 1 : 0)) / 2;
     draw_lan(rp, TRAY_PAD, cy, lan_state);
     if (wifi_state >= 0) draw_wifi(rp, TRAY_PAD + 16 + TRAY_PAD, cy, wifi_state, wifi_signal);
+    see_key(net_w);
 }
 
 static struct Window *net_window(WORD x, WORD y, WORD w, WORD h)
@@ -854,7 +927,7 @@ static void net_open(void)
 {
     net_poll();
     net_place();
-    if ((net_w = net_window(nx, ny, nw, nh))) {
+    if ((net_w = see_new(net_window(nx, ny, nw, nh)))) {
         net_drawn = -100;
         draw_net(1);
         tray("Network", nw, NET_ORDER);
@@ -1090,12 +1163,13 @@ static void draw_cog(int force)
             RectFill(rp, ox + x, oy + y, ox + run - 1, oy + y);
             x = run;
         }
+    see_key(cog_w);
 }
 
 static void cog_open(void)
 {
     cog_place();
-    if ((cog_w = net_window(gx, gy, gw, gh))) {
+    if ((cog_w = see_new(net_window(gx, gy, gw, gh)))) {
         cog_drawn = -1;
         draw_cog(1);
         tray("Cog", gw, COG_ORDER);
@@ -1379,13 +1453,14 @@ static void ts_draw(struct ts_icon *t, int force)
             RectFill(rp, ox + x, oy + y, ox + run - 1, oy + y);
             x = run;
         }
+    see_key(t->win);
 }
 
 static void ts_open_one(struct ts_icon *t)
 {
     if (!scr || t->win) return;
     ts_place(t);
-    if ((t->win = net_window(t->x, t->y, t->bw, t->bh))) {
+    if ((t->win = see_new(net_window(t->x, t->y, t->bw, t->bh)))) {
         t->drawn = -1;
         ts_draw(t, 1);
         tray(t->name, t->bw, t->order);
@@ -1562,8 +1637,181 @@ static int ts_is(struct Window *w)
     return 0;
 }
 
+/* ---- 0.7.5: the see-through bar ------------------------------------------------------------------
+ * The bar is Intuition's: it draws the background, the title and the depth gadget into the screen's BarLayer with
+ * pens, and nothing tells a program when it draws them again. OpenLayers can make a layer translucent
+ * (SetLayerOpacity) or let its own alpha count (LAYERLOOK_ALPHA), but either from outside would fade the title and
+ * the depth gadget with the background, or lose them (pens leave a 32-bit pixel's alpha 0). So the bar's
+ * background opacity is asked of Intuition, with a call proposed to Team 4 on 25 October 2026 and not in
+ * Intuition yet:
+ *
+ *   IntuitionControlA(screen, tags) with TB_ICTRL_BAROPACITY: ti_Data 0-255 is how solid the bar's background (its
+ *   fill or gradient and its lines) is; the title, its shadow and the depth gadget stay opaque, and 255 is the bar
+ *   as it is today. ~0 asks and changes nothing. It answers 0x100 | the opacity before when the bar takes it, and
+ *   0 when it can't. A change composes the bar again and draws no more than the bar.
+ *
+ * Today's Intuition answers 0 for a screen (its IntuitionControlA takes windows only), so see_screen() says no
+ * and the bar stays as it was. The rest is ready for it: the setting, the fade and its timing, and our windows.
+ *
+ * See-through only where all of these hold, checked when the windows open (and the last every 2 s):
+ *   - the Workbench screen's own title bar (not OpenMenus' bar at an edge), shown;
+ *   - OpenLayers composites the screen (47.102's LAYERS_COMPOSE_WHY answers 0): RTG, not 8-bit, the switch on;
+ *   - 32 bits a pixel, where a layer's own alpha counts (our windows' glyphs stay opaque on the clear bar);
+ *   - Intuition takes TB_ICTRL_BAROPACITY;
+ *   - a layer behind the bar covers it all, so there is something to see. OpenBench's backdrop window starts
+ *     under the bar (openamigabench desktop/openbench.c), so with it alone there is only the compositor's black.
+ * Elsewhere (AGA, PAL, 8 or 16-bit, a screen classic layers draw) nothing here runs and the bar is solid.
+ *
+ * The cost at rest is today's: no extra wake. Each wake the loop already has (a tenth of a second while the pointer
+ * is on the bar, half a second otherwise) also looks at the pointer's height, at OpenTitle's own lists and at the
+ * menu button (input.device's PeekQualifier): no calls into the screen. Only while the bar fades does the loop
+ * wake every TBF_STEP_MS (40 ms): at most 4 steps in, then one after the grace, then 8 steps out; each is one
+ * IntuitionControlA. */
+#define TB_ICTRL_BAROPACITY (TAG_USER + 0x41430003UL)  /* proposed: after openintuition's WA_Opacity (+1), WA_AlphaSurface (+2) */
+static int see_ok;                             /* this screen can (see_screen), found when the windows open */
+static tb_fade see_fade;
+static ULONG see_s, see_m;                     /* when the fade last stepped (CurrentTime) */
+static struct IOStdReq input_io;               /* input.device while see-through: PeekQualifier, for the menu button */
+
+static ULONG bar_opacity(ULONG level)
+{
+    struct TagItem t[2];
+    t[0].ti_Tag = TB_ICTRL_BAROPACITY;
+    t[0].ti_Data = level;
+    t[1].ti_Tag = TAG_DONE;
+    t[1].ti_Data = 0;
+    return IntuitionControlA(scr, t);
+}
+
+static int see_screen(void)
+{
+    ULONG why;
+    if (!scr || bar_edge != OM_BAR_TITLE || !(scr->Flags & SHOWTITLE) || !scr->BarLayer || !CyberGfxBase) return 0;
+    if (LayersBase->lib_Version != 47 || LayersBase->lib_Revision < 102 || LayersBase->lib_NegSize < 264) return 0;
+    {   /* ComposeLayerInfo(li, NULL, LAYERS_COMPOSE_WHY) (-246, OpenLayers 47.102): 0 while it composites. As
+         * OpenPrefs' Windows page asks it; A6 saved by hand */
+        register struct Library *d1 __asm("d1") = LayersBase;
+        register void *a0 __asm("a0") = &scr->LayerInfo;
+        register void *a1 __asm("a1") = NULL;
+        register ULONG d0 __asm("d0") = 2;
+        __asm__ volatile("move.l %%a6,-(%%sp)\n\tmove.l %%d1,%%a6\n\tjsr -246(%%a6)\n\tmove.l (%%sp)+,%%a6"
+                         : "+r"(d0), "+r"(a0), "+r"(a1), "+r"(d1) : : "cc", "memory");
+        why = d0;
+    }
+    if (why != 0) return 0;
+    if (GetCyberMapAttr(scr->RastPort.BitMap, CYBRMATTR_BPPIX) != 4) return 0;
+    /* a composited screen means AmigaChrome's own Intuition (only it asks layers to composite), so the call is there */
+    if (IntuitionBase->LibNode.lib_Version < 47) return 0;
+    return bar_opacity(~0UL) != 0;
+}
+
+/* a layer behind the bar that covers it all: something to see through it */
+static int see_backed(void)
+{
+    struct Layer *l;
+    int ok = 0;
+    LockLayerInfo(&scr->LayerInfo);
+    for (l = scr->BarLayer->back; l && !ok; l = l->back)
+        ok = l->bounds.MinX <= 0 && l->bounds.MinY <= 0 && l->bounds.MaxX >= scr->Width - 1 && l->bounds.MaxY >= scr->BarHeight;
+    UnlockLayerInfo(&scr->LayerInfo);
+    return ok;
+}
+
+/* the bar is wanted solid: the pointer on it, our list or panel open, or the menu button held */
+static int see_hot(void)
+{
+    if (menu_w || pop_w) return 1;
+    if (IntuitionBase->FirstScreen == scr && scr->MouseY >= 0 && scr->MouseY <= scr->BarHeight) return 1;
+    if (input_io.io_Device) {
+        struct Library *InputBase = (struct Library *)input_io.io_Device;   /* PeekQualifier's base, as OpenBench has it */
+        (void)InputBase;
+        if (PeekQualifier() & IEQUALIFIER_RBUTTON) return 1;
+    }
+    return 0;
+}
+
+static void see_looks(ULONG on)
+{
+    struct Window *const ws[4] = { logo_w, clock_w, net_w, cog_w };
+    int i;
+    for (i = 0; i < 4; i++) if (ws[i]) layer_look(ws[i]->WLayer, SEE_LOOK_ALPHA, on);
+    for (i = 0; i < TS_ICONS; i++) if (ts[i] && ts[i]->win) layer_look(ts[i]->win->WLayer, SEE_LOOK_ALPHA, on);
+}
+
+static void see_rekey(void)
+{
+    struct Window *const ws[4] = { logo_w, clock_w, net_w, cog_w };
+    int i;
+    for (i = 0; i < 4; i++) see_key(ws[i]);
+    for (i = 0; i < TS_ICONS; i++) if (ts[i]) see_key(ts[i]->win);
+}
+
+/* solid, as before: our windows' colours are as they were drawn, and their alpha no longer counts */
+static void see_off(void)
+{
+    if (!see_live) return;
+    see_live = 0;
+    bar_opacity(255);
+    see_looks(0);
+    see_level = 255;
+    see_tray_bg = -1;
+    if (input_io.io_Device) CloseDevice((struct IORequest *)&input_io);
+    input_io.io_Device = NULL;
+}
+
+/* the bar at level; our windows clear before it fades, and opaque once it is solid */
+static void see_apply(int level)
+{
+    int bg = level >= 255 ? 255 : 0;
+    if (!bg && see_tray_bg != 0) { see_tray_bg = 0; see_rekey(); }
+    if (level != see_level) {
+        if (!bar_opacity((ULONG)level)) { see_off(); see_ok = 0; return; }    /* Intuition no longer takes it */
+        see_level = level;
+    }
+    if (bg && see_tray_bg != 255) { see_tray_bg = 255; see_rekey(); }
+}
+
+static void see_on(void)
+{
+    memset(&input_io, 0, sizeof input_io);
+    if (OpenDevice((STRPTR)"input.device", 0, (struct IORequest *)&input_io, 0)) input_io.io_Device = NULL;
+    see_live = 1;
+    see_level = 255;                           /* as the bar is */
+    tbf_init(&see_fade, prefs.see_opacity * 255 / 100, see_hot());
+    CurrentTime(&see_s, &see_m);
+    see_tray_bg = see_fade.level >= 255 ? 255 : 0;
+    see_rekey();                               /* the alpha in first: it counts once the look says so, with no flash */
+    see_looks(1);
+    see_apply(see_fade.level);
+}
+
+/* fresh: the windows have just opened (the screen, the setting or OpenMenus' bar may have changed) */
+static void see_check(int fresh)
+{
+    int want;
+    if (fresh) see_ok = prefs.seethrough && see_screen();
+    want = see_ok && prefs.seethrough && see_backed();
+    if (want && !see_live) see_on();
+    else if (!want && see_live) see_off();
+}
+
+/* each wake: the fade's next step */
+static void see_tick(void)
+{
+    ULONG s, m;
+    LONG ds, dt;
+    if (!see_live) return;
+    CurrentTime(&s, &m);
+    ds = (LONG)(s - see_s);
+    dt = ds < 0 ? 0 : ds > 1 ? TBF_DT_MAX : ds * 1000 + ((LONG)m - (LONG)see_m) / 1000;
+    see_s = s;
+    see_m = m;
+    see_apply(tbf_step(&see_fade, (int)(dt < 0 ? 0 : dt), see_hot()));
+}
+
 static void close_all(void)
 {
+    see_off();                                 /* 0.7.5: the bar solid again while the screen is still ours */
     if (clock_w) { CloseWindow(clock_w); clock_w = NULL; tray("Clock", 0, CLOCK_ORDER); }
     if (pop_w) { CloseWindow(pop_w); pop_w = NULL; }
     if (net_w) { CloseWindow(net_w); net_w = NULL; tray("Network", 0, NET_ORDER); }
@@ -1595,7 +1843,7 @@ static int open_all(void)
     pt_load(scr);
     if (prefs.clock) {
         place();
-        if ((clock_w = bar_window(cx, cy, cw, ch))) {
+        if ((clock_w = see_new(bar_window(cx, cy, cw, ch)))) {
             SetFont(clock_w->RPort, dri->dri_Font);
             shown[0] = 0;
             draw_clock(1);
@@ -1609,6 +1857,7 @@ static int open_all(void)
         for (i = 0; i < TS_ICONS; i++) if (ts[i]) ts_open_one(ts[i]);
     }
     apply_border();
+    see_check(1);                              /* 0.7.5 */
     return 1;
 }
 
@@ -1873,7 +2122,7 @@ static void logo_follow(void)
     int want = prefs.logo && wb_title_shown();
     if (want && !logo_w) {
         bar_sample_now();
-        if ((logo_w = bar_window(0, 0, logo_window_w(), scr->BarHeight))) draw_logo();
+        if ((logo_w = see_new(bar_window(0, 0, logo_window_w(), scr->BarHeight)))) draw_logo();
     } else if (!want && logo_w) {
         CloseWindow(logo_w);
         logo_w = NULL;
@@ -1934,6 +2183,10 @@ int main(void)
         struct Window *act;
         /* a tenth of a second while the pointer is on the bar or the list is open (the cog lights up), else half */
         ms = menu_w || cog_drawn > 0 || hover_for >= 0 || (scr && IntuitionBase->FirstScreen == scr && scr->MouseY <= scr->BarHeight) ? 100 : 500;
+        if (see_live) {                        /* 0.7.5: sooner only while the see-through bar fades, or for its grace */
+            int n = tbf_next(&see_fade);
+            if (n > 0 && (ULONG)n < ms) ms = n < 20 ? 20 : n;
+        }
         if (timer) {
             tr->tr_node.io_Command = TR_ADDREQUEST; tr->tr_time.tv_secs = 0; tr->tr_time.tv_micro = ms * 1000;
             SendIO((struct IORequest *)tr);
@@ -1991,6 +2244,7 @@ int main(void)
         if (scr) ts_hover();
         if (cog_skip && !over_cog()) cog_skip = 0;
         draw_cog(0);
+        see_tick();                            /* 0.7.5: the see-through bar's fade */
         act = IntuitionBase->ActiveWindow;
         if (act && act != logo_w && act != clock_w && act != net_w && act != pop_w && act != cog_w && act != menu_w && !ts_is(act)) last_other = act;
         if (last_other && !is_window(last_other)) last_other = NULL;
@@ -2056,6 +2310,7 @@ int main(void)
                 cog_drawn = -1; draw_cog(1);
                 for (i = 0; i < TS_ICONS; i++) if (ts[i]) ts_draw(ts[i], 1);
             }
+            if (scr) see_check(0);                /* 0.7.5: something behind the bar to see (OpenBench may have come or gone) */
         }
     }
     os_poll(0);                                /* the other screens' cogs closed */
