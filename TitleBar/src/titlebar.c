@@ -1,6 +1,7 @@
 /* OpenPrefs Title bar: the editor for OpenTitle (the logo, free memory,
  * clock, network icons and the cog with the settings editors on the
- * Workbench screen's title bar, and the black border around the screen).
+ * Workbench screen's title bar, the black border around the screen, and,
+ * since 0.3.4, the bar see-through until the pointer is on it).
  *
  *   TitleBar [FROM file] [USE] [SAVE]
  *
@@ -34,7 +35,7 @@
 #include "tb_prefs.h"
 #include "../../Common/looktabs.h"
 
-static const char version[] __attribute__((used)) = "$VER: TitleBar 0.3.3 (12.10.2026) OpenPrefs, MIT, Copyright (c) 2026 AmigaChrome Team";
+static const char version[] __attribute__((used)) = "$VER: TitleBar 0.3.4 (25.10.2026) OpenPrefs, MIT, Copyright (c) 2026 AmigaChrome Team";
 
 static tb_prefs cur;
 
@@ -111,7 +112,7 @@ static int put_in_place(int save)
 
 /* ---- the window ---------------------------------------------------------------------- */
 
-enum { G_LOGO, G_MEMORY, G_CLOCK, G_DATE, G_NET, G_COG, G_BORDER, G_STATUS, G_SAVE, G_USE, G_CANCEL, G_COUNT };
+enum { G_LOGO, G_MEMORY, G_CLOCK, G_DATE, G_NET, G_COG, G_BORDER, G_SEE, G_STATUS, G_SAVE, G_USE, G_CANCEL, G_COUNT };
 static struct Gadget *gad[G_COUNT];
 static struct Window *win;
 static char status_text[120];
@@ -142,6 +143,7 @@ static void show(void)
     SET(G_NET, GTCB_Checked, cur.network);
     SET(G_COG, GTCB_Checked, cur.cog);
     SET(G_BORDER, GTCB_Checked, cur.border_black);
+    SET(G_SEE, GTCB_Checked, cur.seethrough);
 }
 
 static int gui(void)
@@ -176,7 +178,10 @@ static int gui(void)
     G(CHECKBOX_KIND, G_NET, X, row, 26, lh, "Network icons (LAN, Wi-Fi)", PLACETEXT_LEFT, GTCB_Scaled, TRUE); row += lh + 4;
     /* the cog: always on the bar (Dale, 17 October 2026, 08:26), so no switch; the file keeps its "cog" line */
     row += 6;
-    G(CHECKBOX_KIND, G_BORDER, X, row, 26, lh, "Black border around the screen", PLACETEXT_LEFT, GTCB_Scaled, TRUE); row += lh + 10;
+    G(CHECKBOX_KIND, G_BORDER, X, row, 26, lh, "Black border around the screen", PLACETEXT_LEFT, GTCB_Scaled, TRUE); row += lh + 4;
+    /* 0.3.4: OpenTitle 0.7.5's see-through bar (the user, 24 October 2026): only where the screen can, an RTG screen
+     * the compositor draws; elsewhere the bar stays solid whatever this says */
+    G(CHECKBOX_KIND, G_SEE, X, row, 26, lh, "See-through until pointed at", PLACETEXT_LEFT, GTCB_Scaled, TRUE); row += lh + 10;
     G(TEXT_KIND, G_STATUS, 10, row, W - 20, lh, NULL, 0, GTTX_Text, (ULONG)status_text, GTTX_Border, TRUE); row += lh + 6;
     {
         static const char *const names[3] = { "Save", "Use", "Cancel" };
@@ -235,6 +240,7 @@ static int gui(void)
                 case G_NET: cur.network = sel; break;
                 case G_COG: cur.cog = sel; break;
                 case G_BORDER: cur.border_black = sel; break;
+                case G_SEE: cur.seethrough = sel; break;
                 case G_USE: put_in_place(0); quit = 1; break;
                 case G_SAVE: put_in_place(1); quit = 1; break;
                 case G_CANCEL: quit = 1; break;

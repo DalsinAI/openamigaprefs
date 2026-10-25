@@ -49,6 +49,100 @@ installed. OpenMenus' own bar (at an edge) keeps room for the sum.
 With the menu bar in the screen's title bar (the default), the first item
 sits two bar heights in from the right edge, clear of the depth gadget.
 
+## The see-through bar (OpenTitle 0.7.5, 25 October 2026): waits on Intuition
+
+The user, 24 October 2026, 21:25: "make the title bar translucent until moused over then it goes its blue colour"
+(Salvor's OS list, item 61).
+
+**What it is meant to do.** On a screen the compositor draws, the bar's background rests at 40% opacity, so the
+backdrop shows through it. The title, the depth gadget, the clock, the tray's icons and the logo stay opaque. With
+the pointer on the bar, or a menu open (the menu button held, or OpenTitle's own cog list or network panel), it goes
+solid in about 150 ms. Once the pointer has left it stays solid for 300 ms, then fades back in about 300 ms.
+Anywhere else (AGA, PAL, an 8 or 16-bit screen, classic layers) the bar is solid, as before.
+
+**Why it waits.** The bar is Intuition's: it draws the background, the title and the depth gadget into the screen's
+BarLayer with pens, and nothing tells a program when it draws them again. OpenLayers can make any layer translucent
+(`SetLayerOpacity`) or let its own alpha count (`LAYERLOOK_ALPHA`, 32-bit screens). Done to the BarLayer from
+outside, the first fades the title and the depth gadget with the background. The second hides the whole bar,
+because pens leave an OpenRTG 32-bit pixel's alpha at 0. A copy of the title kept opaque over it would lag each change
+of title by up to half a second. So the background's opacity has to come from Intuition. This call is proposed to
+Team 4 and is not in Intuition yet:
+
+| | |
+| --- | --- |
+| Call | `IntuitionControlA(screen, tags)`, the screen as the object (today it takes windows only) |
+| Tag | `ICTRL_BarOpacity`, `TAG_USER + 0x41430003` (after `WA_Opacity` +1 and `WA_AlphaSurface` +2) |
+| 0-255 | How solid the bar's background (fill or gradient, and its lines) is. The title, its shadow and the depth gadget stay opaque, and so do the menus, in their own layers. 255 is today's bar, exactly |
+| `~0` | Asks; changes nothing |
+| Answer | `0x100` \| the opacity before, when the bar takes it; 0 when it can't (classic layers, 8 or 16-bit, no bar) |
+| Cost | A change composes the bar's area again and draws no more than the bar. A hover sends 12: 4 in 150 ms, then 8 in 300 ms |
+| Kept | Through Intuition's own redraws of the bar (a new title, ShowTitle) |
+
+Today's Intuition answers 0 for a screen, so OpenTitle 0.7.5 finds the screen can't and nothing changes.
+
+**OpenTitle's part, ready for it.** OpenTitle makes the bar see-through only when all of these hold. The first
+four are checked when its windows open; the last also every 2 s.
+
+- It's the Workbench screen's own title bar, shown (not OpenMenus' bar at an edge).
+- OpenLayers composites the screen: 47.102's `LAYERS_COMPOSE_WHY` answers 0.
+- The screen has 32 bits a pixel.
+- Intuition answers the query.
+- A layer behind the bar covers it all, so there's something to see. **OpenBench's backdrop window starts under the bar**
+  (`WA_Top` BarHeight + 1, openamigabench `desktop/openbench.c`), so today only the compositor's black (its backfill,
+  colour 0) is behind the bar. OpenBench needs a backdrop strip there (below).
+
+While see-through:
+- **The fade** is `src/tb_fade.h`, plain C with host tests. A step applies the time since the last one to the state
+  the last one found. So a fade starts from the step that sees the pointer arrive, and the wait before that step
+  doesn't count.
+- **OpenTitle's bar windows** (the logo, clock, network icons, cog and the taskspace's icons) are drawn as before,
+  then keyed. Their layers get `LAYERLOOK_ALPHA`. A pixel in its row's bar colour takes alpha 0 while the bar is
+  less than solid, so the bar shows round the glyphs at whatever opacity it has. It takes 255 once the bar is
+  solid, so a title long enough to run under the tray stays hidden, as before. Every other pixel is opaque. The
+  alpha goes in with `WritePixelArray(RECTFMT_RAW)`, which keeps an OpenRTG 32-bit pixel's top byte. Pens and
+  `RECTFMT_ARGB` clear it.
+- **The bar's colours** are read only while it is solid. A theme changed while it rests is seen the next time it
+  goes solid.
+
+**The setting.** `seethrough on|off` in `ENV:OpenPrefs/TitleBar`, on by default. The Title Bar page has a box for
+it: **See-through until pointed at** (TitleBar 0.3.4, OpenPrefs 2.6). OpenTitle follows it on Ctrl-F, as it does
+the other settings. `seethrough.opacity 10-100` (40 by default) has no box; it's for trying other levels.
+
+**Cost.** At rest the loop wakes as it did before: every 100 ms while the pointer is on the bar, every 500 ms
+otherwise. On each of those wakes it also checks the pointer's height, OpenTitle's own lists and the menu button
+(input.device's `PeekQualifier`), and calls `CurrentTime`. Only during a fade does the loop wake every 40 ms. A
+hover adds 13 wakes in all (`tests/run.sh` simulates the loop): 4 in, 1 at the grace's end and 8 out. Each is one
+`IntuitionControlA`, and two of them re-key the bar windows (about 6 windows, each up to about 60 x 21 pixels). On a
+screen that can't, nothing extra runs after the windows open: one flag test every 2 s.
+
+The pointer arriving is seen at the next wake. From below the bar that can be up to 500 ms after it arrives, as the
+cog's light is today. A menu opened with the pointer elsewhere is seen the same way.
+
+**How 40% reads.** Measured on the host: the Background Pack's four designs, cut to 1920 x 1200 as the pack does,
+with the bar's gradient (openintuition's glass look) mixed over the picture's top 21 rows. The figures are the
+contrast of the white title against the mixed background, across the text rows:
+
+| Design | Solid (median) | 40%: lowest / 5th percentile / median | 60%: 5th percentile / median |
+| --- | --- | --- | --- |
+| Prismatic light | 7.0 | 1.7 / 2.1 / 3.3 | 2.8 / 4.1 |
+| Prismatic dark | 7.0 | 1.7 / 4.7 / 11.6 | 5.1 / 9.4 |
+| Nebula dark | 7.0 | 2.0 / 7.7 / 12.2 | 6.9 / 9.6 |
+| AC090-EX64 dark | 7.0 | 2.8 / 7.7 / 12.0 | 6.9 / 9.4 |
+
+40% reads well on the three dark designs: the background goes darker than the solid bar, so the title gains
+contrast. Prismatic light at 40% drops to a median of 3.3 (2.1 at the 5th percentile), which is weak for small
+text. Both Prismatic designs have bright streaks near the right end, under the clock (the lowest figures). A light
+backdrop (its `.tone` says light) would want about 60%. That is a follow-up once the bar is live; until then,
+`seethrough.opacity` sets it.
+
+**Not yet.**
+- Intuition's call (Team 4).
+- OpenBench's backdrop under the bar: a backdrop strip window over the bar's rows with the same backfill hook (its
+  `bf_fill` already draws in screen coordinates), then `ShowTitle(screen, TRUE)` so the bar stays in front.
+- OpenSpeaker's speaker (openamigaup) keyed the same way. Until then it is a solid box on the clear bar.
+- Lab proof on a copy of Instance-32 (full12, RTG 1920 x 1200), once the call is there: screenshots at rest, while
+  hovering and with a menu open; a PAL/AGA screen staying solid; the Shell run's cost.
+
 ## The cog always, and on other screens (OpenTitle 0.7, 17 October 2026)
 
 Dale, 17 October 2026, 08:26: "The cog should be present on all standard screens so Workbench screen has it all
