@@ -206,6 +206,7 @@ patches nothing:
   the mouse is never held.
 - The right button on the screen bar or in a program's window is unchanged.
 - **No `WORKBENCH` port, no right-click menu (0.4.5, W67).** OpenBench marks its drawers and its desktop as Workbench's windows but has no ARexx port. OpenMenus 0.4.4 took the right press there, asked nobody, and showed nothing (Dale, 18 October: "no right click menu in list mode"). Now it looks for the port at the press: without it, the press is an ordinary one, and the window's own menus open (OpenBench's Window, View and Icons, or its desktop's).
+- **Built -fno-late-combine-instructions (0.4.6, W134).** OpenAmigaGCC 16.2.0-open3's late-combine pass made `Common/wbclose.h`'s `strcpy(r->name, "OpenWBNotify")` a copy that stored each byte one place late (`move.b (a1)+,(a1,d0.l)`), so a root semaphore OpenMenus made was named "" and OpenLook's notice and OpenBench never found it. `Menus/engine/build.sh` turns the pass off on a compiler that has it, until OpenAmigaGCC open4 (openamigagcc #29). No source changed.
 
 `Menus/engine/wbprobe.c` sends commands to the port and prints the answers.
 
