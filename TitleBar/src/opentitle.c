@@ -79,6 +79,9 @@
  *   screen has a window of its own, so its owner can close it; its list opens OpenPrefs on that screen
  *   (PUBSCREEN=). Never on a custom screen that isn't public (a game's), nor on one with no title bar.
  *
+ * 0.7.6 (25 October 2026, Team 4's bar-opacity agent): the check that OpenLayers has ComposeLayerInfo asked for
+ *   a 264-byte table (lib_NegSize); 47.106's is 258, so the see-through bar was never tried. It asks for 258.
+ *
  * MIT, Copyright (c) 2026 AmigaChrome Team. */
 #include <exec/types.h>
 #include <exec/memory.h>
@@ -128,7 +131,7 @@
 #include "obmsg.h"
 #include "../../Common/prefsapp.h"           /* where OpenPrefs is (SYS:Preferences) */
 
-const char version[] __attribute__((used)) = "$VER: OpenTitle 0.7.5 (25.10.2026) OpenPrefs, AmigaChrome Team";
+const char version[] __attribute__((used)) = "$VER: OpenTitle 0.7.6 (25.10.2026) OpenPrefs, AmigaChrome Team";
 
 struct IntuitionBase *IntuitionBase;
 struct GfxBase *GfxBase;
@@ -1687,7 +1690,7 @@ static int see_screen(void)
 {
     ULONG why;
     if (!scr || bar_edge != OM_BAR_TITLE || !(scr->Flags & SHOWTITLE) || !scr->BarLayer || !CyberGfxBase) return 0;
-    if (LayersBase->lib_Version != 47 || LayersBase->lib_Revision < 102 || LayersBase->lib_NegSize < 264) return 0;
+    if (LayersBase->lib_Version != 47 || LayersBase->lib_Revision < 102 || LayersBase->lib_NegSize < 258) return 0;   /* 0.7.6: 47.106's table is 258 bytes */
     {   /* ComposeLayerInfo(li, NULL, LAYERS_COMPOSE_WHY) (-246, OpenLayers 47.102): 0 while it composites. As
          * OpenPrefs' Windows page asks it; A6 saved by hand */
         register struct Library *d1 __asm("d1") = LayersBase;
