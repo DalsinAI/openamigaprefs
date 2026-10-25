@@ -45,7 +45,7 @@
 #include "looktabs.h"
 #include "openprefs.h"
 
-static const char version[] __attribute__((used)) = "$VER: OpenPrefs " OP_VERSION " (24.10.2026) MIT, Copyright (c) 2026 AmigaChrome Team";
+static const char version[] __attribute__((used)) = "$VER: OpenPrefs " OP_VERSION " (25.10.2026) MIT, Copyright (c) 2026 AmigaChrome Team";
 
 struct Library *UtilityBase;
 

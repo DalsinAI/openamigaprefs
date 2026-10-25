@@ -3,7 +3,7 @@
 #ifndef OPENPREFS_H
 #define OPENPREFS_H
 
-#define OP_VERSION "2.4"                   /* higher than every editor it replaces (OpenLook 1.2, Windows 0.6.5, ...) */
+#define OP_VERSION "2.5"                   /* higher than every editor it replaces (OpenLook 1.2, Windows 0.6.5, ...) */
 
 int look_main(int argc, char **argv);
 int windows_main(int argc, char **argv);
@@ -21,7 +21,7 @@ int system_main(int argc, char **argv);
 int blanker_main(int argc, char **argv);
 int screenmode_main(int argc, char **argv);
 int icontrol_main(int argc, char **argv);
-int icons_main(int argc, char **argv);    /* the Icons page (2.3): labels' place and gap, the column grid */
+int icons_main(int argc, char **argv);    /* the Icons page (2.3): labels' place and gap, the column grid; (2.5) no icons */
 int printing_main(int argc, char **argv); /* the Printing page (2.4): printer.prefs' and printergfx.prefs' paper */
 
 /* A page by its name ("Date & Time", "Title Bar"), letters in either case; -1 for none (opframe.c) */

@@ -10,11 +10,16 @@
  *     down the left (the default) or the right; the desktop's labels in the colour the backdrop's .tone asks for
  *     (light on a dark picture, dark on a light one; the default) or the theme's
  *   - Icon text font: a button to the Fonts page, whose Workbench icon text font the labels are in
+ *   - No icons on the desktop (0.2, Salvor's OS list, item 59; the user, 24 October 2026, 21:08: "offer a no-icons mode
+ *     too... for workbench itself"): OpenBench's desktop shows no icons at all, its disks', the ones left out or
+ *     AppIcons, and the backdrop, the bar, the dock and the meters stay; off, they come back where they were. OpenBench's
+ *     Window > No icons is the same setting, and its Icons > Clean Up turns it off
  *
  * Two variables, so icon.library (in the ROM) reads one word: ENV:Sys/IconLabels ("close", "close 3", "below") and
  * ENV:Sys/IconLayout ("cell=auto snap=on order=name columns=left labelcolour=backdrop"), read by OpenBench and its
- * drawers, which follow a change at once (opengadtools' workbench/wb_grid.c reads and writes both). Save writes ENV:
- * and ENVARC: (SetVar), Use ENV:, Test ENV: until Cancel puts back what was there, Cancel changes nothing else.
+ * drawers, which follow a change at once (opengadtools' workbench/wb_grid.c reads and writes both). And (0.2) a third
+ * beside them, ENV:Sys/DesktopIcons ("show" or "none"; Common/deskicons.h), which OpenBench alone reads. Save writes
+ * ENV: and ENVARC: (SetVar), Use ENV:, Test ENV: until Cancel puts back what was there, Cancel changes nothing else.
  *
  * Its own page rather than a tab of Workbench's: OpenPrefs's sections are one list of pages, each with its own Save,
  * Use, Test and Cancel and no tabs inside them, and Workbench's page is already full (its paths, its devices, its
@@ -45,16 +50,18 @@
 #endif
 
 #include "wb_grid.h"                        /* opengadtools' workbench/: the two variables' words */
+#include "deskicons.h"                      /* Common/: ENV:Sys/DesktopIcons's words, shared with OpenBench */
 
-static const char version[] __attribute__((used)) = "$VER: IconsPage 0.1 (24.10.2026) OpenPrefs, MIT, Copyright (c) 2026 AmigaChrome Team";
+static const char version[] __attribute__((used)) = "$VER: IconsPage 0.2 (25.10.2026) OpenPrefs, MIT, Copyright (c) 2026 AmigaChrome Team";
 
 #define LABELS "Sys/IconLabels"
 #define LAYOUT "Sys/IconLayout"
 
 static wb_iconprefs ip;
+static int noicons;                         /* 0.2: DESKICONS_NONE, no icons on the desktop */
 /* what ENV: had when the page opened, put back by Cancel after a Test */
-static char was_labels[48], was_layout[128];
-static int had_labels, had_layout, tested;
+static char was_labels[48], was_layout[128], was_desk[16];
+static int had_labels, had_layout, had_desk, tested;
 
 /* A variable's text from ENV: (GetVar), else from ENVARC: (the file); 1 when there was one */
 static int read_var(const char *name, char *buf, int size)
@@ -93,6 +100,10 @@ static int put(int save, void (*say)(const char *))
         say(save ? "Couldn't write ENV: and ENVARC:Sys/IconLabels or IconLayout." : "Couldn't write ENV:Sys/IconLabels or IconLayout.");
         return 0;
     }
+    if (!set_var(DESKICONS_VAR, deskicons_text(noicons), save)) {
+        say(save ? "Couldn't write ENV: and ENVARC:Sys/DesktopIcons." : "Couldn't write ENV:Sys/DesktopIcons.");
+        return 0;
+    }
     return 1;
 }
 
@@ -104,13 +115,15 @@ static void put_back(void)
     else DeleteVar((CONST_STRPTR)LABELS, GVF_GLOBAL_ONLY);
     if (had_layout) set_var(LAYOUT, was_layout, 0);
     else DeleteVar((CONST_STRPTR)LAYOUT, GVF_GLOBAL_ONLY);
+    if (had_desk) set_var(DESKICONS_VAR, was_desk, 0);
+    else DeleteVar((CONST_STRPTR)DESKICONS_VAR, GVF_GLOBAL_ONLY);
     tested = 0;
 }
 
 /* ---- the window ------------------------------------------------------------------------------------ */
 
-enum { G_LABELS = 1, G_GAPLABEL, G_GAP, G_GAPTEXT, G_CELL, G_SNAP, G_ORDER, G_COLUMNS, G_TONE, G_FONTS, G_FONTTEXT, G_STATUS,
-       G_SAVE, G_USE, G_TEST, G_CANCEL, G_COUNT };
+enum { G_LABELS = 1, G_GAPLABEL, G_GAP, G_GAPTEXT, G_CELL, G_SNAP, G_ORDER, G_COLUMNS, G_TONE, G_NOICONS, G_FONTS, G_FONTTEXT,
+       G_STATUS, G_SAVE, G_USE, G_TEST, G_CANCEL, G_COUNT };
 
 static const char *const labels_names[] = { "Close to the picture", "Below the picture (OS 3.2.3)", NULL };
 static const char *const cell_names[] = { "Auto (from the icons)", "32 pixels", "40 pixels", "48 pixels", "56 pixels",
@@ -218,6 +231,10 @@ static int gui(void)
      * backdrops), or in the theme's colour */
     G(CYCLE_KIND, G_TONE, X, row, cw, lh, "Desktop labels", PLACETEXT_LEFT, GTCY_Labels, (ULONG)tone_names,
       GTCY_Active, ip.tone ? 0 : 1);
+    row += lh + 4;
+    /* 0.2: no icons on the desktop at all (OpenBench's Window > No icons; Icons > Clean Up there brings them back) */
+    G(CHECKBOX_KIND, G_NOICONS, X, row, 26, lh, "No icons on the desktop", PLACETEXT_RIGHT,
+      GTCB_Checked, noicons == DESKICONS_NONE, GTCB_Scaled, TRUE);
     row += lh + 10;
     G(TEXT_KIND, G_FONTTEXT, 12, row, W - 24, lh, NULL, 0, GTTX_Text,
       (ULONG)"The labels are in Font prefs' Workbench icon text font.");
@@ -238,9 +255,9 @@ static int gui(void)
                    CYCLEIDCMP | TEXTIDCMP)
 #ifdef LT_ONE
     win = lt_open(scr, (scr->Width - W) / 2 > 0 ? (scr->Width - W) / 2 : 0, scr->BarHeight + 20, W, row - scr->WBorTop - fh - 1,
-                  glist, IDCMP_ALL, "Icons 0.1");
+                  glist, IDCMP_ALL, "Icons 0.2");
 #else
-    win = OpenWindowTags(NULL, WA_Title, (ULONG)"Icons", WA_ScreenTitle, (ULONG)"Icons 0.1", WA_PubScreen, (ULONG)scr,
+    win = OpenWindowTags(NULL, WA_Title, (ULONG)"Icons", WA_ScreenTitle, (ULONG)"Icons 0.2", WA_PubScreen, (ULONG)scr,
                          WA_Left, (scr->Width - W) / 2 > 0 ? (scr->Width - W) / 2 : 0, WA_Top, scr->BarHeight + 20,
                          WA_InnerWidth, W, WA_InnerHeight, row - scr->WBorTop - fh - 1,
                          WA_Gadgets, (ULONG)glist, WA_DragBar, TRUE, WA_DepthGadget, TRUE, WA_CloseGadget, TRUE, WA_Activate, TRUE,
@@ -295,6 +312,7 @@ static int gui(void)
                 case G_ORDER: ip.order = code < 4 ? code : 0; break;
                 case G_COLUMNS: ip.right = code == 1; break;
                 case G_TONE: ip.tone = code == 0; break;
+                case G_NOICONS: noicons = (gg->Flags & GFLG_SELECTED) ? DESKICONS_NONE : DESKICONS_SHOW; break;
                 case G_FONTS:                       /* the Fonts page, this one's changes kept as Use */
 #ifdef LT_ONE
                     if (LT_DIRTY) put(0, status);
@@ -308,6 +326,7 @@ static int gui(void)
                     if (!tested) {
                         had_labels = GetVar((CONST_STRPTR)LABELS, (STRPTR)was_labels, sizeof was_labels, GVF_GLOBAL_ONLY) >= 0;
                         had_layout = GetVar((CONST_STRPTR)LAYOUT, (STRPTR)was_layout, sizeof was_layout, GVF_GLOBAL_ONLY) >= 0;
+                        had_desk = GetVar((CONST_STRPTR)DESKICONS_VAR, (STRPTR)was_desk, sizeof was_desk, GVF_GLOBAL_ONLY) >= 0;
                     }
                     if (put(0, status)) {
                         tested = 1;
@@ -344,18 +363,19 @@ static int word_of(const char *w, const char *const *list)
 }
 
 /*   Icons [LABELS close|below] [GAP n] [CELL auto|px] [SNAP on|off] [ORDER name|kind|size|date]
- *         [COLUMNS left|right] [LABELCOLOUR backdrop|theme] [USE] [SAVE]
- * (OpenPrefs ICONS ...): the settings given over the ones in ENV:; with USE or SAVE written without a window. */
+ *         [COLUMNS left|right] [LABELCOLOUR backdrop|theme] [DESKTOP show|none] [USE] [SAVE]
+ * (OpenPrefs ICONS ...): the settings given over the ones in ENV:; with USE or SAVE written without a window.
+ * DESKTOP (0.2): the desktop's icons shown (show, icons, on) or none at all (none, noicons, off). */
 int main(int argc, char **argv)
 {
     static const char *const lb[] = { "close", "below", "on", "off", NULL }, *const onoff[] = { "on", "off", "yes", "no", NULL };
     static const char *const ord[] = { "name", "kind", "size", "date", NULL }, *const side[] = { "left", "right", NULL };
     static const char *const tone[] = { "theme", "backdrop", NULL };
-    LONG args[9] = { 0, 0, 0, 0, 0, 0, 0, 0, 0 };
-    struct RDArgs *rd = argc > 0 ? ReadArgs((STRPTR)"LABELS/K,GAP/K/N,CELL/K,SNAP/K,ORDER/K,COLUMNS/K,USE/S,SAVE/S,LABELCOLOUR/K",
-                                            args, NULL) : NULL;
-    char a[48], b[128];
-    int rc, ha, hb, k;
+    LONG args[10] = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
+    struct RDArgs *rd = argc > 0 ? ReadArgs((STRPTR)"LABELS/K,GAP/K/N,CELL/K,SNAP/K,ORDER/K,COLUMNS/K,USE/S,SAVE/S,LABELCOLOUR/K,"
+                                            "DESKTOP/K", args, NULL) : NULL;
+    char a[48], b[128], d[16];
+    int rc, ha, hb, hd, k;
     (void)argv;
     (void)version;
     win = NULL;                             /* built into OpenPrefs, the statics outlive a run */
@@ -363,7 +383,9 @@ int main(int argc, char **argv)
     if (!rd && argc > 0) { PrintFault(IoErr(), (STRPTR)"Icons"); return RETURN_FAIL; }
     ha = read_var(LABELS, a, sizeof a);
     hb = read_var(LAYOUT, b, sizeof b);
+    hd = read_var(DESKICONS_VAR, d, sizeof d);
     wb_iconprefs_parse(&ip, ha ? a : NULL, hb ? b : NULL);
+    noicons = deskicons_parse(hd ? d : NULL, -1);
     if ((k = word_of((const char *)args[0], lb)) >= 0) ip.close = !(k & 1);
     if (args[1]) { k = (int)*(LONG *)args[1]; if (k >= 0 && k <= WB_GAP_MAX) ip.gap = k; }
     if (args[2]) {
@@ -375,6 +397,7 @@ int main(int argc, char **argv)
     if ((k = word_of((const char *)args[4], ord)) >= 0) ip.order = k;
     if ((k = word_of((const char *)args[5], side)) >= 0) ip.right = k;
     if ((k = word_of((const char *)args[8], tone)) >= 0) ip.tone = k;
+    if ((k = deskicons_word((const char *)args[9], -1)) >= 0) noicons = k;
     if (args[6] || args[7]) rc = put(args[7] != 0, say_shell) ? RETURN_OK : RETURN_ERROR;
     else rc = gui();
     if (rd) FreeArgs(rd);
