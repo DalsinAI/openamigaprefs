@@ -131,6 +131,17 @@ rounded rectangle tinted to the look, through which the desktop shows.
   0.6.10: on OpenExec (taskclock.resource 2, which counts the tasks added and
   removed), the two-second check is skipped while that count and the window
   list are as they were; on OS 3.2.3's exec every check runs, as before.
+- **Its timer** (0.6.11, `src/od_wake.h`): clicks, refreshes, icons dropped,
+  Ctrl-F, Ctrl-C and Workbench closing or opening wake the dock by
+  themselves. Only three things need a look, as nothing tells the dock:
+  the pointer (Intuition reports the mouse to the active window only), what
+  is behind a see-through shelf, and the running programs (taskclock.resource
+  counts tasks but sends no signal). The timer runs once a second at rest
+  and ten times a second only while the pointer is over the dock, a name is
+  up or a window behind the shelf is settling; never while the dock is
+  closed. At rest that is 1 wake a second, where 0.6.10 woke 10 times. The
+  running check stays every 2 seconds and the look beside a see-through
+  shelf every second (not while another screen is in front).
 - Icons dropped on the dock (it is an AppWindow) are added at the end and
   kept, as AmiDock does.
 - The menu, opened with the right mouse button while the dock is active,
@@ -158,17 +169,20 @@ rounded rectangle tinted to the look, through which the desktop shows.
   - **The shelf** has rounded corners and is **glass** (the default),
     **see-through** or **solid**: see 0.3 above for how each is drawn.
   - **Names pop up** above the icon under the pointer, in a small box, as
-    the Mac's do. The pointer is looked at ten times a second, only while
-    the Workbench screen is in front.
+    the Mac's do. The pointer is looked at only while the Workbench screen
+    is in front: once a second while it is elsewhere, ten times a second
+    while it is over the dock or a name is up (0.6.11), so a name comes up
+    within a second and then follows the pointer from icon to icon.
   - **A started program's icon hops**: twice and a little, 20 steps two
     video frames apart (about a second),
     in room kept above the shelf (on the side away from the edge).
   - What is behind the dock is copied from the screen as the dock opens
     (and again whenever it opens anew: new settings, a button added or
-    removed), so seeing through costs one blit. Ten times a second the
+    removed), so seeing through costs one blit. At each wake the
     dock looks at the windows over its place (where each is, how big, in
     what order, under Intuition's lock; no pixels are read). When that
-    changes and then stays put for 0.3 seconds, a window has been dropped
+    changes (seen within a second, then looked at ten times a second) and
+    then stays put for 0.3 seconds, a window has been dropped
     there, and the dock copies what is behind it afresh by opening again:
     it blinks once, briefly. Everything is drawn into a bitmap of the
     dock's size and copied in at once, so nothing flickers. Without the

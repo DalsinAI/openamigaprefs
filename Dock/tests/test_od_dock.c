@@ -1,5 +1,6 @@
 /* Host tests for od_dock.c. MIT, Copyright (c) 2026 AmigaChrome Team. */
 #include "od_dock.h"
+#include "od_wake.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -184,6 +185,85 @@ static void test_full(void)
     CHECK(d.n == OD_MAX && r.added == OD_MAX && r.full == 60 - OD_MAX);
 }
 
+/* ---- 0.6.11: the timer's pace (od_wake.h), run as opendock.c's loop runs it ---- */
+
+typedef struct { int wakes, stale, running; unsigned long first_busy; } wake_count;
+static unsigned long busy_from, busy_to;           /* the pointer over the dock in [from, to), microseconds */
+static unsigned busy_at(unsigned long t) { return t >= busy_from && t < busy_to ? OD_BUSY_POINTER : 0; }
+
+/* span microseconds of wakes: each request's length from what is going on as it is sent */
+static wake_count run_wakes(unsigned long span, int fixed_tenth)
+{
+    od_wake w;
+    wake_count c = { 0, 0, 0, 0 };
+    unsigned long t = 0, tick;
+    od_wake_init(&w);
+    tick = fixed_tenth ? 100000UL : od_wake_next(busy_at(0));
+    while (t + tick <= span) {
+        unsigned due;
+        t += tick;
+        c.wakes++;
+        if (!c.first_busy && busy_at(t)) c.first_busy = t;
+        due = od_wake_due(&w, tick);
+        if (due & OD_DUE_STALE) c.stale++;
+        if (due & OD_DUE_RUNNING) c.running++;
+        tick = fixed_tenth ? 100000UL : od_wake_next(busy_at(t));
+    }
+    return c;
+}
+
+static void test_wake(void)
+{
+    wake_count before, rest, over, visit, late;
+    od_wake w;
+    CHECK(od_wake_next(0) == 1000000UL);
+    CHECK(od_wake_next(OD_BUSY_POINTER) == 100000UL && od_wake_next(OD_BUSY_NAME) == 100000UL && od_wake_next(OD_BUSY_BEHIND) == 100000UL);
+
+    /* a minute at rest: 0.6.10 woke 600 times (a tenth of a second, always), 0.6.11 60 */
+    busy_from = busy_to = 0;
+    before = run_wakes(60000000UL, 1);
+    rest = run_wakes(60000000UL, 0);
+    CHECK(before.wakes == 600 && rest.wakes == 60);
+    /* the slow looks keep their pace either way: beside the shelf each second, the tasks every two */
+    CHECK(before.stale == 60 && before.running == 30 && rest.stale == 60 && rest.running == 30);
+
+    /* the pointer over the dock all the minute: ten a second, as before */
+    busy_from = 0; busy_to = ~0UL;
+    over = run_wakes(60000000UL, 0);
+    CHECK(over.wakes == 600 && over.stale == 60 && over.running == 30);
+
+    /* over it from 10 s to 15 s: 10 slow, 50 fast, 45 slow */
+    busy_from = 10000000UL; busy_to = 15000000UL;
+    visit = run_wakes(60000000UL, 0);
+    CHECK(visit.wakes == 105 && visit.stale == 60 && visit.running == 30);
+
+    /* the pointer reaches the dock at 10.5 s: the name's first look within a second (at 11 s) */
+    busy_from = 10500000UL; busy_to = ~0UL;
+    late = run_wakes(20000000UL, 0);
+    CHECK(late.first_busy == 11000000UL);
+
+    /* after a copy made for staleness, the next look beside the shelf waits three seconds */
+    od_wake_init(&w);
+    CHECK(od_wake_due(&w, 1000000UL) == OD_DUE_STALE);                     /* 1 s */
+    od_wake_stale_hold(&w);
+    CHECK(od_wake_due(&w, 1000000UL) == OD_DUE_RUNNING);                   /* 2 s: held */
+    CHECK(od_wake_due(&w, 1000000UL) == 0);                                /* 3 s: held */
+    CHECK(od_wake_due(&w, 1000000UL) == (OD_DUE_STALE | OD_DUE_RUNNING));  /* 4 s: three seconds after the copy */
+    /* fast wakes add up to the same pace: twenty tenths make one look at the tasks */
+    od_wake_init(&w);
+    {
+        int stale = 0, running = 0;
+        for (int i = 0; i < 20; i++) {
+            unsigned due = od_wake_due(&w, 100000UL);
+            stale += !!(due & OD_DUE_STALE);
+            running += !!(due & OD_DUE_RUNNING);
+        }
+        CHECK(stale == 2 && running == 1);
+    }
+    printf("wakes in a minute at rest: 0.6.10 %d, 0.6.11 %d; with the pointer over the dock for 5 s: %d\n",
+           before.wakes, rest.wakes, visit.wakes);
+}
+
 int main(int argc, char **argv)
 {
     const char *dir = argc > 1 ? argv[1] : ".";
@@ -193,6 +273,7 @@ int main(int argc, char **argv)
     test_amidock(dir);
     test_amistart(dir);
     test_full();
+    test_wake();
     printf("%d checks, %d failed\n", checks, failed);
     return failed != 0;
 }
