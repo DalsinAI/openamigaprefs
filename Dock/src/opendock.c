@@ -49,11 +49,12 @@
 #include <stdio.h>
 
 #include "od_dock.h"
+#include "od_wake.h"
 #include "wbclose.h"
 #include "obmsg.h"
 #include "../../Common/prefsapp.h"           /* where OpenPrefs is (SYS:Preferences) */
 
-const char version[] __attribute__((used)) = "$VER: OpenDock 0.6.10 (24.10.2026) OpenPrefs, AmigaChrome Team";   /* 0.6.10: no look at the tasks while none start or end; 0.6.9: running programs after a line; 0.6.8: one look at the tasks per check; 0.6.7: its editor is OpenPrefs DOCK, never ROM: */
+const char version[] __attribute__((used)) = "$VER: OpenDock 0.6.11 (25.10.2026) OpenPrefs, AmigaChrome Team";   /* 0.6.11: wakes once a second at rest, ten times only while the pointer is over it; 0.6.10: no look at the tasks while none start or end; 0.6.9: running programs after a line; 0.6.8: one look at the tasks per check; 0.6.7: its editor is OpenPrefs DOCK, never ROM: */
 
 #define PREFS_ENV "ENV:OpenDock/Dock"
 #define PREFS_ENVARC "ENVARC:OpenDock/Dock"
@@ -1277,10 +1278,14 @@ static void bubble_on(int i)
     }
 }
 
-/* Called ten times a second: the name follows the pointer. */
+static int pointer_on;                             /* 0.6.11: the pointer was over the dock, where it shows, at the last look */
+
+/* Called at each wake (od_wake.h: ten times a second while the pointer is over the dock or a name is up,
+ * else once a second): the name follows the pointer. */
 static void check_hover(void)
 {
     int i = -1;
+    pointer_on = 0;
     if (dock.hover && win && IntuitionBase->FirstScreen == scr) {
         int mx = scr->MouseX - win->LeftEdge, my = scr->MouseY - win->TopEdge;
         if (mx >= 0 && my >= 0 && mx < win->Width && my < win->Height) {
@@ -1289,7 +1294,7 @@ static void check_hover(void)
             LockLayerInfo(&scr->LayerInfo);
             l = WhichLayer(&scr->LayerInfo, scr->MouseX, scr->MouseY);
             UnlockLayerInfo(&scr->LayerInfo);
-            if (l == win->WLayer) i = hit(mx, my);
+            if (l == win->WLayer) { pointer_on = 1; i = hit(mx, my); }
         }
     }
     if (i != bubble_for) { if (i >= 0) bubble_on(i); else bubble_off(); }
@@ -1316,9 +1321,8 @@ static ULONG behind_sig(void)
     return sig;
 }
 
-static ULONG seen_sig, moving_sig;
+static ULONG seen_sig, moving_sig;                 /* 0.6.11: moving_sig != seen_sig while a change has not stayed put */
 static int still;
-static int stale_wait;                             /* ticks to wait after a copy made for staleness */
 
 /* True when the screen beside the dock (a line along its screen side) no longer matches the copy of what
  * is behind it: the picture on the desktop was drawn or changed after the dock opened, or a window that
@@ -1331,6 +1335,7 @@ static int behind_stale(void)
     ULONG *screen_px, *copy_px;
     struct RastPort brp2;
     if (!win || !behind || !card || !CyberGfxBase) return 0;
+    if (IntuitionBase->FirstScreen != scr) return 0;   /* 0.6.11: not while another screen is in front; looked at again when it isn't */
     W = win->Width; H = win->Height;
     n = along_x ? W : H;
     /* the line beside the dock, on the side the screen's edge isn't */
@@ -1373,17 +1378,25 @@ static int behind_stale(void)
     return diff > 14;
 }
 
-/* Called ten times a second. True once a window has been dropped behind the
+/* Called at each wake. True once a window has been dropped behind the
  * dock (what is there changed, then stayed put for 0.3 seconds, so a window
- * dragged solidly is copied once, where it lands): time to copy afresh. */
+ * dragged solidly is copied once, where it lands): time to copy afresh.
+ * 0.6.11: a change is seen at a wake once a second at most; from then on the
+ * wakes come ten times a second (behind_settling) until it has stayed put. */
 static int behind_changed(void)
 {
     ULONG sig;
     if (!win || !behind) return 0;
     sig = behind_sig();
-    if (sig == seen_sig) { still = 0; return 0; }
+    if (sig == seen_sig) { moving_sig = seen_sig; still = 0; return 0; }   /* back as it was: nothing to settle */
     if (sig != moving_sig) { moving_sig = sig; still = 0; return 0; }
     return ++still >= 3;
+}
+
+/* 0.6.11: what is behind the dock changed and has not yet stayed put. */
+static int behind_settling(void)
+{
+    return win && behind && moving_sig != seen_sig;
 }
 
 /* ---- opening and closing -------------------------------------------------------------------- */
@@ -1650,13 +1663,29 @@ static struct NewMenu newmenus[] = {
     { NM_END, NULL, NULL, 0, 0, NULL }
 };
 
+/* 0.6.11: what keeps the timer fast (od_wake.h) */
+static unsigned busy_now(void)
+{
+    return (pointer_on ? OD_BUSY_POINTER : 0) | (bubble ? OD_BUSY_NAME : 0) | (behind_settling() ? OD_BUSY_BEHIND : 0);
+}
+
+static void timer_ask(struct timerequest *tr, unsigned long micros)
+{
+    tr->tr_node.io_Command = TR_ADDREQUEST;
+    tr->tr_time.tv_secs = micros / 1000000UL;
+    tr->tr_time.tv_micro = micros % 1000000UL;
+    SendIO((struct IORequest *)tr);
+}
+
 int main(void)
 {
     struct MsgPort *port, *tport = NULL;
     struct timerequest *tr = NULL;
     struct Menu *menus = NULL;
     APTR vi = NULL;
-    int quit = 0, timer = 0, ticks = 0, rc = RETURN_OK;
+    int quit = 0, timer = 0, rc = RETURN_OK;
+    od_wake wake;
+    unsigned long tick = 0;                        /* 0.6.11: the request out, in microseconds */
     ULONG sigs;
 
     /* 0.6.6: one dock. The port is looked for and added under one Forbid, so two starts at once
@@ -1689,8 +1718,10 @@ int main(void)
     if ((tport = CreateMsgPort()) && (tr = (struct timerequest *)CreateIORequest(tport, sizeof *tr)))
         timer = !OpenDevice((STRPTR)TIMERNAME, UNIT_VBLANK, (struct IORequest *)tr, 0);
     check_running();
-    /* ten times a second for the name under the pointer; every two seconds for running programs */
-    if (timer) { tr->tr_node.io_Command = TR_ADDREQUEST; tr->tr_time.tv_secs = 0; tr->tr_time.tv_micro = 100000; SendIO((struct IORequest *)tr); }
+    /* 0.6.11: once a second at rest, ten times a second only while the pointer is over the dock, a name is up or
+     * a window settles behind it; the running programs every two seconds whatever the pace (od_wake.h) */
+    od_wake_init(&wake);
+    if (timer) timer_ask(tr, tick = od_wake_next(busy_now()));
 
     while (!quit && (win || wb_down)) {
         ULONG got;
@@ -1729,15 +1760,16 @@ int main(void)
         }
         if (wb_down) continue;
         if (got & SIGBREAKF_CTRL_F) { load(); free_icons(); relayout(menus); check_running(); }
+        /* While Workbench is down (above) the request that comes back is not sent again: no wakes until it is up */
         if (timer && CheckIO((struct IORequest *)tr)) {
+            unsigned due;
             WaitIO((struct IORequest *)tr);
+            due = od_wake_due(&wake, tick);
             check_hover();
             if (behind_changed()) relayout(menus);
-            else if (ticks % 10 == 9 && stale_wait <= 0 && behind_stale()) { stale_wait = 30; relayout(menus); }
-            if (stale_wait > 0) stale_wait--;
-            if (++ticks >= 20) { ticks = 0; if (!dock.running || !nothing_changed()) check_running(); }
-            tr->tr_time.tv_secs = 0; tr->tr_time.tv_micro = 100000;
-            SendIO((struct IORequest *)tr);
+            else if ((due & OD_DUE_STALE) && behind_stale()) { od_wake_stale_hold(&wake); relayout(menus); }
+            if ((due & OD_DUE_RUNNING) && (!dock.running || !nothing_changed())) check_running();
+            timer_ask(tr, tick = od_wake_next(busy_now()));
         }
         if (appport) {
             struct AppMessage *am;
