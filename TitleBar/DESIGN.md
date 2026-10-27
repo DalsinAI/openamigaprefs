@@ -95,6 +95,11 @@ While see-through:
 - **The fade** is `src/tb_fade.h`, plain C with host tests. A step applies the time since the last one to the state
   the last one found. So a fade starts from the step that sees the pointer arrive, and the wait before that step
   doesn't count.
+- **The pointer at rest after a boot** (OpenTitle 0.7.7, 27 October 2026). Intuition starts the pointer at the screen's
+  top left corner, which is on the bar, so until someone moved the mouse the bar stayed solid, as if pointed at
+  (Instance-32, 26 October). A pointer that hasn't moved since OpenTitle first looked doesn't count as on the bar
+  (`tbp_on_bar` in `src/tb_fade.h`, with host tests). Once it has moved it counts wherever it is. A menu, the cog's
+  list and the menu button make the bar solid as before.
 - **OpenTitle's bar windows** (the logo, clock, network icons, cog and the taskspace's icons) are drawn as before,
   then keyed. Their layers get `LAYERLOOK_ALPHA`. A pixel in its row's bar colour takes alpha 0 while the bar is
   less than solid, so the bar shows round the glyphs at whatever opacity it has. It takes 255 once the bar is

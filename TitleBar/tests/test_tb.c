@@ -1,4 +1,5 @@
-/* Host tests for tb_prefs.h (ENV:OpenPrefs/TitleBar) and tb_fade.h (the see-through bar's fade).
+/* Host tests for tb_prefs.h (ENV:OpenPrefs/TitleBar) and tb_fade.h (the see-through bar's fade, and the pointer's
+ * part in it).
  * MIT, Copyright (c) 2026 AmigaChrome Team. */
 #include "tb_prefs.h"
 #include "tb_fade.h"
@@ -196,10 +197,54 @@ static void fade_tests(void)
     CHECK(f.level == rest && tbf_next(&f) == 0);
 }
 
+/* tbp_on_bar (OpenTitle 0.7.7): the pointer where the boot left it, on the bar, doesn't make the bar solid until it
+ * has moved; then it counts as before */
+static void pointer_tests(void)
+{
+    tb_ptr p = { 0, 0, 0, 0 };
+    tb_fade f;
+    const int rest = 40 * 255 / 100;
+    int i;
+    /* Instance-32 after a boot: the pointer at 0,0, on the 24-row bar, never moved */
+    CHECK(!tbp_on_bar(&p, 0, 0, 1));                      /* the first look */
+    for (i = 0; i < 50; i++) CHECK(!tbp_on_bar(&p, 0, 0, 1));
+    /* the fade with it: the bar stays at rest */
+    tbf_init(&f, rest, tbp_on_bar(&p, 0, 0, 1));
+    for (i = 0; i < 20; i++) tbf_step(&f, 500, tbp_on_bar(&p, 0, 0, 1));
+    CHECK(f.level == rest && tbf_next(&f) == 0);
+    /* moved off the bar: still not on it */
+    CHECK(!tbp_on_bar(&p, 900, 700, 0));
+    /* back onto the bar: now it counts, and the bar goes solid */
+    CHECK(tbp_on_bar(&p, 600, 10, 1));
+    tbf_step(&f, 0, 1);
+    for (i = 0; i < 10; i++) tbf_step(&f, TBF_STEP_MS, tbp_on_bar(&p, 600, 10, 1));
+    CHECK(f.level == 255);
+    /* even back at 0,0, now that it has moved */
+    CHECK(tbp_on_bar(&p, 0, 0, 1));
+    /* and off again: no longer, and the bar goes back to rest */
+    CHECK(!tbp_on_bar(&p, 900, 700, 0));
+    for (i = 0; i < 40; i++) tbf_step(&f, TBF_STEP_MS, tbp_on_bar(&p, 900, 700, 0));
+    CHECK(f.level == rest);
+
+    /* a move along the bar alone (x only) counts as a move */
+    p = (tb_ptr){ 0, 0, 0, 0 };
+    CHECK(!tbp_on_bar(&p, 0, 0, 1));
+    CHECK(tbp_on_bar(&p, 1, 0, 1));
+    /* so does one in y only */
+    p = (tb_ptr){ 0, 0, 0, 0 };
+    CHECK(!tbp_on_bar(&p, 5, 5, 1));
+    CHECK(tbp_on_bar(&p, 5, 6, 1));
+    /* a pointer first seen off the bar that is moved onto it counts at once */
+    p = (tb_ptr){ 0, 0, 0, 0 };
+    CHECK(!tbp_on_bar(&p, 960, 600, 0));
+    CHECK(tbp_on_bar(&p, 960, 10, 1));
+}
+
 int main(void)
 {
     prefs_tests();
     fade_tests();
-    printf("%s   %d checks%s\n", failed ? "FAIL" : "ok", checks, failed ? ", some failed" : " (settings, fade)");
+    pointer_tests();
+    printf("%s   %d checks%s\n", failed ? "FAIL" : "ok", checks, failed ? ", some failed" : " (settings, fade, pointer)");
     return failed != 0;
 }
