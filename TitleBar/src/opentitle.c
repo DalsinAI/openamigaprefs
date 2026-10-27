@@ -81,6 +81,10 @@
  *
  * 0.7.6 (25 October 2026, Team 4's bar-opacity agent): the check that OpenLayers has ComposeLayerInfo asked for
  *   a 264-byte table (lib_NegSize); 47.106's is 258, so the see-through bar was never tried. It asks for 258.
+ * 0.7.7 (27 October 2026, Dale, 07:39 Cyprus): a pointer that hasn't moved since OpenTitle started doesn't count as on
+ *   the bar (tb_fade.h, tbp_on_bar). After a boot the pointer sits at the screen's top left corner, on the bar, so the
+ *   see-through bar stayed solid until someone moved the mouse (Instance-32, 26 October). The menus, the cog's list
+ *   and the menu button still make it solid as before.
  *
  * MIT, Copyright (c) 2026 AmigaChrome Team. */
 #include <exec/types.h>
@@ -131,7 +135,7 @@
 #include "obmsg.h"
 #include "../../Common/prefsapp.h"           /* where OpenPrefs is (SYS:Preferences) */
 
-const char version[] __attribute__((used)) = "$VER: OpenTitle 0.7.6 (25.10.2026) OpenPrefs, AmigaChrome Team";
+const char version[] __attribute__((used)) = "$VER: OpenTitle 0.7.7 (27.10.2026) OpenPrefs, AmigaChrome Team";
 
 struct IntuitionBase *IntuitionBase;
 struct GfxBase *GfxBase;
@@ -1721,10 +1725,15 @@ static int see_backed(void)
 }
 
 /* the bar is wanted solid: the pointer on it, our list or panel open, or the menu button held */
+static tb_ptr see_ptr;                         /* 0.7.7: where the pointer was at the first look, and whether it moved */
+
 static int see_hot(void)
 {
     if (menu_w || pop_w) return 1;
-    if (IntuitionBase->FirstScreen == scr && scr->MouseY >= 0 && scr->MouseY <= scr->BarHeight) return 1;
+    /* 0.7.7: the pointer counts only once it has moved since OpenTitle first looked (tbp_on_bar): after a boot it
+     * rests at the top left corner, on the bar */
+    if (IntuitionBase->FirstScreen == scr
+        && tbp_on_bar(&see_ptr, scr->MouseX, scr->MouseY, scr->MouseY >= 0 && scr->MouseY <= scr->BarHeight)) return 1;
     if (input_io.io_Device) {
         struct Library *InputBase = (struct Library *)input_io.io_Device;   /* PeekQualifier's base, as OpenBench has it */
         (void)InputBase;
