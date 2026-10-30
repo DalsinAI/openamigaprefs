@@ -11,6 +11,8 @@
  *     68040 or 68060 without OpenGPU
  *   - which screens are themed (Workbench, other public screens, game
  *     screens) and programs never touched
+ *   - Scale (100, 125, 150, 200%): every Open app's font, the screen font
+ *     and the bars; and old apps scaled whole 2x to 4x ("Old apps": "Ed 2")
  *   - icon labels (Font prefs' Workbench icon text: plain, fields, shadow, outline)
  *   - desktop profiles (SYS:Prefs/Presets/OpenPrefs/<name>.profile), and
  *     "choose a profile by machine at start"
@@ -90,6 +92,8 @@ struct look {
     int lite_shadows, lite_rounding, lite_gradients;   /* left out when Lite is on */
     int wb_themed, pub_themed, custom_themed;
     char never[160];              /* program names, comma between */
+    int scale;                    /* 0-3: 100, 125, 150, 200% (Dale, 30 October 2026: "a scale setting" all apps respond to) */
+    char oldapps[160];            /* "ShowConfig 2, Ed 3": old programs scaled whole, 2x to 4x (amigachrome-guest docs/design/old-apps-scale.md) */
     int profile_auto;
     char desktop[112];            /* kept as read: the editor has no gadget for it yet */
     int no_zoom, no_size, auto_scrollers;   /* OpenLook 0.5: zoom off, sizegadget off, scrollers auto */
@@ -194,6 +198,16 @@ static void parse_look(struct look *l, const char *text)
                 } else if (!strcmp(w, "never") && word(&p, v, sizeof v)) {
                     if (l->never[0]) strncat(l->never, ", ", sizeof l->never - strlen(l->never) - 1);
                     strncat(l->never, v, sizeof l->never - strlen(l->never) - 1);
+                } else if (!strcmp(w, "scale") && word(&p, v, sizeof v)) {
+                    int pc = atoi(v);
+                    l->scale = pc >= 200 ? 3 : pc >= 150 ? 2 : pc >= 125 ? 1 : 0;
+                } else if (!strcmp(w, "oldapp") && word(&p, v, sizeof v)) {
+                    char f[8];
+                    int x = word(&p, f, sizeof f) ? atoi(f) : 2;
+                    char one[48];
+                    snprintf(one, sizeof one, "%s %d", v, x >= 2 && x <= 4 ? x : 2);
+                    if (l->oldapps[0]) strncat(l->oldapps, ", ", sizeof l->oldapps - strlen(l->oldapps) - 1);
+                    strncat(l->oldapps, one, sizeof l->oldapps - strlen(l->oldapps) - 1);
                 } else if (!strcmp(w, "profile") && word(&p, v, sizeof v)) l->profile_auto = !strcmp(v, "auto");
                 else if (!strcmp(w, "zoom") && word(&p, v, sizeof v)) l->no_zoom = !strcmp(v, "off");
                 else if (!strcmp(w, "sizegadget") && word(&p, v, sizeof v)) l->no_size = !strcmp(v, "off");
@@ -233,6 +247,25 @@ static void make_look_text(const struct look *l, char *out, int size)
             while (k && name[k - 1] == ' ') k--;
             name[k] = 0;
             if (k) { n = snprintf(o, size, "never \"%s\"\n", name); o += n; size -= n; }
+        }
+    }
+    {
+        static const int pcs[4] = { 100, 125, 150, 200 };
+        const char *s = l->oldapps;
+        if (l->scale) { n = snprintf(o, size, "scale %d\n", pcs[l->scale & 3]); o += n; size -= n; }
+        /* "Name 3" or "Name": the factor is a last word of 2 to 4, else 2 */
+        while (*s && size > 48) {
+            char name[40];
+            int k = 0, x = 2;
+            while (*s == ' ' || *s == ',') s++;
+            while (*s && *s != ',' && k < 39) name[k++] = *s++;
+            while (k && name[k - 1] == ' ') k--;
+            if (k >= 3 && name[k - 1] >= '2' && name[k - 1] <= '4' && name[k - 2] == ' ') {
+                x = name[k - 1] - '0';
+                for (k -= 2; k && name[k - 1] == ' '; k--) {}
+            }
+            name[k] = 0;
+            if (k) { n = snprintf(o, size, "oldapp \"%s\" %d\n", name, x); o += n; size -= n; }
         }
     }
     n = snprintf(o, size, "zoom %s\nsizegadget %s\nscrollers %s\n",
@@ -526,12 +559,13 @@ enum {
     G_THEMES, G_MODE, G_FROM, G_TO, G_OWNACCENT, G_ACCENT, G_LITE, G_LSHADOW, G_LROUND, G_LGRAD,
     G_WB, G_PUB, G_CUSTOM, G_NEVER, G_LABELS, G_PROFILE, G_APPLYPROFILE, G_PROFILEAUTO,
     G_CTF, G_CTFQUAL, G_AP, G_STATUS, G_SAVE, G_USE, G_TEST, G_CANCEL,
-    G_SCROLL, G_NOSIZE, G_NOZOOM, G_COUNT
+    G_SCROLL, G_NOSIZE, G_NOZOOM, G_SCALE, G_OLDAPPS, G_COUNT
 };
 
 static const char *mode_labels[] = { "Light", "Dark", "By the clock", NULL };
 static const char *lite_labels[] = { "Automatic", "On", "Off", NULL };
 static const char *themed_labels[] = { "Themed", "Classic", NULL };
+static const char *scale_labels[] = { "100%", "125%", "150%", "200%", NULL };
 static const char *label_labels[] __attribute__((unused)) = { "Plain", "Fields", "Shadow", "Outline", NULL };   /* not in OpenLook (LT_ONE) */
 static const char *qual_labels[] = { "Any click", "Left Alt", "Left Amiga", "Ctrl", NULL };
 static const char *qual_values[] = { "NONE", "LALT", "LCOMMAND", "CONTROL" };
@@ -605,6 +639,8 @@ static void show(const struct look *l)
     SET(G_PUB, GTCY_Active, !l->pub_themed);
     SET(G_CUSTOM, GTCY_Active, !l->custom_themed);
     SET(G_NEVER, GTST_String, (ULONG)l->never);
+    SET(G_SCALE, GTCY_Active, l->scale);
+    SET(G_OLDAPPS, GTST_String, (ULONG)l->oldapps);
     SET(G_PROFILEAUTO, GTCB_Checked, l->profile_auto);
     SET(G_SCROLL, GTCB_Checked, l->auto_scrollers);
     SET(G_NOSIZE, GTCB_Checked, l->no_size);
@@ -719,7 +755,9 @@ static int gui_once(void)
     row = top;
     G(CYCLE_KIND, G_MODE, R + 110, row, 200, lh, "Mode", PLACETEXT_LEFT, GTCY_Labels, (ULONG)mode_labels); row += lh + 4;
     G(INTEGER_KIND, G_FROM, R + 110, row, 50, lh, "Dark from", PLACETEXT_LEFT, GTIN_MaxChars, 2);
-    G(INTEGER_KIND, G_TO, R + 220, row, 50, lh, "to", PLACETEXT_LEFT, GTIN_MaxChars, 2); row += lh + 8;
+    G(INTEGER_KIND, G_TO, R + 220, row, 50, lh, "to", PLACETEXT_LEFT, GTIN_MaxChars, 2); row += lh + 4;
+    /* Scale: every Open app's font, the screen font and the bars grow with it */
+    G(CYCLE_KIND, G_SCALE, R + 110, row, 100, lh, "Scale", PLACETEXT_LEFT, GTCY_Labels, (ULONG)scale_labels); row += lh + 8;
     /* how windows look and behave (OpenLook 0.5): the approved look has all three */
     G(CHECKBOX_KIND, G_SCROLL, R + 110, row, 26, lh, "Scroll bars when needed", PLACETEXT_RIGHT, GTCB_Scaled, TRUE); row += lh + 2;
     G(CHECKBOX_KIND, G_NOSIZE, R + 110, row, 26, lh, "No size gadget", PLACETEXT_RIGHT, GTCB_Scaled, TRUE); row += lh + 2;
@@ -734,7 +772,8 @@ static int gui_once(void)
     G(CYCLE_KIND, G_WB, R + 110, row, 200, lh, "Workbench", PLACETEXT_LEFT, GTCY_Labels, (ULONG)themed_labels); row += lh + 4;
     G(CYCLE_KIND, G_PUB, R + 110, row, 200, lh, "Other screens", PLACETEXT_LEFT, GTCY_Labels, (ULONG)themed_labels); row += lh + 4;
     G(CYCLE_KIND, G_CUSTOM, R + 110, row, 200, lh, "Game screens", PLACETEXT_LEFT, GTCY_Labels, (ULONG)themed_labels); row += lh + 4;
-    G(STRING_KIND, G_NEVER, R + 110, row, 200, lh, "Never touch", PLACETEXT_LEFT, GTST_MaxChars, 150); row += lh + 8;
+    G(STRING_KIND, G_NEVER, R + 110, row, 200, lh, "Never touch", PLACETEXT_LEFT, GTST_MaxChars, 150); row += lh + 4;
+    G(STRING_KIND, G_OLDAPPS, R + 110, row, 200, lh, "Old apps", PLACETEXT_LEFT, GTST_MaxChars, 150); row += lh + 8;
 #ifndef LT_ONE                                     /* in OpenLook the icon labels are on the Fonts tab */
     G(CYCLE_KIND, G_LABELS, R + 110, row, 200, lh, "Icon labels", PLACETEXT_LEFT, GTCY_Labels, (ULONG)label_labels); row += lh + 8;
 #endif
@@ -753,11 +792,11 @@ static int gui_once(void)
         /* Advanced on a screen under 400 lines (OpenLook 1.2): every setting in 640 x 256 with Topaz 8. No preview
          * (Simple has it, and Test shows the real thing); under a theme list four lines tall, the screens, the programs
          * never touched and the profile; on the right the mode, windows, accent, Lite and focus, a line apart. */
-        static const char *const left_words[] = { "Workbench", "Other screens", "Game screens", "Never touch", "Profile", "By machine",
+        static const char *const left_words[] = { "Workbench", "Other screens", "Game screens", "Never touch", "Old apps", "Profile", "By machine",
                                                   "Icon labels", NULL };
-        int st = lh + 1, lx = L, lw, row2, k, t, nl = 4;          /* nl: the theme list's lines */
+        int st = lh + 1, lx = L, lw, row2, k, t, nl = 3;          /* nl: the theme list's lines (one fewer for Old apps) */
 #ifndef LT_ONE
-        nl = 3;                                    /* the stand-alone Look has the icon labels too */
+        nl = 2;                                    /* the stand-alone Look has the icon labels too */
 #endif
         for (k = 0; left_words[k]; k++)
             if ((t = TextLength(&scr->RastPort, (STRPTR)left_words[k], strlen(left_words[k]))) + 12 > lx - L) lx = L + t + 12;
@@ -770,6 +809,7 @@ static int gui_once(void)
         G(CYCLE_KIND, G_PUB, lx, row2, lw < 160 ? lw : 160, lh, "Other screens", PLACETEXT_LEFT, GTCY_Labels, (ULONG)themed_labels); row2 += st;
         G(CYCLE_KIND, G_CUSTOM, lx, row2, lw < 160 ? lw : 160, lh, "Game screens", PLACETEXT_LEFT, GTCY_Labels, (ULONG)themed_labels); row2 += st;
         G(STRING_KIND, G_NEVER, lx, row2, lw, lh, "Never touch", PLACETEXT_LEFT, GTST_MaxChars, 150); row2 += st;
+        G(STRING_KIND, G_OLDAPPS, lx, row2, lw, lh, "Old apps", PLACETEXT_LEFT, GTST_MaxChars, 150); row2 += st;
         /* the profile's name as wide as the column, and Load beside By machine under it */
         G(CYCLE_KIND, G_PROFILE, lx, row2, lw, lh, "Profile", PLACETEXT_LEFT, GTCY_Labels, (ULONG)profile_labels); row2 += st;
         G(CHECKBOX_KIND, G_PROFILEAUTO, lx, row2, 26, lh, "By machine", PLACETEXT_LEFT, GTCB_Scaled, TRUE);
@@ -780,6 +820,7 @@ static int gui_once(void)
 #endif
         row = top;
         G(CYCLE_KIND, G_MODE, R + 110, row, 200, lh, "Mode", PLACETEXT_LEFT, GTCY_Labels, (ULONG)mode_labels); row += st;
+        G(CYCLE_KIND, G_SCALE, R + 110, row, 100, lh, "Scale", PLACETEXT_LEFT, GTCY_Labels, (ULONG)scale_labels); row += st;
         G(INTEGER_KIND, G_FROM, R + 110, row, 50, lh, "Dark from", PLACETEXT_LEFT, GTIN_MaxChars, 2);
         G(INTEGER_KIND, G_TO, R + 220, row, 50, lh, "to", PLACETEXT_LEFT, GTIN_MaxChars, 2); row += st;
         G(CHECKBOX_KIND, G_SCROLL, R + 110, row, 26, lh, "Scroll bars when needed", PLACETEXT_RIGHT, GTCB_Scaled, TRUE); row += st;
@@ -901,6 +942,8 @@ static int gui_once(void)
                 case G_WB: cur.wb_themed = code == 0; break;
                 case G_PUB: cur.pub_themed = code == 0; break;
                 case G_CUSTOM: cur.custom_themed = code == 0; break;
+                case G_SCALE: cur.scale = code & 3; break;
+                case G_OLDAPPS: strncpy(cur.oldapps, (const char *)((struct StringInfo *)gg->SpecialInfo)->Buffer, sizeof cur.oldapps - 1); redraw = 0; break;
                 case G_NEVER: strncpy(cur.never, (const char *)((struct StringInfo *)gg->SpecialInfo)->Buffer, sizeof cur.never - 1); redraw = 0; break;
                 case G_LABELS: label_now = code; redraw = 0; break;
                 case G_PROFILE: redraw = 0; break;
