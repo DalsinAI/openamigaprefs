@@ -45,6 +45,10 @@ struct pbc_stack {
 };
 void pbc_stack_parse(struct pbc_stack *s, const char *text, pbc_u32 len);
 
+/* ENV:OpenGadTools/Look, as OpenPrefs Look writes it: its "scale <percent>"
+ * line (not the first, which names the theme), kept to 50-400. No line: 100. */
+pbc_u32 pbc_look_scale(const char *text, pbc_u32 len);
+
 /* ENV:OpenInput/LowLevelPatch: 1 when the patch is on (the first byte '1') */
 int pbc_lowlevel_on(const char *text, pbc_u32 len);
 

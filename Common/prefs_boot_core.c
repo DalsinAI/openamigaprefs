@@ -146,3 +146,28 @@ int pbc_lowlevel_on(const char *text, pbc_u32 len)
 {
     return text && len > 0 && text[0] == '1';
 }
+
+/* ---- ENV:OpenGadTools/Look ---- */
+
+pbc_u32 pbc_look_scale(const char *text, pbc_u32 len)
+{
+    const char *p = text, *end = text + len;
+    char w[8];
+    long scale = 100;
+    int first = 1, ok;
+    if (!text)
+        return 100;
+    while (p < end) {
+        const char *q = p;
+        if (!first && pbc_word(&q, end, w, sizeof w) == 5 && pbc_is(w, "scale")) {
+            long v;
+            while (q < end && pbc_blank(*q)) q++;
+            v = pbc_num(&q, end, &ok);
+            if (ok) scale = pbc_clamp(v, 50, 400);
+        }
+        first = 0;
+        while (p < end && *p != '\n') p++;
+        if (p < end) p++;
+    }
+    return (pbc_u32)scale;
+}
